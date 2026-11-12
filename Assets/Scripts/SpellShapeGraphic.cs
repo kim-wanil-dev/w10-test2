@@ -9,6 +9,7 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
 
     private readonly List<SpellGame.ShapeCell> _cells = new List<SpellGame.ShapeCell>();
     private SpellGame.Shape _shape;
+    private bool _isCursed;
 
     public SpellGame.Shape Shape
     {
@@ -45,7 +46,7 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
         float cell = Mathf.Min(rect.width / size.x, rect.height / size.y);
         float shrink = Mathf.Max(0f, 1f - 2f * GAP / cell);
         UIVertex vertex = UIVertex.simpleVert;
-        vertex.color = new Color(0.88f, 0.91f, 0.92f) * color;
+        vertex.color = (_isCursed ? new Color(1f, 0.3f, 0.3f) : new Color(0.88f, 0.91f, 0.92f)) * color;
         foreach (SpellGame.ShapeCell c in _cells)
         {
             Vector2 center = SpellPatternLayout.GridToBoard(new Vector2(c.X + 0.5f, c.Y + 0.5f));
@@ -65,6 +66,14 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
         }
     }
 
+    /// <summary>카드 전체의 회전된 칸 목록과 저주 강조 상태를 표시한다.</summary>
+    public void SetCard(SpellGame.Card card, int rotation = 0, bool isCursed = false)
+    {
+        _shape = card.Shape; _isCursed = isCursed;
+        _cells.Clear(); _cells.AddRange(SpellGame.CardCells(card, rotation)); SetVerticesDirty();
+    }
+
+
     /// <summary>칸의 구역 삼각형 꼭짓점(바깥 두 모서리와 칸 중심)을 마름모 방향 좌표(x 오른쪽, y 아래)로 반환한다.</summary>
     private static Vector2[] SectorPoints(SpellGame.ShapeCell cell, int sector)
     {
@@ -72,3 +81,4 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
         return new[] { SpellPatternLayout.GridToBoard(corners[sector]), SpellPatternLayout.GridToBoard(corners[(sector + 1) % 4]), SpellPatternLayout.GridToBoard(new Vector2(cell.X + 0.5f, cell.Y + 0.5f)) };
     }
 }
+
