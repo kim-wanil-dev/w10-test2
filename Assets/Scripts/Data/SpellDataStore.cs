@@ -153,12 +153,18 @@ public static class SpellDataStore
         {
             if (cell == null) { errors.Add($"{label}: 빈 칸 항목이 있습니다"); continue; }
             if (cell.X < 0 || cell.X >= GRID_SIZE || cell.Y < 0 || cell.Y >= GRID_SIZE) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})이 {GRID_SIZE}×{GRID_SIZE} 범위를 벗어납니다");
-            if (cell.Mask < 1 || cell.Mask > FULL_MASK) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})의 마스크는 1~15여야 합니다");
+            if (!IsHalfUnitMask(cell.Mask)) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})의 마스크는 1/4 삼각형 단위(3, 6, 9, 12, 15)여야 합니다");
             if (!positions.Add(cell.Y * GRID_SIZE + cell.X)) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})이 중복됩니다");
             minX = Math.Min(minX, cell.X); minY = Math.Min(minY, cell.Y);
         }
         if (errors.Count == count && (minX != 0 || minY != 0)) errors.Add($"{label}: 칸이 왼쪽 위 (0, 0) 기준으로 정규화되지 않았습니다");
         return errors.Count == count;
+    }
+
+    /// <summary>칸 마스크가 1/4 삼각형(인접한 두 구역) 하나 또는 칸 전체인지 반환한다.</summary>
+    public static bool IsHalfUnitMask(int mask)
+    {
+        return mask == FULL_MASK || mask == 3 || mask == 6 || mask == 9 || mask == 12;
     }
 
     /// <summary>칸 목록의 모든 구역이 같은 칸의 이웃 구역 또는 옆 칸의 마주 보는 구역을 통해 이어져 있는지 반환한다.</summary>
