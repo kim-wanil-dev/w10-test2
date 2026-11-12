@@ -1347,7 +1347,7 @@ public sealed class SpellGame
         ActiveReward = RewardKind.None;
         HasPieceReward = true;
         HasPatternReward = _random.NextDouble() < OPTIONAL_REWARD_CHANCE;
-        HasSealReward = _random.NextDouble() < OPTIONAL_REWARD_CHANCE;
+        HasSealReward = false;
         RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
         bool hasClay = false;
         for (int i = 0; i < REWARD_PIECE_COUNT; i++)
