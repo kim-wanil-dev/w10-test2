@@ -259,6 +259,7 @@ public sealed class SpellGame
     private bool _hasThiefEncounter;
     private bool _hasCurserEncounter;
     private bool _hasUsedWorkshop;
+    private bool _hasRested;
     private readonly List<Card> _stolen = new List<Card>();
     private Enemy _theftOwner;
 
@@ -293,8 +294,9 @@ public sealed class SpellGame
     public int Block { get; private set; }
     public int Battle { get; private set; }
     public int Turn { get; private set; }
-    public bool IsWorkshopEvent { get { return (CurrentPhase == Phase.Event && Battle == 2) || CurrentPhase == Phase.Rest; } }
+    public bool IsWorkshopEvent { get { return CurrentPhase == Phase.Event || CurrentPhase == Phase.Rest; } }
     public bool CanUseWorkshop { get { return IsWorkshopEvent && !_hasUsedWorkshop; } }
+    public bool CanRest { get { return CurrentPhase == Phase.Rest && !_hasRested; } }
     public int HammerUsesLeft { get { return CanUseWorkshop ? 1 : 0; } }
     public int GlueUsesLeft { get { return CanUseWorkshop ? 1 : 0; } }
     public string SealNotice { get; private set; } = "";
@@ -590,6 +592,7 @@ public sealed class SpellGame
         IsDeveloperMode = isDeveloperMode; MaxHealth = isDeveloperMode ? DEVELOPER_HEALTH : START_HEALTH;
         _owned.Clear(); _spells.Clear(); _ownedSpells.Clear(); _nextId = 0; Health = MaxHealth; Battle = 0; LastAcquiredPattern = -1;
         _hasUsedWorkshop = false;
+        _hasRested = false;
         for (int i = 0; i < PatternCount; i++)
         {
             if (!isDeveloperMode && !PATTERNS[i].IsStarter) continue;
@@ -772,7 +775,7 @@ public sealed class SpellGame
     /// <summary>첫 이벤트의 작업 가능 여부와 소유 조각의 분해 조건을 확인해 거부 사유를 반환한다.</summary>
     public string HammerIssue(Card card)
     {
-        if (!IsWorkshopEvent) return "첫 번째 이벤트 또는 휴식에서만 분해할 수 있습니다";
+        if (!IsWorkshopEvent) return "이벤트 또는 휴식에서만 분해할 수 있습니다";
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 분해할 조각 하나를 선택하세요";
         if (card.IsUnique) return "고유 조각은 쪼갤 수 없습니다";
@@ -957,7 +960,7 @@ public sealed class SpellGame
     /// <summary>첫 이벤트에서 접착할 수 있는 소유 기본 조각인지 확인해 거부 사유를 반환한다. 특수 효과는 허용한다.</summary>
     public string GlueCardIssue(Card card)
     {
-        if (!IsWorkshopEvent) return "첫 번째 이벤트 또는 휴식에서만 접착할 수 있습니다";
+        if (!IsWorkshopEvent) return "이벤트 또는 휴식에서만 접착할 수 있습니다";
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 조각을 선택하세요";
         if (card.IsUnique) return "고유 조각은 접착할 수 없습니다";
@@ -1507,6 +1510,7 @@ public sealed class SpellGame
                 : Battle == 2 || Battle == 4 ? Phase.Event
                 : Battle == 5 ? Phase.Rest : Phase.Loadout;
             if (IsWorkshopEvent) _hasUsedWorkshop = false;
+            if (CurrentPhase == Phase.Rest) _hasRested = false;
             ActiveReward = RewardKind.None;
             return true;
         }
@@ -1600,11 +1604,19 @@ public sealed class SpellGame
     /// <summary>휴식 시 회복할 최대 체력 30%를 소수점 이하 버림으로 반환한다.</summary>
     public int RestHealAmount { get { return (int)(MaxHealth * REST_HEAL_RATIO); } }
 
-    /// <summary>이벤트 또는 휴식을 마치고 도안 배치로 이동한다. 휴식은 체력 상한까지 한 번 회복한다.</summary>
+    /// <summary>휴식 선택을 한 번 적용해 최대 체력의 30%를 상한까지 회복한다. 작업 선택 화면은 유지한다.</summary>
+    public bool TryRest()
+    {
+        if (!CanRest) return false;
+        Health = Math.Min(MaxHealth, Health + RestHealAmount);
+        _hasRested = true;
+        return true;
+    }
+
+    /// <summary>이벤트 또는 휴식 선택을 마치고 도안 배치로 이동한다.</summary>
     public bool ContinueEncounter()
     {
         if (CurrentPhase != Phase.Event && CurrentPhase != Phase.Rest) return false;
-        if (CurrentPhase == Phase.Rest) Health = Math.Min(MaxHealth, Health + RestHealAmount);
         CurrentPhase = Phase.Loadout;
         return true;
     }

@@ -77,6 +77,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private RectTransform _workshopChoices;
     private UnityEngine.UI.Button _workshopHammer;
     private UnityEngine.UI.Button _workshopGlue;
+    private UnityEngine.UI.Button _restChoice;
 
     // SpellGame은 처음 쓰일 때 Resources에서 JSON을 읽으므로 필드 초기화식이 아닌 Awake에서 만든다.
     private SpellGame _game;
@@ -420,22 +421,23 @@ public sealed class SpellGameUI : MonoBehaviour
         SpellGame.Phase phase = _game.CurrentPhase;
         bool encounter = phase == SpellGame.Phase.Event || phase == SpellGame.Phase.Rest;
         _encounterScreen.gameObject.SetActive(encounter);
-        _workshopChoices.gameObject.SetActive(_game.CanUseWorkshop);
+        _workshopChoices.gameObject.SetActive(_game.IsWorkshopEvent);
         if (encounter)
         {
             bool rest = phase == SpellGame.Phase.Rest;
             _encounterTitle.text = rest ? "휴식" : _game.IsWorkshopEvent ? "조각 장인의 작업실" : "이벤트";
             _encounterDescription.text = rest
-                ? $"체력 {_game.Health}/{_game.MaxHealth}\n계속 진행 시 최대 체력의 30% 회복 (+{Math.Min(_game.RestHealAmount, _game.MaxHealth - _game.Health)})"
+                ? $"체력 {_game.Health}/{_game.MaxHealth}\n"
+                    + (_game.CanRest ? $"휴식 선택 시 최대 체력의 30% 회복 (+{Math.Min(_game.RestHealAmount, _game.MaxHealth - _game.Health)})" : "휴식을 마쳤습니다.")
                     + (_game.CanUseWorkshop ? "\n\n분해 또는 접착 중 하나를 1회 사용할 수 있습니다." : "\n\n작업을 마쳤습니다. 변경된 조각이 덱에 저장되었습니다.")
                 : _game.IsWorkshopEvent
                     ? _game.CanUseWorkshop
                         ? "낡은 작업대 위에 망치와 접착제가 놓여 있습니다.\n장인은 당신의 조각을 새롭게 다듬어 주겠다고 합니다.\n\n분해 또는 접착 중 하나를 1회 선택하세요.\n변경한 조각은 이번 런의 덱에 영구히 남습니다."
                         : "작업을 마쳤습니다.\n변경된 조각이 덱에 저장되었습니다."
                     : "";
-            _encounterDescription.rectTransform.anchoredPosition = _game.CanUseWorkshop ? new Vector2(140, -270) : new Vector2(240, -285);
-            _encounterDescription.rectTransform.sizeDelta = _game.CanUseWorkshop ? new Vector2(480, 180) : new Vector2(800, 100);
-            _encounterDescription.alignment = _game.CanUseWorkshop ? TextAnchor.UpperLeft : TextAnchor.MiddleCenter;
+            _encounterDescription.rectTransform.anchoredPosition = _game.IsWorkshopEvent ? new Vector2(140, -270) : new Vector2(240, -285);
+            _encounterDescription.rectTransform.sizeDelta = _game.IsWorkshopEvent ? new Vector2(480, 240) : new Vector2(800, 100);
+            _encounterDescription.alignment = _game.IsWorkshopEvent ? TextAnchor.UpperLeft : TextAnchor.MiddleCenter;
             int glueCount = 0;
             bool canHammer = false;
             foreach (SpellGame.Card card in _game.OwnedCards)
@@ -443,8 +445,10 @@ public sealed class SpellGameUI : MonoBehaviour
                 if (_game.GlueCardIssue(card) == null) glueCount++;
                 if (_game.HammerIssue(card) == null) canHammer = true;
             }
-            _workshopHammer.interactable = canHammer;
-            _workshopGlue.interactable = glueCount >= 2;
+            SetEncounterOption(_workshopHammer, canHammer);
+            SetEncounterOption(_workshopGlue, glueCount >= 2);
+            _restChoice.gameObject.SetActive(rest);
+            SetEncounterOption(_restChoice, _game.CanRest);
         }
         bool combat = phase == SpellGame.Phase.Combat;
         _background.SetActive(!combat);
@@ -474,12 +478,17 @@ public sealed class SpellGameUI : MonoBehaviour
         _encounterTitle = _encounterScreen.GetComponentInChildren<UnityEngine.UI.Text>();
         Label(_encounterScreen, "", 240, 285, 800, 100, 24);
         _encounterDescription = _encounterScreen.GetChild(1).GetComponent<UnityEngine.UI.Text>();
-        _workshopChoices = Element("Workshop Choices", _encounterScreen, 700, 270, 440, 180);
-        _workshopHammer = Button(_workshopChoices, "[E] 분해\n덱의 조각 1개를 여러 조각으로 나눕니다", 0, 0, 440, 82, BeginHammer, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
-        _workshopGlue = Button(_workshopChoices, "[Q] 접착\n덱의 조각 2개를 하나로 붙입니다", 0, 98, 440, 82, BeginGlue, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        _workshopChoices = Element("Workshop Choices", _encounterScreen, 700, 270, 440, 278);
+        _workshopHammer = Button(_workshopChoices, "[E] 분해\n덱의 조각 1개를 여러 조각으로 나눕니다", 0, 98, 440, 82, BeginHammer, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        _workshopGlue = Button(_workshopChoices, "[Q] 접착\n덱의 조각 2개를 하나로 붙입니다", 0, 0, 440, 82, BeginGlue, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        _restChoice = Button(_workshopChoices, "휴식\n최대 체력의 30% 회복", 0, 196, 440, 82, () => { if (_game.TryRest()) Render(); }, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        _workshopHammer.gameObject.AddComponent<CanvasGroup>();
+        _workshopGlue.gameObject.AddComponent<CanvasGroup>();
+        _restChoice.gameObject.AddComponent<CanvasGroup>();
+        DisableNavigation((RectTransform)_restChoice.transform);
         DisableNavigation((RectTransform)_workshopHammer.transform);
         DisableNavigation((RectTransform)_workshopGlue.transform);
-        Button(_encounterScreen, "계속", 490, 520, 300, 64, ContinueEncounter, fontSize: 26);
+        Button(_encounterScreen, "계속", 490, 600, 300, 64, ContinueEncounter, fontSize: 26);
         _titleScreen.StartButton.SetAction(StartNewGame);
         _resultScreen.Restart.SetAction(() => StartRun(_isSealerRun, _isThiefRun, _isCurserRun));
         _rewardScreen.Skip.SetAction(LeaveRewardSelection);
@@ -499,6 +508,13 @@ public sealed class SpellGameUI : MonoBehaviour
         List<int> placed = new List<int>();
         foreach (int spell in _game.OwnedSpells) if (_layout.IsPlaced(spell)) placed.Add(spell);
         return placed;
+    }
+
+    /// <summary>선택지의 사용 가능 여부를 설정하고 비활성 버튼과 문구를 흐리게 표시한다.</summary>
+    private static void SetEncounterOption(UnityEngine.UI.Button option, bool canUse)
+    {
+        option.interactable = canUse;
+        option.GetComponent<CanvasGroup>().alpha = canUse ? 1f : 0.35f;
     }
 
     /// <summary>이벤트 또는 휴식을 확정하고 다음 전투 전 도안 배치 화면을 표시한다.</summary>
