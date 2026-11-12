@@ -550,12 +550,28 @@ public sealed class SpellTable3D : MonoBehaviour
             return;
         }
         if (IsOverControl(pointer) || _screen.Board.IsDraggingPattern) { HideHover(pointer); return; }
+        if (Mouse.current.rightButton.wasPressedThisFrame && !_ui.IsRightClickReserved && TryRecallAt(pointer)) return;
         Ray ray = _camera.ScreenPointToRay(pointer);
         SpellPiece3D hovered = Physics.Raycast(ray, out RaycastHit hit, 50f, 1 << TABLE_LAYER) ? hit.collider.GetComponent<SpellPiece3D>() : null;
         if (hovered != null && hovered.IsHand) { _ui.ShowPieceTooltip(hovered.Card, pointer); _hadTableHover = true; }
         else if (ScreenToGrid(pointer, out Vector2 grid) && OnGrid(grid) && _layout.TryFindTarget((int)grid.x, (int)grid.y, Sector(grid), _game.Spells, out int spell))
-        { _ui.ShowPatternTooltip(spell, pointer, hovered == null ? null : hovered.Card); _hadTableHover = true; }
+        {
+            bool canRecall = hovered != null && !hovered.IsHand && _game.CanMovePiece(hovered.Placement);
+            _ui.ShowPatternTooltip(spell, pointer, hovered == null ? null : hovered.Card, canRecall); _hadTableHover = true;
+        }
         else HideHover(pointer);
+    }
+
+    /// <summary>포인터 아래 판 위 조각을 손패로 회수한다. 드래그로 손패에 돌려놓을 수 있는 조각(이번 턴에 놓은 환불 가능 조각)만 회수하며, 회수하면 true를 반환한다.</summary>
+    private bool TryRecallAt(Vector2 pointer)
+    {
+        Ray ray = _camera.ScreenPointToRay(pointer);
+        if (!Physics.Raycast(ray, out RaycastHit hit, 50f, 1 << TABLE_LAYER)) return false;
+        SpellPiece3D piece = hit.collider.GetComponent<SpellPiece3D>();
+        if (piece == null || piece.IsHand || !_game.CanMovePiece(piece.Placement)) return false;
+        if (!_game.Recall(piece.Board, piece.Placement)) return false;
+        HideHover(pointer); _ui.TableChanged();
+        return true;
     }
 
     /// <summary>격자와 배치된 조각을 방향키 입력만큼 이동하고 화면의 도안 조작 위치를 갱신한다.</summary>

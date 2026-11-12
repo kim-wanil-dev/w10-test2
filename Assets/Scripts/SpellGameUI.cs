@@ -127,6 +127,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private int _openPile = -1;
     private bool _showPauseMenu;
     private int _pendingCast = -1;
+    private int _rightClickUsedFrame = -1;
     private bool _castDragging;
     private int _castDragBoard = -1;
     private int _hoverEnemy = -1;
@@ -205,6 +206,8 @@ public sealed class SpellGameUI : MonoBehaviour
     public SpellGame.Card SelectedCard { get { return _selectedCard; } }
     public int Rotation { get { return _rotation; } }
     public bool IsTableActive { get { return _table != null; } }
+    // 우클릭이 시전 취소·선택 조각 회전에 쓰이는 중이거나 이번 프레임에 이미 쓰였으면 판 조각 우클릭 회수를 막는 데 쓴다.
+    public bool IsRightClickReserved { get { return _pendingCast >= 0 || _selectedCard != null || _rightClickUsedFrame == Time.frameCount; } }
     public bool CanInteract { get { return isActiveAndEnabled && _glueOverlay == null && _hammerPhase == HammerPhase.None && !_showDebugRemote && !_showPauseMenu && !_showHelp && _openPile < 0 && _game.CurrentPhase == SpellGame.Phase.Combat; } }
     private bool CanOpenWorkshop { get { return isActiveAndEnabled && _game.CanUseWorkshop && _glueOverlay == null && _hammerPhase == HammerPhase.None && !_showDebugRemote && !_showPauseMenu && !_showHelp && _openPile < 0; } }
 
@@ -292,6 +295,7 @@ public sealed class SpellGameUI : MonoBehaviour
         bool rotate = Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame;
         bool rightClick = Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
         if (!rotate && !rightClick) return;
+        if (rightClick && (_boardGraphic.IsDraggingPattern || _selectedCard != null || _pendingCast >= 0)) _rightClickUsedFrame = Time.frameCount;
         if (_boardGraphic.IsDraggingPattern) _boardGraphic.RotatePatternDrag();
         else if (_selectedCard != null)
         {
@@ -1198,13 +1202,14 @@ public sealed class SpellGameUI : MonoBehaviour
     }
 
     /// <summary>포인터가 가리킨 도안의 주문 효과와 완성 상태를 표시하고, 가리킨 조각이 있으면 코팅·씰링 설명을 좌우에 펼친다.</summary>
-    public void ShowPatternTooltip(int spell, Vector2 screenPosition, SpellGame.Card card = null)
+    public void ShowPatternTooltip(int spell, Vector2 screenPosition, SpellGame.Card card = null, bool canRecall = false)
     {
         if (spell < 0) { ShowTextTooltip(null, screenPosition); ShowTraitTooltip(null, screenPosition); return; }
         bool complete = _game.IsComplete(spell);
         string detail;
         string formula = BuildFormula(spell, complete, out detail);
-        ShowTextTooltip($"{SpellGame.PatternName(spell)} · {(complete ? "완성" : RemainingText(spell))}\n{formula}" + (string.IsNullOrEmpty(detail) ? "" : "\n" + detail), screenPosition);
+        ShowTextTooltip($"{SpellGame.PatternName(spell)} · {(complete ? "완성" : RemainingText(spell))}\n{formula}" + (string.IsNullOrEmpty(detail) ? "" : "\n" + detail)
+            + (canRecall ? "\n우클릭: 이 조각을 손패로 회수" : ""), screenPosition);
         ShowTraitTooltip(card, screenPosition);
     }
 
