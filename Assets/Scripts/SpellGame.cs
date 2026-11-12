@@ -192,7 +192,7 @@ public sealed class SpellGame
 
     public sealed class Enemy
     {
-        private readonly int[] _pattern;
+        private readonly int[] _pattern;    
         private readonly ReadOnlyCollection<int> _patternView;
 
         public string Name { get; internal set; }
