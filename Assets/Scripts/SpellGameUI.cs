@@ -41,6 +41,7 @@ public sealed class SpellGameUI : MonoBehaviour
     [SerializeField] private SpellCombatScreen _combatScreen;
     [SerializeField] private SpellTitleScreen _titleScreen;
     [SerializeField] private SpellRewardScreen _rewardScreen;
+
     [SerializeField] private SpellResultScreen _resultScreen;
     [SerializeField] private SpellPauseMenu _pauseMenu;
     [SerializeField] private SpellHelpPanel _helpPanel;
@@ -68,6 +69,7 @@ public sealed class SpellGameUI : MonoBehaviour
     [SerializeField] private Color _warnColor = new Color(0.949f, 0.722f, 0.294f);
 
     private readonly System.Random _random = new System.Random();
+    private SpellGame.Card _rewardSealCard;
     private RectTransform _testControls;
     private RectTransform _sealLayer;
 
@@ -234,6 +236,12 @@ public sealed class SpellGameUI : MonoBehaviour
         if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote) return;
+        if (_game.CurrentPhase == SpellGame.Phase.Reward)
+        {
+            if (_game.ActiveReward != SpellGame.RewardKind.None && Keyboard.current != null
+                && Keyboard.current.escapeKey.wasPressedThisFrame) LeaveRewardSelection();
+            return;
+        }
         UpdateTheft();
         if (_glueOverlay != null) { UpdateGlue(); return; }
         if (_hammerPhase != HammerPhase.None) { UpdateHammer(); return; }
@@ -417,7 +425,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         _titleScreen.StartButton.SetAction(StartNewGame);
         _resultScreen.Restart.SetAction(() => StartRun(_isSealerRun, _isThiefRun, _isCurserRun));
-        _rewardScreen.Skip.SetAction(() => ChooseReward(-1));
+        _rewardScreen.Skip.SetAction(LeaveRewardSelection);
         _loadoutScreen.Setup(_layout, _game.OwnedSpells, PatternColor, StartLoadoutBattle);
     }
 
@@ -1526,7 +1534,11 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>랜덤 보상 조각과 아직 없는 도안을 보상 화면에 표시한다.</summary>
     private void RefreshRewards()
     {
-        IReadOnlyList<SpellGame.Reward> rewards = _game.Rewards;
+        bool isList = _game.ActiveReward == SpellGame.RewardKind.None;
+        _rewardScreen.Skip.SetLabel(isList ? "다음" : "보상 목록으로");
+        if (isList) { RefreshRewardList(); return; }
+        if (_game.ActiveReward == SpellGame.RewardKind.Seal) { RefreshSealReward(); return; }
+        IReadOnlyList<SpellGame.Reward> rewards = _game.ActiveRewardChoices;
         SpellRewardCardView[] cards = _rewardScreen.ShowCards(rewards.Count);
         for (int i = 0; i < rewards.Count; i++)
         {
@@ -1534,6 +1546,90 @@ public sealed class SpellGameUI : MonoBehaviour
             if (reward.IsPattern) cards[i].BindPattern(i, $"도안: {SpellGame.PatternName(reward.Pattern)}\n{SpellGame.PatternDescription(reward.Pattern)}", reward.Pattern, PatternColor(reward.Pattern), ChooseReward);
             else cards[i].BindPiece(i, TraitDescriptionText(reward.Piece), reward.Piece, HasTraits(reward.Piece) ? AccentColor(reward.Piece) : _subColor, ShapeTint(reward.Piece), SealColor, ChooseReward);
         }
+    }
+
+    /// <summary>전투에서 등장한 미수령 보상을 각각 선택할 수 있는 목록으로 표시한다.</summary>
+    private void RefreshRewardList()
+    {
+        List<SpellGame.RewardKind> kinds = new List<SpellGame.RewardKind>();
+        if (_game.HasPieceReward) kinds.Add(SpellGame.RewardKind.Piece);
+        if (_game.HasPatternReward) kinds.Add(SpellGame.RewardKind.Pattern);
+        if (_game.HasSealReward) kinds.Add(SpellGame.RewardKind.Seal);
+        if (kinds.Count == 0)
+        {
+            SpellRewardCardView[] complete = _rewardScreen.ShowEntries(1);
+            complete[0].BindOption(0, "보상 수령 완료", "다음을 눌러 진행하세요.", _subColor, _ => LeaveRewardSelection());
+            return;
+        }
+        SpellRewardCardView[] views = _rewardScreen.ShowEntries(kinds.Count);
+        for (int i = 0; i < kinds.Count; i++)
+        {
+            SpellGame.RewardKind kind = kinds[i];
+            string title = kind == SpellGame.RewardKind.Piece ? "조각 획득" : kind == SpellGame.RewardKind.Pattern ? "도안 획득" : "인장 획득";
+            views[i].BindOption(i, title, "", _subColor, _ => OpenCombatReward(kind));
+        }
+    }
+
+    /// <summary>보상 종류를 열고 인장 부착 대상의 임시 선택을 초기화한다.</summary>
+    private void OpenCombatReward(SpellGame.RewardKind kind)
+    {
+        if (!_game.OpenReward(kind)) return;
+        _rewardSealCard = null;
+        Render();
+    }
+
+    /// <summary>상세 선택에서는 목록으로 돌아가고, 목록에서는 남은 보상을 포기하고 정비로 진행한다.</summary>
+    private void LeaveRewardSelection()
+    {
+        if (_game.ActiveReward != SpellGame.RewardKind.None)
+        {
+            _game.OpenReward(SpellGame.RewardKind.None); _rewardSealCard = null; Render();
+        }
+        else ChooseReward(-1);
+    }
+
+    /// <summary>인장을 붙일 소유 조각 또는 해당 조각의 빈 1/4 영역을 표시한다.</summary>
+    private void RefreshSealReward()
+    {
+        if (_rewardSealCard == null)
+        {
+            List<SpellGame.Card> eligible = new List<SpellGame.Card>();
+            foreach (SpellGame.Card card in _game.OwnedCards)
+                if (_game.RewardSealTargets(card).Count > 0) eligible.Add(card);
+            SpellRewardCardView[] views = _rewardScreen.ShowCards(eligible.Count);
+            for (int i = 0; i < eligible.Count; i++)
+            {
+                SpellGame.Card card = eligible[i];
+                views[i].BindPiece(i, $"{SealName(_game.RewardSeal)} 부착 대상\n#{card.Id} {TraitDescriptionText(card)}",
+                    card, SealColor(_game.RewardSeal), ShapeTint(card), SealColor, _ => { _rewardSealCard = card; Render(); });
+            }
+            if (eligible.Count == 0)
+            {
+                SpellRewardCardView[] empty = _rewardScreen.ShowEntries(1);
+                empty[0].BindOption(0, "부착 가능한 조각이 없습니다", "빈 영역이 있는 조각이 필요합니다. 조각 보상을 먼저 확인하세요.", _subColor, _ => LeaveRewardSelection());
+            }
+            return;
+        }
+        IReadOnlyList<SpellGame.RewardSealTarget> targets = _game.RewardSealTargets(_rewardSealCard);
+        SpellRewardCardView[] slots = _rewardScreen.ShowCards(targets.Count);
+        string[] directions = { "위", "오른쪽", "아래", "왼쪽" };
+        for (int i = 0; i < targets.Count; i++)
+        {
+            SpellGame.RewardSealTarget target = targets[i];
+            SpellGame.Card preview = new SpellGame.Card { Shape = target.Piece.Shape, Effect = target.Piece.Effect, Coating = target.Piece.Coating };
+            preview.SealList.AddRange(target.Piece.Seals);
+            preview.SealList.Add(new SpellGame.SealSpot(target.Spot.X, target.Spot.Y, target.Spot.Sector, _game.RewardSeal));
+            slots[i].BindPiece(i, $"{SealName(_game.RewardSeal)} 부착 미리보기\n{ShapeName(target.Piece.Shape)} · 영역 {i + 1}\n기준 칸 ({target.Spot.X + 1}, {target.Spot.Y + 1}) {directions[target.Spot.Sector]}",
+                preview, SealColor(_game.RewardSeal), ShapeTint(preview), SealColor, ClaimCombatRewardSeal);
+        }
+    }
+
+    /// <summary>선택한 영역에 인장을 붙이고 수령 목록을 갱신한다.</summary>
+    private void ClaimCombatRewardSeal(int target)
+    {
+        if (!_game.ClaimRewardSeal(_rewardSealCard, target)) return;
+        _rewardSealCard = null;
+        Render();
     }
 
     /// <summary>배치한 조각을 이동 또는 회수 대상으로 선택한다.</summary>
