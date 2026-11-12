@@ -53,6 +53,9 @@ public sealed class SpellBoardGraphic : UnityEngine.UI.MaskableGraphic, IPointer
     public bool IsDragging { get { return _dragPiece || IsDraggingPattern; } }
     public bool IsDraggingPattern { get { return _dragPattern >= 0; } }
     public float CellSize { get { return _cellSize; } }
+    public float CellGap { get { return CELL_GAP; } }
+    public Color EmptyColor { get { return _emptyColor; } }
+    public Color GridLineColor { get { Color color = Color.Lerp(_guideColor, Color.white, 0.35f); color.a = 1f; return color; } }
     public int PreviewPatternIndex { get { return _hasPatternPreview ? _dragPattern : -1; } }
     public Vector2Int PreviewOrigin { get { return _previewOrigin; } }
     public int PreviewRotation { get { return _dragRotation; } }
@@ -138,8 +141,7 @@ public sealed class SpellBoardGraphic : UnityEngine.UI.MaskableGraphic, IPointer
                 if (preview && (CellMask(selected, _hoverX, _hoverY, _ui.Rotation, x, y) & (1 << sector)) != 0) color = valid ? _validColor : _invalidColor;
                 Sector(vh, center, _corners[sector], _corners[(sector + 1) % 4], color);
             }
-            Color gridColor = Color.Lerp(_guideColor, Color.white, 0.35f);
-            gridColor.a = 1f;
+            Color gridColor = GridLineColor;
             for (int side = 0; side < 4; side++)
             {
                 Line(vh, center, _corners[side], 1.2f, gridColor);
