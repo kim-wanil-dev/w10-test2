@@ -94,23 +94,53 @@ public static class SpellDataStore
         return "#" + ColorUtility.ToHtmlStringRGB(color);
     }
 
-    /// <summary>도안 데이터의 기본 효과와 키워드를 게임 화면과 같은 한 줄 설명으로 반환한다. SpellGame 정적 데이터를 읽지 않으므로 에디터 미저장 편집본에도 쓸 수 있다.</summary>
+    /// <summary>도안 이름과 효과를 게임 화면 표기로 반환한다. 첫 줄은 "이름 - 기본 효과", 키워드 보상이 있으면 둘째 줄에 "태그: 보상"을 붙인다. 예: "방패 밀치기 - 방어 9\n순수: 무작위 적 피해 6"</summary>
+    public static string PatternTitle(SpellPatternData data)
+    {
+        string description = PatternDescription(data);
+        return $"{data.Name} - {description}";
+    }
+
+    /// <summary>도안의 기본 효과 줄과 키워드 태그 줄을 줄바꿈으로 이어 반환한다. SpellGame 정적 데이터를 읽지 않으므로 에디터 미저장 편집본에도 쓸 수 있다.</summary>
     public static string PatternDescription(SpellPatternData data)
     {
         string text = BaseEffectText(data);
-        string keyword;
-        // 보상 수치가 0이면 효과가 없으므로 보상 문구를 빼고 모자이크만 이름을 남긴다.
-        if (HasKeywordBonus(data.Keyword) && data.KeywordBonusValue == 0) keyword = data.Keyword == SpellGame.Keyword.Mosaic ? "모자이크" : "";
-        else
-            switch (data.Keyword)
-            {
-                case SpellGame.Keyword.OneStroke: keyword = $"한 방: 조각 1장으로 완성하면 {KeywordBonusText(data)}"; break;
-                case SpellGame.Keyword.Mosaic: keyword = $"모자이크: 조각 1장마다 {KeywordBonusText(data)}"; break;
-                case SpellGame.Keyword.Purity: keyword = $"순수: 한 가지 도형으로만 완성하면 {KeywordBonusText(data)}"; break;
-                default: keyword = ""; break;
-            }
-        if (text.Length == 0) return keyword.Length == 0 ? "기본 효과 없음" : keyword;
-        return keyword.Length == 0 ? text : text + " · " + keyword;
+        if (text.Length == 0) text = "기본 효과 없음";
+        string keyword = KeywordLine(data);
+        return keyword.Length == 0 ? text : text + "\n" + keyword;
+    }
+
+    /// <summary>키워드 태그와 보상을 "태그: 보상" 한 줄로 반환한다. 키워드가 없거나 보상 수치가 0이면 빈 문자열이다. 모자이크는 "× 조각 수"를 붙인다.</summary>
+    public static string KeywordLine(SpellPatternData data)
+    {
+        if (!HasKeywordBonus(data.Keyword) || data.KeywordBonusValue == 0) return "";
+        string line = $"{KeywordName(data.Keyword)}: {KeywordBonusText(data)}";
+        return data.Keyword == SpellGame.Keyword.Mosaic ? line + " × 조각 수" : line;
+    }
+
+    /// <summary>키워드 태그의 표시 이름을 반환한다. 없음이면 빈 문자열이다.</summary>
+    public static string KeywordName(SpellGame.Keyword keyword)
+    {
+        switch (keyword)
+        {
+            case SpellGame.Keyword.OneStroke: return "한 방";
+            case SpellGame.Keyword.Mosaic: return "모자이크";
+            case SpellGame.Keyword.Purity: return "순수";
+            default: return "";
+        }
+    }
+
+    /// <summary>도안 키워드 태그의 발동 조건 설명을 "태그 이름\n조건" 형식으로 반환한다. 태그 줄이 없으면 빈 문자열이다.</summary>
+    public static string KeywordExplanation(SpellPatternData data)
+    {
+        if (KeywordLine(data).Length == 0) return "";
+        switch (data.Keyword)
+        {
+            case SpellGame.Keyword.OneStroke: return "<b>한 방</b>\n조각 1장으로 도안을 완성해 시전하면 보상을 받습니다.";
+            case SpellGame.Keyword.Mosaic: return "<b>모자이크</b>\n도안에 놓인 조각 수만큼 보상을 받습니다. 조각 1장이어도 발동합니다.";
+            case SpellGame.Keyword.Purity: return "<b>순수</b>\n한 가지 도형으로만 도안을 완성해 시전하면 보상을 받습니다. 접착 조각은 순수로 치지 않습니다.";
+            default: return "";
+        }
     }
 
     /// <summary>도안 효과 종류의 기본 효과 문구를 반환한다. 효과 종류가 None이면 빈 문자열이다.</summary>
@@ -133,14 +163,14 @@ public static class SpellDataStore
         return keyword == SpellGame.Keyword.OneStroke || keyword == SpellGame.Keyword.Purity || keyword == SpellGame.Keyword.Mosaic;
     }
 
-    /// <summary>도안 키워드 보상의 종류와 수치를 설명 문구로 반환한다. 예: "+6", "무작위 적 피해 6", "방어도 +6"</summary>
+    /// <summary>도안 키워드 보상의 종류와 수치를 설명 문구로 반환한다. 예: "추가 피해 +6", "무작위 적 피해 6", "방어도 +6"</summary>
     private static string KeywordBonusText(SpellPatternData data)
     {
         switch (data.KeywordBonus)
         {
             case SpellGame.KeywordBonus.RandomDamage: return $"무작위 적 피해 {data.KeywordBonusValue}";
             case SpellGame.KeywordBonus.Block: return $"방어도 +{data.KeywordBonusValue}";
-            default: return $"+{data.KeywordBonusValue}";
+            default: return $"추가 피해 +{data.KeywordBonusValue}";
         }
     }
 

@@ -216,7 +216,12 @@ public sealed class SpellPatternEditorWindow : EditorWindow
     {
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("게임 설명 미리보기", EditorStyles.boldLabel);
-        EditorGUILayout.HelpBox($"{pattern.Name}\n{SpellDataStore.PatternDescription(pattern)}", MessageType.None);
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.HelpBox(SpellDataStore.PatternTitle(pattern), MessageType.None);
+        // 게임에서 설명 박스 옆에 따로 뜨는 태그 설명이다.
+        string explanation = SpellDataStore.KeywordExplanation(pattern).Replace("<b>", "").Replace("</b>", "");
+        if (explanation.Length > 0) EditorGUILayout.HelpBox(explanation, MessageType.Info);
+        EditorGUILayout.EndHorizontal();
     }
 
     /// <summary>4×4 공유 판의 유효 구역 위에 다른 시작 도안을 옅게, 선택 도안을 진하게 그린다. 판 밖 구역은 빨간색이다. 선택 도안이 판 안에 다 들어가면 true를 반환한다.</summary>

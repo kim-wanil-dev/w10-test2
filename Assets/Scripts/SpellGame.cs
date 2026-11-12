@@ -612,6 +612,12 @@ public sealed class SpellGame
     /// <summary>도안의 기본 효과와 키워드를 한 줄 설명으로 반환한다.</summary>
     public static string PatternDescription(int spell) { return SpellDataStore.PatternDescription(PATTERNS[spell]); }
 
+    /// <summary>도안의 "이름 - 기본 효과\n태그: 보상" 표기를 반환한다.</summary>
+    public static string PatternTitle(int spell) { return SpellDataStore.PatternTitle(PATTERNS[spell]); }
+
+    /// <summary>도안 키워드 태그의 발동 조건 설명을 반환한다. 태그가 없으면 빈 문자열이다.</summary>
+    public static string PatternKeywordExplanation(int spell) { return SpellDataStore.KeywordExplanation(PATTERNS[spell]); }
+
     /// <summary>도안의 시전 연출을 반환한다. Auto면 효과 종류(단일 타격, 전체 유성, 방어 방벽, 산탄 산탄, 없음 연출 없음)로 고른다.</summary>
     public static CastEffect PatternCastEffect(int spell)
     {

@@ -12,6 +12,8 @@ public sealed class SpellTooltipView : MonoBehaviour
     [SerializeField] private RectTransform _area;
     [SerializeField] private Text _label;
 
+    public RectTransform Box { get { return _rect; } }
+
     /// <summary>설명을 화면 좌표 근처에 표시한다. text가 비어 있으면 숨긴다.</summary>
     public void Show(string text, Vector2 screenPosition)
     {

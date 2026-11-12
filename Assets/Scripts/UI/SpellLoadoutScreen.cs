@@ -179,7 +179,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
             RectTransform rect = (RectTransform)_cards[i].transform;
             rect.localScale = Vector3.one * STORAGE_SCALE;
             rect.anchoredPosition = new Vector2(0, -height / 2 - i * (height + STORAGE_GAP));
-            _cards[i].BindPattern(spell, $"{SpellGame.PatternName(spell)}\n{SpellGame.PatternDescription(spell)}", spell, _colorOf(spell), PickStored, "보유 도안");
+            _cards[i].BindPattern(spell, SpellGame.PatternTitle(spell), spell, _colorOf(spell), PickStored, "보유 도안");
         }
         _storageEmpty.gameObject.SetActive(stored.Count == 0);
         _grid.SetHeld(_held, _heldRotation);

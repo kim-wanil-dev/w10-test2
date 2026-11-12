@@ -233,6 +233,7 @@ public sealed class SpellGameUI : MonoBehaviour
         SetupOverlays();
         SetupDebugRemote();
         SetupCastEffects();
+        SpellTagTooltip.Create(_content, _font);
         SetupFeatureControls();
         Render();
     }
@@ -945,11 +946,11 @@ public sealed class SpellGameUI : MonoBehaviour
         return extras.Count > 0 ? main + "  ·  " + string.Join(" · ", extras) : main;
     }
 
-    /// <summary>도안의 예상 수식과 미완성 안내를 툴팁용 문구로 만든다.</summary>
+    /// <summary>도안의 "이름 - 기본 효과\n태그: 보상" 표기와 예상 수식, 미완성 안내를 툴팁용 문구로 만든다.</summary>
     private string BuildFormula(int spell, bool complete, out string detail)
     {
         detail = complete ? "" : "빈 구역을 채우면 시전할 수 있습니다";
-        return SpellGame.PatternDescription(spell) + "\n예상 " + FormulaText(spell);
+        return SpellGame.PatternTitle(spell) + "\n예상 " + FormulaText(spell);
     }
 
     /// <summary>적 슬롯을 배치하고 모델의 다음 행동·방어·충전·패시브와 조준 피해 미리보기를 표시한다.</summary>
@@ -1237,14 +1238,17 @@ public sealed class SpellGameUI : MonoBehaviour
         bool complete = _game.IsComplete(spell);
         string detail;
         string formula = BuildFormula(spell, complete, out detail);
-        ShowTextTooltip($"{SpellGame.PatternName(spell)} · {(complete ? "완성" : RemainingText(spell))}\n{formula}" + (string.IsNullOrEmpty(detail) ? "" : "\n" + detail)
+        ShowTextTooltip($"{formula}\n{(complete ? "완성" : RemainingText(spell))}" + (string.IsNullOrEmpty(detail) ? "" : " · " + detail)
             + (canRecall ? "\n우클릭: 이 조각을 손패로 회수" : ""), screenPosition);
+        // 태그 발동 조건은 설명 박스 옆에 따로 띄운다.
+        if (_combatScreen.Tooltip.gameObject.activeSelf) SpellTagTooltip.Show(SpellGame.PatternKeywordExplanation(spell), _combatScreen.Tooltip.Box);
         ShowTraitTooltip(card, screenPosition);
     }
 
     /// <summary>지정한 설명을 화면 좌표 근처에 표시하거나 지운다. 드래그·조준 중에는 표시하지 않는다.</summary>
     public void ShowTextTooltip(string message, Vector2 screenPosition)
     {
+        SpellTagTooltip.Hide();
         if (message == null || !CanShowTooltip) { _combatScreen.Tooltip.Hide(); return; }
         _combatScreen.Tooltip.Show(message, screenPosition);
     }
@@ -1254,7 +1258,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>문구 설명과 좌우 코팅·씰링 설명을 모두 숨긴다.</summary>
     private void HideTooltips()
     {
-        _combatScreen.Tooltip.Hide();
+        _combatScreen.Tooltip.Hide(); SpellTagTooltip.Hide();
         if (_coatingTooltip != null) { _coatingTooltip.gameObject.SetActive(false); _sealTooltip.gameObject.SetActive(false); }
     }
 
@@ -1672,7 +1676,7 @@ public sealed class SpellGameUI : MonoBehaviour
         for (int i = 0; i < rewards.Count; i++)
         {
             SpellGame.Reward reward = rewards[i];
-            if (reward.IsPattern) cards[i].BindPattern(i, $"도안: {SpellGame.PatternName(reward.Pattern)}\n{SpellGame.PatternDescription(reward.Pattern)}", reward.Pattern, PatternColor(reward.Pattern), ChooseReward);
+            if (reward.IsPattern) cards[i].BindPattern(i, SpellGame.PatternTitle(reward.Pattern), reward.Pattern, PatternColor(reward.Pattern), ChooseReward);
             else cards[i].BindPiece(i, TraitDescriptionText(reward.Piece), reward.Piece, HasTraits(reward.Piece) ? AccentColor(reward.Piece) : _subColor, ShapeTint(reward.Piece), SealColor, ChooseReward);
         }
     }
