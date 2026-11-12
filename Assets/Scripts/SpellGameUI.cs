@@ -624,14 +624,14 @@ public sealed class SpellGameUI : MonoBehaviour
         _pauseMenu.gameObject.SetActive(_showPauseMenu);
         _pileViewer.gameObject.SetActive(_openPile >= 0);
         if (_openPile < 0) return;
-        List<string> lines = new List<string>();
-        foreach (KeyValuePair<SpellGame.Card, int> entry in _game.GetPileSummary(_openPile == 0))
-            lines.Add(CardName(entry.Key).Replace("\n", " · ") + "  × " + entry.Value);
-        lines.Sort(StringComparer.Ordinal);
-        System.Text.StringBuilder body = new System.Text.StringBuilder();
-        foreach (string line in lines) body.Append(line).Append('\n');
-        if (lines.Count == 0) body.Append("비어 있습니다");
-        _pileViewer.Bind(_openPile == 0 ? "드로우 덱" : "묘지", body.ToString(), () => { _openPile = -1; Render(); });
+        List<KeyValuePair<SpellGame.Card, int>> summary = new List<KeyValuePair<SpellGame.Card, int>>(_game.GetPileSummary(_openPile == 0));
+        summary.Sort((a, b) => string.CompareOrdinal(
+            CardName(a.Key).Replace("\n", " · "),
+            CardName(b.Key).Replace("\n", " · ")));
+        List<SpellGame.Card> cards = new List<SpellGame.Card>();
+        foreach (KeyValuePair<SpellGame.Card, int> entry in summary)
+            for (int i = 0; i < entry.Value; i++) cards.Add(entry.Key);
+        _pileViewer.Bind(this, _openPile == 0 ? "드로우 덱" : "묘지", cards, () => { _openPile = -1; Render(); });
     }
 
     /// <summary>전투 화면의 모든 뷰에 현재 상태를 넣는다.</summary>
