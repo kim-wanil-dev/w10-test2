@@ -78,6 +78,11 @@ public sealed class SpellGameUI : MonoBehaviour
     private UnityEngine.UI.Button _workshopHammer;
     private UnityEngine.UI.Button _workshopGlue;
     private UnityEngine.UI.Button _restChoice;
+    private UnityEngine.UI.Button _sealEventChoice;
+    private RectTransform _sealWorkbench;
+    private SpellSealWorkbenchGraphic _sealBoard;
+    private RectTransform _sealDragToken;
+    private UnityEngine.UI.Text _sealWorkbenchHint;
 
     // SpellGame은 처음 쓰일 때 Resources에서 JSON을 읽으므로 필드 초기화식이 아닌 Awake에서 만든다.
     private SpellGame _game;
@@ -233,7 +238,7 @@ public sealed class SpellGameUI : MonoBehaviour
 
     void OnDisable()
     {
-        _theftWasInteractive = false; CloseGlue(); CloseHammer();
+        _theftWasInteractive = false; CloseGlue(); CloseHammer(); CloseSealWorkbench();
         ClearSelection();
         _pendingCast = -1;
         _openPile = -1;
@@ -249,7 +254,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote) return;
-        if (_game.CurrentPhase == SpellGame.Phase.Reward)
+        if (_game.CurrentPhase == SpellGame.Phase.Reward || (_game.IsSealEvent && _game.ActiveReward == SpellGame.RewardKind.Seal))
         {
             if (_game.ActiveReward != SpellGame.RewardKind.None && Keyboard.current != null
                 && Keyboard.current.escapeKey.wasPressedThisFrame) LeaveRewardSelection();
@@ -411,7 +416,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private void Render()
     {
         if (_pendingCast >= 0 && (_game.CurrentPhase != SpellGame.Phase.Combat || !_game.IsComplete(_pendingCast) || _game.IsSealed(_pendingCast))) _pendingCast = -1;
-        CloseGlue(); CloseHammer();
+        CloseGlue(); CloseHammer(); CloseSealWorkbench();
         _boardGraphic.CancelDrag();
         if (_dragGhost != null) ClearSelection();
         HideDragGhost(); HideAim();
@@ -420,12 +425,14 @@ public sealed class SpellGameUI : MonoBehaviour
         _combatScreen.MoreMenu.Close();
         SpellGame.Phase phase = _game.CurrentPhase;
         bool encounter = phase == SpellGame.Phase.Event || phase == SpellGame.Phase.Rest;
-        _encounterScreen.gameObject.SetActive(encounter);
+        bool sealSelection = _game.IsSealEvent && _game.ActiveReward == SpellGame.RewardKind.Seal;
+        _encounterScreen.gameObject.SetActive(encounter && !sealSelection);
         _workshopChoices.gameObject.SetActive(_game.IsWorkshopEvent);
+        _sealEventChoice.gameObject.SetActive(_game.IsSealEvent);
         if (encounter)
         {
             bool rest = phase == SpellGame.Phase.Rest;
-            _encounterTitle.text = rest ? "휴식" : _game.IsWorkshopEvent ? "조각 장인의 작업실" : "이벤트";
+            _encounterTitle.text = rest ? "휴식" : _game.IsSealEvent ? "인장 장인의 작업실" : "조각 장인의 작업실";
             _encounterDescription.text = rest
                 ? $"체력 {_game.Health}/{_game.MaxHealth}\n"
                     + (_game.CanRest ? $"휴식 선택 시 최대 체력의 30% 회복 (+{Math.Min(_game.RestHealAmount, _game.MaxHealth - _game.Health)})" : "휴식을 마쳤습니다.")
@@ -434,10 +441,12 @@ public sealed class SpellGameUI : MonoBehaviour
                     ? _game.CanUseWorkshop
                         ? "낡은 작업대 위에 망치와 접착제가 놓여 있습니다.\n장인은 당신의 조각을 새롭게 다듬어 주겠다고 합니다.\n\n분해 또는 접착 중 하나를 1회 선택하세요.\n변경한 조각은 이번 런의 덱에 영구히 남습니다."
                         : "작업을 마쳤습니다.\n변경된 조각이 덱에 저장되었습니다."
-                    : "";
-            _encounterDescription.rectTransform.anchoredPosition = _game.IsWorkshopEvent ? new Vector2(140, -270) : new Vector2(240, -285);
-            _encounterDescription.rectTransform.sizeDelta = _game.IsWorkshopEvent ? new Vector2(480, 240) : new Vector2(800, 100);
-            _encounterDescription.alignment = _game.IsWorkshopEvent ? TextAnchor.UpperLeft : TextAnchor.MiddleCenter;
+                    : _game.HasSealReward
+                        ? $"장인이 빛나는 인장 하나를 건넵니다.\n\n이번 인장: {SealName(_game.RewardSeal)}\n{SealDescription(_game.RewardSeal)}\n\n덱의 원하는 조각에 붙일 수 있습니다."
+                        : "인장을 붙였습니다.\n변경된 조각이 덱에 저장되었습니다.";
+            _encounterDescription.rectTransform.anchoredPosition = new Vector2(140, -270);
+            _encounterDescription.rectTransform.sizeDelta = new Vector2(480, 260);
+            _encounterDescription.alignment = TextAnchor.UpperLeft;
             int glueCount = 0;
             bool canHammer = false;
             foreach (SpellGame.Card card in _game.OwnedCards)
@@ -449,6 +458,8 @@ public sealed class SpellGameUI : MonoBehaviour
             SetEncounterOption(_workshopGlue, glueCount >= 2);
             _restChoice.gameObject.SetActive(rest);
             SetEncounterOption(_restChoice, _game.CanRest);
+            SetEncounterOption(_sealEventChoice, _game.HasSealReward);
+            _sealEventChoice.GetComponentInChildren<UnityEngine.UI.Text>().text = $"씰 부착 · {SealName(_game.RewardSeal)}\n덱의 조각과 빈 영역을 선택합니다";
         }
         bool combat = phase == SpellGame.Phase.Combat;
         _background.SetActive(!combat);
@@ -456,10 +467,12 @@ public sealed class SpellGameUI : MonoBehaviour
         _combatScreen.gameObject.SetActive(combat);
         _table.SetVisible(combat);
         _titleScreen.gameObject.SetActive(phase == SpellGame.Phase.Title);
-        _rewardScreen.gameObject.SetActive(phase == SpellGame.Phase.Reward);
+        bool sealWorkbench = (phase == SpellGame.Phase.Reward || _game.IsSealEvent) && _game.ActiveReward == SpellGame.RewardKind.Seal;
+        _rewardScreen.gameObject.SetActive(phase == SpellGame.Phase.Reward && !sealWorkbench);
         _loadoutScreen.gameObject.SetActive(phase == SpellGame.Phase.Loadout);
         _resultScreen.gameObject.SetActive(result);
         if (combat) RefreshCombat();
+        else if (sealWorkbench) RenderSealWorkbench();
         else if (phase == SpellGame.Phase.Reward) RefreshRewards();
         else if (phase == SpellGame.Phase.Loadout) RefreshLoadout();
         else if (result) _resultScreen.Bind(phase == SpellGame.Phase.Victory ? "승리" : "패배");
@@ -485,6 +498,9 @@ public sealed class SpellGameUI : MonoBehaviour
         _workshopHammer.gameObject.AddComponent<CanvasGroup>();
         _workshopGlue.gameObject.AddComponent<CanvasGroup>();
         _restChoice.gameObject.AddComponent<CanvasGroup>();
+        _sealEventChoice = Button(_encounterScreen, "씰 부착", 700, 270, 440, 100, () => OpenCombatReward(SpellGame.RewardKind.Seal), fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        _sealEventChoice.gameObject.AddComponent<CanvasGroup>();
+        DisableNavigation((RectTransform)_sealEventChoice.transform);
         DisableNavigation((RectTransform)_restChoice.transform);
         DisableNavigation((RectTransform)_workshopHammer.transform);
         DisableNavigation((RectTransform)_workshopGlue.transform);
@@ -1595,7 +1611,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private void RefreshRewards()
     {
         bool isList = _game.ActiveReward == SpellGame.RewardKind.None;
-        _rewardScreen.Skip.SetLabel(isList ? "다음" : "보상 목록으로");
+        _rewardScreen.Skip.SetLabel(_game.IsSealEvent ? "이벤트로 돌아가기" : isList ? "다음" : "보상 목록으로");
         if (isList) { RefreshRewardList(); return; }
         if (_game.ActiveReward == SpellGame.RewardKind.Seal) { RefreshSealReward(); return; }
         IReadOnlyList<SpellGame.Reward> rewards = _game.ActiveRewardChoices;
@@ -1648,6 +1664,94 @@ public sealed class SpellGameUI : MonoBehaviour
         else ChooseReward(-1);
     }
 
+    /// <summary>씰 작업대와 드래그 표시를 제거하고 임시 그래픽 참조를 정리한다.</summary>
+    private void CloseSealWorkbench()
+    {
+        if (_sealWorkbench != null) { _sealWorkbench.gameObject.SetActive(false); Destroy(_sealWorkbench.gameObject); }
+        _sealWorkbench = null; _sealBoard = null; _sealDragToken = null; _sealWorkbenchHint = null;
+    }
+
+    /// <summary>전체 덱에서 조각을 고르고 씰을 직접 드래그해 붙이는 작업대를 표시한다.</summary>
+    private void RenderSealWorkbench()
+    {
+        _sealWorkbench = Panel(_root, 0, 0, 1280, 720, Color.black);
+        Label(_sealWorkbench, "씰 부착 작업대", 300, 30, 680, 50, 30);
+        Label(_sealWorkbench, "조각 선택 → 씰을 원하는 영역에 드래그 · 초록: 부착 가능 / 빨강: 부착 불가", 100, 90, 1080, 35, 19);
+        RectTransform board = Panel(_sealWorkbench, 160, 145, 660, 400, new Color(0.07f, 0.09f, 0.12f));
+        if (_rewardSealCard != null)
+        {
+            _sealBoard = Element("Seal Target", board, 0, 0, 660, 400).gameObject.AddComponent<SpellSealWorkbenchGraphic>();
+            _sealBoard.raycastTarget = false;
+            _sealBoard.Setup(_rewardSealCard, _game.RewardSealTargets(_rewardSealCard), ShapeTint(_rewardSealCard), SealColor);
+        }
+        else Label(board, "아래 덱에서 조각을 선택하세요", 30, 160, 600, 60, 24);
+        RectTransform token = Element("Seal Source", _sealWorkbench, 950, 200, 90, 90);
+        token.gameObject.AddComponent<SpellSealWorkbenchGraphic>().SetupToken(SealColor(_game.RewardSeal));
+        EventTrigger trigger = token.gameObject.AddComponent<EventTrigger>();
+        AddSealDragTrigger(trigger, EventTriggerType.BeginDrag, BeginSealDrag);
+        AddSealDragTrigger(trigger, EventTriggerType.Drag, MoveSealDrag);
+        AddSealDragTrigger(trigger, EventTriggerType.EndDrag, EndSealDrag);
+        Label(_sealWorkbench, SealName(_game.RewardSeal), 860, 150, 300, 42, 24);
+        Label(_sealWorkbench, SealDescription(_game.RewardSeal), 850, 300, 360, 70, 18);
+        RectTransform hint = Element("Seal Hint", _sealWorkbench, 850, 385, 360, 65);
+        _sealWorkbenchHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
+        _sealWorkbenchHint.font = _font; _sealWorkbenchHint.fontSize = 19; _sealWorkbenchHint.alignment = TextAnchor.MiddleCenter;
+        _sealWorkbenchHint.text = "원형 씰을 조각 위로 드래그하세요";
+        _sealWorkbenchHint.raycastTarget = false;
+        Button(_sealWorkbench, "돌아가기 · Esc", 880, 470, 280, 55, LeaveRewardSelection);
+        RectTransform cards = CreateWorkshopDeck(_sealWorkbench);
+        for (int i = 0; i < _game.OwnedCards.Count; i++)
+        {
+            SpellGame.Card card = _game.OwnedCards[i];
+            RectTransform entry = Button(cards, "", i * 165, 0, 155, 120, () => { _rewardSealCard = card; Render(); });
+            entry.GetComponent<UnityEngine.UI.Image>().color = CardColor(card, card == _rewardSealCard);
+            HammerCardShape(entry, card, 77, 35, 58).GetComponent<SpellShapeGraphic>().color = ShapeTint(card);
+            Label(entry, CardName(card), 3, 73, 149, 42, 13);
+        }
+    }
+
+    /// <summary>씰 원본의 드래그 이벤트를 지정 콜백에 연결한다.</summary>
+    private static void AddSealDragTrigger(EventTrigger trigger, EventTriggerType type, Action<PointerEventData> callback)
+    {
+        EventTrigger.Entry entry = new EventTrigger.Entry { eventID = type };
+        entry.callback.AddListener(data => callback((PointerEventData)data));
+        trigger.triggers.Add(entry);
+    }
+
+    /// <summary>선택 조각이 있으면 포인터를 따라갈 씰 아이콘을 만들고 부착 미리보기를 시작한다.</summary>
+    private void BeginSealDrag(PointerEventData data)
+    {
+        if (data.button != PointerEventData.InputButton.Left || _sealBoard == null || !_game.HasSealReward) return;
+        _sealDragToken = Element("Dragged Seal", _sealWorkbench, 0, 0, 48, 48);
+        _sealDragToken.pivot = new Vector2(0.5f, 0.5f);
+        SpellSealWorkbenchGraphic graphic = _sealDragToken.gameObject.AddComponent<SpellSealWorkbenchGraphic>();
+        graphic.SetupToken(SealColor(_game.RewardSeal)); graphic.raycastTarget = false;
+        MoveSealDrag(data);
+    }
+
+    /// <summary>씰 아이콘을 포인터로 이동하고 대상 구역과 유효·무효 안내를 갱신한다.</summary>
+    private void MoveSealDrag(PointerEventData data)
+    {
+        if (_sealDragToken == null || _sealBoard == null) return;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(_sealWorkbench, data.position, data.pressEventCamera, out Vector2 local);
+        _sealDragToken.anchoredPosition = new Vector2(local.x - _sealWorkbench.rect.xMin, local.y - _sealWorkbench.rect.yMax);
+        bool valid = _sealBoard.Preview(data.position, data.pressEventCamera, true) >= 0;
+        _sealDragToken.GetComponent<SpellSealWorkbenchGraphic>().color = valid ? SealColor(_game.RewardSeal) : _dangerColor;
+        _sealWorkbenchHint.text = valid ? "놓으면 이 영역에 붙습니다" : "붙일 수 없는 영역입니다";
+        _sealWorkbenchHint.color = valid ? new Color(0.3f, 1f, 0.5f) : _dangerColor;
+    }
+
+    /// <summary>드롭 위치를 다시 검사해 유효 영역에 한 번 부착한다. 무효 위치는 덱을 변경하지 않는다.</summary>
+    private void EndSealDrag(PointerEventData data)
+    {
+        if (_sealDragToken == null || _sealBoard == null) return;
+        int target = _sealBoard.Preview(data.position, data.pressEventCamera, true);
+        Destroy(_sealDragToken.gameObject); _sealDragToken = null;
+        _sealBoard.Preview(data.position, data.pressEventCamera, false);
+        if (target >= 0) ClaimCombatRewardSeal(target);
+        else { _sealWorkbenchHint.text = "부착하지 않았습니다. 빈 영역에 놓아 주세요"; _sealWorkbenchHint.color = _dangerColor; }
+    }
+
     /// <summary>인장을 붙일 소유 조각 또는 해당 조각의 빈 1/4 영역을 표시한다.</summary>
     private void RefreshSealReward()
     {
@@ -1666,7 +1770,7 @@ public sealed class SpellGameUI : MonoBehaviour
             if (eligible.Count == 0)
             {
                 SpellRewardCardView[] empty = _rewardScreen.ShowEntries(1);
-                empty[0].BindOption(0, "부착 가능한 조각이 없습니다", "빈 영역이 있는 조각이 필요합니다. 조각 보상을 먼저 확인하세요.", _subColor, _ => LeaveRewardSelection());
+                empty[0].BindOption(0, "부착 가능한 조각이 없습니다", "빈 인장 영역이 있는 조각이 필요합니다.", _subColor, _ => LeaveRewardSelection());
             }
             return;
         }
