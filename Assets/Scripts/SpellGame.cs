@@ -15,6 +15,7 @@ public sealed class SpellGame
     public enum Effect { None, Period, Resonance }
     public enum Seal { None, Recall, Shard, Refill, Overpaint }
     public enum Coating { None, Guard, Amplify, Cog }
+    public enum RewardKind { None, Piece, Pattern, Seal }
     public enum Phase { Title, Combat, Reward, Loadout, Victory, Defeat }
     public enum SpellKind { Single, Block, All, Scatter }
     public enum Keyword { None, OneStroke, Mosaic, Purity }
@@ -30,7 +31,9 @@ public sealed class SpellGame
     private const int AMPLIFY_HIT_BONUS = 1;
     private const int GUARD_BONUS = 3;
     private const int REWARD_PIECE_COUNT = 3;
+    private const int REWARD_PATTERN_COUNT = 3;
     private const double REWARD_SEAL_CHANCE = 0.5;
+    private const double OPTIONAL_REWARD_CHANCE = 0.5;
     private const int PERIOD_BONUS = 3;
     private const int RESONANCE_BONUS = 3;
     private const int RESONANCE_COUNT = 3;
@@ -256,6 +259,8 @@ public sealed class SpellGame
     private readonly List<int> _ownedSpells = new List<int>();
     private readonly List<int> _spells = new List<int>();
     private readonly List<Reward> _rewards = new List<Reward>();
+    private readonly List<Reward> _patternRewards = new List<Reward>();
+
     private readonly Board[] _boards = CreateBoards();
     private bool _hasSealerEncounter;
     private bool _hasThiefEncounter;
@@ -280,6 +285,13 @@ public sealed class SpellGame
     public ReadOnlyCollection<int> OwnedSpells { get; }
     public ReadOnlyCollection<Board> Boards { get; }
     public ReadOnlyCollection<Reward> Rewards { get; }
+    public bool HasPieceReward { get; private set; }
+    public bool HasPatternReward { get; private set; }
+    public bool HasSealReward { get; private set; }
+    public Seal RewardSeal { get; private set; }
+    public RewardKind ActiveReward { get; private set; }
+    public IReadOnlyList<Reward> ActiveRewardChoices { get { return ActiveReward == RewardKind.Pattern ? _patternRewards : _rewards; } }
+
     public Phase CurrentPhase { get; private set; } = Phase.Title;
     public int Health { get; private set; }
     public int MaxHealth { get; private set; } = START_HEALTH;
@@ -1318,14 +1330,25 @@ public sealed class SpellGame
         // 회수 복사본은 이번 전투에만 쓰는 임시 카드라 보유 덱에 넣지 않고, 손패 한도도 무시한다.
         _hand.AddRange(recalled);
         if (e.Draws > 0 && alive) Draw(e.Draws);
-        if (!alive) { if (Battle == LAST_BATTLE) FinishCombat(Phase.Victory); else { Health = Math.Min(MaxHealth, Health + VICTORY_HEAL); FinishCombat(Phase.Reward); EnterReward(); } }
+        if (!alive)
+        {
+            if (Battle != LAST_BATTLE) Health = Math.Min(MaxHealth, Health + VICTORY_HEAL);
+            FinishCombat(Phase.Reward); EnterReward();
+        }
         return true;
     }
 
-    /// <summary>씰링 또는 코팅이 붙은 랜덤 조각 3개와 아직 없는 도안을 보상 후보로 만들고 보상 단계로 넘어간다. 점토는 한 번에 최대 1개다.</summary>
+    /// <summary>확정 조각 보상과 독립 확률의 도안·인장 보상을 생성하고 보상 단계로 전환한다.</summary>
     private void EnterReward()
     {
         _rewards.Clear();
+        _patternRewards.Clear();
+        LastAcquiredPattern = -1;
+        ActiveReward = RewardKind.None;
+        HasPieceReward = true;
+        HasPatternReward = _random.NextDouble() < OPTIONAL_REWARD_CHANCE;
+        HasSealReward = false;
+        RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
         bool hasClay = false;
         for (int i = 0; i < REWARD_PIECE_COUNT; i++)
         {
@@ -1333,7 +1356,17 @@ public sealed class SpellGame
             hasClay |= piece.IsUnique;
             _rewards.Add(new Reward { Pattern = -1, Piece = piece });
         }
-        for (int spell = 0; spell < PATTERN_COUNT; spell++) if (!_ownedSpells.Contains(spell)) _rewards.Add(new Reward { Pattern = spell });
+        for (int spell = 0; spell < PATTERN_COUNT; spell++) if (!_ownedSpells.Contains(spell)) _patternRewards.Add(new Reward { Pattern = spell });
+        int patternCount = Math.Min(REWARD_PATTERN_COUNT, _patternRewards.Count);
+        for (int i = 0; i < patternCount; i++)
+        {
+            int selected = _random.Next(i, _patternRewards.Count);
+            Reward candidate = _patternRewards[i];
+            _patternRewards[i] = _patternRewards[selected];
+            _patternRewards[selected] = candidate;
+        }
+        if (_patternRewards.Count > patternCount) _patternRewards.RemoveRange(patternCount, _patternRewards.Count - patternCount);
+        HasPatternReward &= _patternRewards.Count > 0;
         CurrentPhase = Phase.Reward;
     }
 
@@ -1356,18 +1389,87 @@ public sealed class SpellGame
         return card;
     }
 
-    /// <summary>보상 후보 하나를 얻고 도안 장착 단계로 넘어간다. -1은 건너뛰기다.</summary>
+    /// <summary>선택한 조각 또는 도안을 수령하고 목록으로 돌아간다. -1은 수령을 마친다.</summary>
     public bool ChooseReward(int index)
     {
-        if (CurrentPhase != Phase.Reward || index < -1 || index >= _rewards.Count) return false;
-        LastAcquiredPattern = -1;
-        if (index >= 0)
+        if (CurrentPhase != Phase.Reward) return false;
+        if (index == -1) { CurrentPhase = Battle == LAST_BATTLE ? Phase.Victory : Phase.Loadout; ActiveReward = RewardKind.None; return true; }
+        IReadOnlyList<Reward> choices = ActiveRewardChoices;
+        if (index < 0 || index >= choices.Count) return false;
+        Reward reward = choices[index];
+        if (ActiveReward == RewardKind.Pattern && HasPatternReward)
         {
-            Reward reward = _rewards[index];
-            if (reward.IsPattern) { _ownedSpells.Add(reward.Pattern); LastAcquiredPattern = reward.Pattern; }
-            else _owned.Add(CopyCard(reward.Piece, true));
+            if (_ownedSpells.Contains(reward.Pattern)) return false;
+            _ownedSpells.Add(reward.Pattern); LastAcquiredPattern = reward.Pattern; HasPatternReward = false;
         }
-        CurrentPhase = Phase.Loadout; return true;
+        else if (ActiveReward == RewardKind.Piece && HasPieceReward)
+        {
+            _owned.Add(CopyCard(reward.Piece, true)); HasPieceReward = false;
+        }
+        else return false;
+        ActiveReward = RewardKind.None;
+        return true;
+    }
+
+    /// <summary>미수령 보상 종류를 연다. 후보는 다시 추첨하지 않고 유지한다.</summary>
+    public bool OpenReward(RewardKind kind)
+    {
+        if (CurrentPhase != Phase.Reward) return false;
+        bool available = kind == RewardKind.None || kind == RewardKind.Piece && HasPieceReward
+            || kind == RewardKind.Pattern && HasPatternReward || kind == RewardKind.Seal && HasSealReward;
+        if (!available) return false;
+        ActiveReward = kind;
+        return true;
+    }
+
+    public readonly struct RewardSealTarget
+    {
+        public Card Piece { get; }
+        public SealSpot Spot { get; }
+
+        /// <summary>인장을 붙일 원본 조각과 빈 영역을 저장한다.</summary>
+        internal RewardSealTarget(Card piece, SealSpot spot) { Piece = piece; Spot = spot; }
+    }
+
+    /// <summary>소유 조각의 빈 인장 영역을 반환한다. 접착 조각은 구성 조각까지 조회한다.</summary>
+    public IReadOnlyList<RewardSealTarget> RewardSealTargets(Card card)
+    {
+        List<RewardSealTarget> targets = new List<RewardSealTarget>();
+        if (card != null && _owned.Contains(card)) CollectRewardSealTargets(card, targets);
+        return targets;
+    }
+
+    /// <summary>빈 1/4 영역을 목록에 추가한다. 찰흙은 기존 규칙에 따라 제외한다.</summary>
+    private static void CollectRewardSealTargets(Card card, List<RewardSealTarget> targets)
+    {
+        if (card.Glued != null)
+        {
+            CollectRewardSealTargets(card.Glued.First, targets);
+            CollectRewardSealTargets(card.Glued.Second, targets);
+            return;
+        }
+        if (card.IsUnique) return;
+        foreach (ShapeCell cell in CardCells(card, 0))
+            for (int sector = 0; sector < 4; sector++)
+            {
+                if ((cell.Mask & (1 << sector)) == 0) continue;
+                bool occupied = false;
+                foreach (SealSpot seal in card.Seals)
+                    if (seal.X == cell.X && seal.Y == cell.Y && seal.Sector == sector) { occupied = true; break; }
+                if (!occupied) targets.Add(new RewardSealTarget(card, new SealSpot(cell.X, cell.Y, sector, Seal.None)));
+            }
+    }
+
+    /// <summary>선택한 빈 영역에 보상 인장을 붙이고 보상 목록으로 돌아간다. 중복 수령은 거부한다.</summary>
+    public bool ClaimRewardSeal(Card card, int targetIndex)
+    {
+        if (CurrentPhase != Phase.Reward || ActiveReward != RewardKind.Seal || !HasSealReward) return false;
+        IReadOnlyList<RewardSealTarget> targets = RewardSealTargets(card);
+        if (targetIndex < 0 || targetIndex >= targets.Count) return false;
+        RewardSealTarget target = targets[targetIndex];
+        target.Piece.SealList.Add(new SealSpot(target.Spot.X, target.Spot.Y, target.Spot.Sector, RewardSeal));
+        HasSealReward = false; ActiveReward = RewardKind.None;
+        return true;
     }
 
     /// <summary>장착할 보유 도안을 정하고 다음 전투를 시작한다. 하나 이상 장착해야 한다.</summary>

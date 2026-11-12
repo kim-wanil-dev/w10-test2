@@ -8,6 +8,8 @@ public sealed class SpellRewardCardView : MonoBehaviour
 {
     private const float SHAPE_CELL = 44f;
     private const float PATTERN_CELL = 40f;
+    private const int OPTION_TITLE_FONT_SIZE = 36;
+    private const int CARD_KIND_FONT_SIZE = 18;
 
     [Header("구성")]
     [SerializeField] private Button _button;
@@ -20,6 +22,25 @@ public sealed class SpellRewardCardView : MonoBehaviour
 
     private int _reward;
     private Action<int> _onChoose;
+
+    /// <summary>보상 종류와 설명을 표시한다. 설명이 없으면 제목만 크게 표시하고 도형을 숨긴다.</summary>
+    public void BindOption(int reward, string kind, string description, Color accent, Action<int> onChoose)
+    {
+        Bind(reward, kind, description, accent, onChoose);
+        _name.rectTransform.anchoredPosition = new Vector2(16, -60);
+        _name.rectTransform.sizeDelta = new Vector2(968, 75);
+        _kind.rectTransform.sizeDelta = new Vector2(968, 26);
+        bool hasDescription = !string.IsNullOrEmpty(description);
+        _name.gameObject.SetActive(hasDescription);
+        if (!hasDescription)
+        {
+            _kind.fontSize = OPTION_TITLE_FONT_SIZE;
+            _kind.rectTransform.sizeDelta = new Vector2(968, 110);
+        }
+        _stripe.rectTransform.sizeDelta = new Vector2(976, 6);
+        _shapeArea.gameObject.SetActive(false);
+        foreach (Image cell in _patternCells) cell.gameObject.SetActive(false);
+    }
 
     void Awake()
     {
@@ -49,6 +70,12 @@ public sealed class SpellRewardCardView : MonoBehaviour
     /// <summary>공통 문구와 강조색, 선택 동작을 설정한다.</summary>
     private void Bind(int reward, string kind, string displayName, Color accent, Action<int> onChoose)
     {
+        _name.gameObject.SetActive(true);
+        _kind.fontSize = CARD_KIND_FONT_SIZE;
+        _name.rectTransform.anchoredPosition = new Vector2(16, -160);
+        _name.rectTransform.sizeDelta = new Vector2(388, 118);
+        _kind.rectTransform.sizeDelta = new Vector2(388, 26);
+        _stripe.rectTransform.sizeDelta = new Vector2(396, 6);
         _reward = reward; _onChoose = onChoose;
         _kind.text = kind; _name.text = displayName; _stripe.color = accent;
     }
