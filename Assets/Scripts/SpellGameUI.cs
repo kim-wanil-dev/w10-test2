@@ -72,6 +72,12 @@ public sealed class SpellGameUI : MonoBehaviour
     private SpellGame.Card _rewardSealCard;
     private RectTransform _testControls;
     private RectTransform _sealLayer;
+    private RectTransform _encounterScreen;
+    private UnityEngine.UI.Text _encounterTitle;
+    private UnityEngine.UI.Text _encounterDescription;
+    private RectTransform _workshopChoices;
+    private UnityEngine.UI.Button _workshopHammer;
+    private UnityEngine.UI.Button _workshopGlue;
 
     private readonly SpellGame _game = new SpellGame();
     private readonly SpellPatternLayout _layout = new SpellPatternLayout();
@@ -189,6 +195,7 @@ public sealed class SpellGameUI : MonoBehaviour
     public int Rotation { get { return _rotation; } }
     public bool IsTableActive { get { return _table != null; } }
     public bool CanInteract { get { return isActiveAndEnabled && _glueOverlay == null && _hammerPhase == HammerPhase.None && !_showDebugRemote && !_showPauseMenu && !_showHelp && _openPile < 0 && _game.CurrentPhase == SpellGame.Phase.Combat; } }
+    private bool CanOpenWorkshop { get { return isActiveAndEnabled && _game.CanUseWorkshop && _glueOverlay == null && _hammerPhase == HammerPhase.None && !_showDebugRemote && !_showPauseMenu && !_showHelp && _openPile < 0; } }
 
     void Awake()
     {
@@ -258,10 +265,14 @@ public sealed class SpellGameUI : MonoBehaviour
             _onboardingActivity = Time.unscaledTime; Render(); return;
         }
         if (_showPauseMenu || _openPile >= 0 || _showHelp) return;
+        if (_game.CanUseWorkshop)
+        {
+            if (Keyboard.current != null && Keyboard.current.qKey.wasPressedThisFrame) BeginGlue();
+            else if (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame) BeginHammer();
+            return;
+        }
         if (_game.CurrentPhase != SpellGame.Phase.Combat) return;
         if (_table.IsDragging) return;
-        if (Keyboard.current != null && Keyboard.current.qKey.wasPressedThisFrame) { BeginGlue(); return; }
-        if (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame) { BeginHammer(); return; }
         bool rotate = Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame;
         bool rightClick = Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
         if (!rotate && !rightClick) return;
@@ -401,6 +412,33 @@ public sealed class SpellGameUI : MonoBehaviour
         HideTooltips();
         _combatScreen.MoreMenu.Close();
         SpellGame.Phase phase = _game.CurrentPhase;
+        bool encounter = phase == SpellGame.Phase.Event || phase == SpellGame.Phase.Rest;
+        _encounterScreen.gameObject.SetActive(encounter);
+        _workshopChoices.gameObject.SetActive(_game.CanUseWorkshop);
+        if (encounter)
+        {
+            bool rest = phase == SpellGame.Phase.Rest;
+            _encounterTitle.text = rest ? "휴식" : _game.IsWorkshopEvent ? "조각 장인의 작업실" : "이벤트";
+            _encounterDescription.text = rest
+                ? $"체력 {_game.Health}/{_game.MaxHealth}\n최대 체력의 30% 회복 (+{Math.Min(_game.RestHealAmount, _game.MaxHealth - _game.Health)})"
+                : _game.IsWorkshopEvent
+                    ? _game.CanUseWorkshop
+                        ? "낡은 작업대 위에 망치와 접착제가 놓여 있습니다.\n장인은 당신의 조각을 새롭게 다듬어 주겠다고 합니다.\n\n분해 또는 접착 중 하나를 1회 선택하세요.\n변경한 조각은 이번 런의 덱에 영구히 남습니다."
+                        : "작업을 마쳤습니다.\n변경된 조각이 덱에 저장되었습니다."
+                    : "";
+            _encounterDescription.rectTransform.anchoredPosition = _game.CanUseWorkshop ? new Vector2(140, -270) : new Vector2(240, -285);
+            _encounterDescription.rectTransform.sizeDelta = _game.CanUseWorkshop ? new Vector2(480, 180) : new Vector2(800, 100);
+            _encounterDescription.alignment = _game.CanUseWorkshop ? TextAnchor.UpperLeft : TextAnchor.MiddleCenter;
+            int glueCount = 0;
+            bool canHammer = false;
+            foreach (SpellGame.Card card in _game.OwnedCards)
+            {
+                if (_game.GlueCardIssue(card) == null) glueCount++;
+                if (_game.HammerIssue(card) == null) canHammer = true;
+            }
+            _workshopHammer.interactable = canHammer;
+            _workshopGlue.interactable = glueCount >= 2;
+        }
         bool combat = phase == SpellGame.Phase.Combat;
         _background.SetActive(!combat);
         bool result = phase == SpellGame.Phase.Victory || phase == SpellGame.Phase.Defeat;
@@ -423,6 +461,18 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>타이틀 시작·결과 다시 시작·보상 건너뛰기 버튼의 동작을 연결한다.</summary>
     private void SetupOtherScreens()
     {
+        _encounterScreen = Panel(_root, 0, 0, 1280, 720, new Color(0.08f, 0.1f, 0.15f));
+        _encounterScreen.name = "Event and Rest Screen";
+        Label(_encounterScreen, "", 240, 170, 800, 90, 42);
+        _encounterTitle = _encounterScreen.GetComponentInChildren<UnityEngine.UI.Text>();
+        Label(_encounterScreen, "", 240, 285, 800, 100, 24);
+        _encounterDescription = _encounterScreen.GetChild(1).GetComponent<UnityEngine.UI.Text>();
+        _workshopChoices = Element("Workshop Choices", _encounterScreen, 700, 270, 440, 180);
+        _workshopHammer = Button(_workshopChoices, "[E] 분해\n덱의 조각 1개를 여러 조각으로 나눕니다", 0, 0, 440, 82, BeginHammer, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        _workshopGlue = Button(_workshopChoices, "[Q] 접착\n덱의 조각 2개를 하나로 붙입니다", 0, 98, 440, 82, BeginGlue, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        DisableNavigation((RectTransform)_workshopHammer.transform);
+        DisableNavigation((RectTransform)_workshopGlue.transform);
+        Button(_encounterScreen, "계속", 490, 520, 300, 64, ContinueEncounter, fontSize: 26);
         _titleScreen.StartButton.SetAction(StartNewGame);
         _resultScreen.Restart.SetAction(() => StartRun(_isSealerRun, _isThiefRun, _isCurserRun));
         _rewardScreen.Skip.SetAction(LeaveRewardSelection);
@@ -442,6 +492,12 @@ public sealed class SpellGameUI : MonoBehaviour
         List<int> placed = new List<int>();
         foreach (int spell in _game.OwnedSpells) if (_layout.IsPlaced(spell)) placed.Add(spell);
         return placed;
+    }
+
+    /// <summary>이벤트 또는 휴식을 확정하고 다음 전투 전 도안 배치 화면을 표시한다.</summary>
+    private void ContinueEncounter()
+    {
+        if (_game.ContinueEncounter()) Render();
     }
 
     /// <summary>격자에 놓인 도안을 장착해 다음 전투를 시작한다. 하나도 없으면 안내만 갱신한다.</summary>
@@ -2003,14 +2059,12 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>충돌하는 입력과 모달을 제외하고 망치 대상 선택 화면을 연다.</summary>
     private void BeginHammer()
     {
-        if (!CanInteract || _pendingCast >= 0 || _dragGhost != null || _boardGraphic.IsDragging || _table.IsDragging) return;
-        if (ONBOARDING_ENABLED && !_onboardingComplete && !_onboardingPlacementExplained && _game.CraftCount > 0) return;
-        if (_game.HammerUsesLeft <= 0) { _message = "이번 턴의 망치를 이미 사용했습니다"; Render(); return; }
+        if (!CanOpenWorkshop) return;
         ClearSelection(); Render();
         if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
         _hammerTurn = _game.Turn; _hammerBattle = _game.Battle;
         _hammerPhase = HammerPhase.Selecting;
-        _hammerMessage = _game.Hand.Count == 0 ? "손패가 비어 있습니다. Esc로 돌아가세요" : "분해할 조각 하나를 선택하세요";
+        _hammerMessage = "덱에서 분해할 조각 하나를 선택하세요";
         RenderHammer();
     }
 
@@ -2098,7 +2152,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_hammerOverlay != null) { _hammerOverlay.gameObject.SetActive(false); Destroy(_hammerOverlay.gameObject); }
         _hammerOverlay = Panel(_root, 0, 0, 1280, 720, new Color(0.015f, 0.02f, 0.03f, 0.94f));
         Label(_hammerOverlay, "망치 작업대", 350, 35, 420, 42, 30);
-        Label(_hammerOverlay, "일반·특수·접착 조각 분해 · 효과는 원본별 가장 큰 조각에 유지 · 배치 비용 없음", 140, 85, 1000, 32, 16);
+        Label(_hammerOverlay, "덱의 조각을 영구 분해 · 효과는 원본별 가장 큰 조각에 유지 · 이벤트 작업 1회", 140, 85, 1000, 32, 16);
         RectTransform board = Element("Hammer Workbench", _hammerOverlay, 350, 130, 420, 420);
         board.gameObject.AddComponent<CanvasRenderer>();
         board.gameObject.AddComponent<SpellHammerGraphic>().raycastTarget = false;
@@ -2114,7 +2168,7 @@ public sealed class SpellGameUI : MonoBehaviour
         _hammerMarker = Panel(_hammerOverlay, 880, 446, 80, 6, Color.white);
         Label(_hammerOverlay, "강한 타격", 856, 140, 130, 30, 17);
         Label(_hammerOverlay, "약한 타격", 856, 460, 130, 30, 17);
-        Label(_hammerOverlay, "임시 확률 규칙\n기본 분해는 항상 성공\n강할수록 추가 분해 확률 증가\n최소 1/4 · 손패 7장 제한", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
+        Label(_hammerOverlay, "기본 분해는 항상 성공\n강할수록 추가 분해 확률 증가\n최소 1/4 · 결과는 덱에 저장", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
         Label(_hammerOverlay, _hammerMessage, 800, 495, 440, 75, 17);
         RectTransform hint = Element("Hammer Preview", _hammerOverlay, 980, 360, 240, 120);
         _hammerHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
@@ -2141,13 +2195,15 @@ public sealed class SpellGameUI : MonoBehaviour
         }
         if (_hammerPhase == HammerPhase.Selecting || _hammerPhase == HammerPhase.Timing)
         {
-            for (int i = 0; i < _game.Hand.Count; i++)
+            RectTransform cards = CreateWorkshopDeck(_hammerOverlay);
+            for (int i = 0; i < _game.OwnedCards.Count; i++)
             {
-                SpellGame.Card card = _game.Hand[i];
-                RectTransform panel = Panel(_hammerOverlay, 80 + i * 160, 590, 148, 115, CardColor(card, card == _hammerCard));
+                SpellGame.Card card = _game.OwnedCards[i];
+                RectTransform panel = Panel(cards, i * 165, 0, 155, 115, CardColor(card, card == _hammerCard));
                 UnityEngine.UI.Button button = panel.gameObject.AddComponent<UnityEngine.UI.Button>();
                 UnityEngine.UI.Navigation navigation = button.navigation; navigation.mode = UnityEngine.UI.Navigation.Mode.None; button.navigation = navigation;
                 button.onClick.AddListener(() => SelectHammerCard(card));
+                button.interactable = _game.HammerIssue(card) == null;
                 panel.gameObject.AddComponent<SpellCardDrag>().Setup(this, card);
                 HammerCardShape(panel, card, 74, 32, 54).GetComponent<SpellShapeGraphic>().color = ShapeTint(card);
                 Label(panel, CardName(card), 2, 65, 144, 48, 12);
@@ -2183,7 +2239,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>상태 유효성, 취소와 타이밍 입력을 처리하고 타격·충격·분해 결과를 시간에 맞춰 표시한다.</summary>
     private void UpdateHammer()
     {
-        if (_game.CurrentPhase != SpellGame.Phase.Combat || _game.Turn != _hammerTurn || _game.Battle != _hammerBattle)
+        if (!_game.IsWorkshopEvent || _game.Turn != _hammerTurn || _game.Battle != _hammerBattle)
         {
             CloseHammer(); Render(); return;
         }
@@ -2241,13 +2297,12 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>일반 카드 수와 모달·드래그 상태를 확인하고 접착 작업을 시작한다.</summary>
     private void BeginGlue()
     {
-        if (!CanInteract || _pendingCast >= 0 || _dragGhost != null || _boardGraphic.IsDragging || _table.IsDragging) return;
-        if (ONBOARDING_ENABLED && !_onboardingComplete && !_onboardingPlacementExplained && _game.CraftCount > 0) return;
+        if (!CanOpenWorkshop) return;
         int count = 0;
-        foreach (SpellGame.Card card in _game.Hand) if (_game.GlueCardIssue(card) == null) count++;
+        foreach (SpellGame.Card card in _game.OwnedCards) if (_game.GlueCardIssue(card) == null) count++;
         if (_game.GlueUsesLeft == 0 || count < 2)
         {
-            _message = _game.GlueUsesLeft == 0 ? "이번 턴의 접착을 이미 사용했습니다" : "접착 가능한 조각이 두 장 이상 필요합니다";
+            _message = "접착 가능한 조각이 두 장 이상 필요합니다";
             Render(); return;
         }
         ClearSelection(); Render();
@@ -2373,7 +2428,7 @@ public sealed class SpellGameUI : MonoBehaviour
         {
             _glueMessage = "카드 상태가 바뀌어 접착하지 못했습니다"; RefreshGlue(); return;
         }
-        _message = "접착 완료 · 전체 모양을 한 장으로 배치합니다";
+        _message = "접착 완료 · 새로운 모양이 덱에 영구 저장되었습니다";
         CloseGlue(); Render();
     }
 
@@ -2411,7 +2466,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>접착 모달의 턴·카드 유효성을 확인하고 취소와 선택 조각의 회전을 처리한다.</summary>
     private void UpdateGlue()
     {
-        bool invalid = _game.CurrentPhase != SpellGame.Phase.Combat || _game.Turn != _glueTurn || _game.Battle != _glueBattle;
+        bool invalid = !_game.CanUseWorkshop || _game.Turn != _glueTurn || _game.Battle != _glueBattle;
         foreach (SpellGame.Card card in _glueCards) if (card != null && _game.GlueCardIssue(card) != null) invalid = true;
         bool escape = Keyboard.current != null && (Keyboard.current.escapeKey.wasPressedThisFrame || Keyboard.current.qKey.wasPressedThisFrame);
         if (!invalid && _glueCoatingChoice != null) { if (escape) HideGlueCoatingChoice(); return; }
@@ -2446,7 +2501,8 @@ public sealed class SpellGameUI : MonoBehaviour
         RectTransform rect = Panel(overlay, x, y, width, height, new Color(0.23f, 0.32f, 0.37f));
         UnityEngine.UI.Button button = rect.gameObject.AddComponent<UnityEngine.UI.Button>();
         UnityEngine.UI.Navigation navigation = button.navigation; navigation.mode = UnityEngine.UI.Navigation.Mode.None; button.navigation = navigation;
-        button.onClick.AddListener(() => { if (isActiveAndEnabled && _glueOverlay != null && _glueOverlay == overlay) action(); });
+        RectTransform activeOverlay = _glueOverlay;
+        button.onClick.AddListener(() => { if (isActiveAndEnabled && _glueOverlay != null && _glueOverlay == activeOverlay) action(); });
         Label(rect, caption, 4, 2, width - 8, height - 4, 18);
         return button;
     }
@@ -2469,12 +2525,14 @@ public sealed class SpellGameUI : MonoBehaviour
         _glueConfirm = GlueButton(_glueOverlay, "접착 확인", 850, 360, 280, 55, ConfirmGlue);
         GlueButton(_glueOverlay, "취소 · Esc", 850, 435, 280, 45, () => { CloseGlue(); Render(); });
         GlueButton(_glueOverlay, "선택 조각 중앙으로", 850, 505, 280, 40, () => MoveGluePart(_glueSelected, new Vector2Int(4, 4)));
-        Label(_glueOverlay, "카드 2장 → 1장 · 현재 전투만 유지\n드래그 또는 빈 칸 클릭으로 이동 · 손패 재클릭으로 선택 해제", 100, 490, 660, 65, 17);
-        for (int i = 0; i < _game.Hand.Count; i++)
+        Label(_glueOverlay, "덱의 조각 2장 → 1장 · 모양과 효과 영구 유지\n드래그 또는 빈 칸 클릭으로 이동 · 덱 조각 재클릭으로 선택 해제", 100, 490, 660, 65, 17);
+        RectTransform cards = CreateWorkshopDeck(_glueOverlay);
+        for (int i = 0; i < _game.OwnedCards.Count; i++)
         {
-            SpellGame.Card card = _game.Hand[i];
+            SpellGame.Card card = _game.OwnedCards[i];
             bool selected = _glueCards[0] == card || _glueCards[1] == card;
-            UnityEngine.UI.Button button = GlueButton(_glueOverlay, "", 65 + i * 165, 585, 155, 120, () => SelectGlueCard(card));
+            UnityEngine.UI.Button button = GlueButton(cards, "", i * 165, 0, 155, 120, () => SelectGlueCard(card));
+            button.interactable = _game.GlueCardIssue(card) == null;
             button.GetComponent<UnityEngine.UI.Image>().color = CardColor(card, selected);
             button.gameObject.AddComponent<SpellCardDrag>().Setup(this, card);
             RectTransform iconRect = Element("Glue Hand Shape", (RectTransform)button.transform, 5, 3, 145, 64);
@@ -2486,8 +2544,23 @@ public sealed class SpellGameUI : MonoBehaviour
     }
 
 
-    public bool CanDragHammerCard { get { return isActiveAndEnabled && (_hammerPhase == HammerPhase.Selecting || _hammerPhase == HammerPhase.Timing); } }
-    public bool CanDragGlueCard { get { return isActiveAndEnabled && _glueOverlay != null; } }
+    /// <summary>전체 덱의 조각을 가로 스크롤로 선택하는 작업대 목록을 만들고 카드 배치용 영역을 반환한다.</summary>
+    private RectTransform CreateWorkshopDeck(RectTransform overlay)
+    {
+        Label(overlay, "전체 덱 · 마우스 휠로 좌우 이동", 80, 562, 1120, 24, 15);
+        RectTransform viewport = Panel(overlay, 65, 590, 1150, 125, new Color(0.06f, 0.08f, 0.12f));
+        viewport.gameObject.AddComponent<UnityEngine.UI.RectMask2D>();
+        RectTransform cards = Element("Owned Pieces", viewport, 0, 0, Mathf.Max(1150, _game.OwnedCards.Count * 165), 120);
+        UnityEngine.UI.ScrollRect scroll = viewport.gameObject.AddComponent<UnityEngine.UI.ScrollRect>();
+        scroll.viewport = viewport; scroll.content = cards;
+        scroll.horizontal = true; scroll.vertical = false;
+        scroll.movementType = UnityEngine.UI.ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 40;
+        return cards;
+    }
+
+    public bool CanDragHammerCard { get { return isActiveAndEnabled && _game.CanUseWorkshop && (_hammerPhase == HammerPhase.Selecting || _hammerPhase == HammerPhase.Timing); } }
+    public bool CanDragGlueCard { get { return isActiveAndEnabled && _game.CanUseWorkshop && _glueOverlay != null; } }
 
     /// <summary>모달 손패에서 끄는 카드 전체 모양을 포인터 위치에 표시한다.</summary>
     private void CreateModalDragGhost(SpellGame.Card card, Vector2 position)
@@ -2525,7 +2598,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (!combat) { ClearTheftApproach(); return; }
         RenderSeals(_sealLayer); RenderTheftHand();
         if (_game.Curse != null && !_game.Curse.IsResolved)
-            Label(_sealLayer, $"[저주] 카드 #{_game.Curse.Target.Id} · 시전/망치 분해로 해제 · 미해결 HP -{_game.Curse.Amount}", 180, 20, 920, 35, 18);
+            Label(_sealLayer, $"[저주] 카드 #{_game.Curse.Target.Id} · 시전으로 해제 · 미해결 HP -{_game.Curse.Amount}", 180, 20, 920, 35, 18);
     }
 
     /// <summary>현재 저주 대상의 실제 3D 조각 색상을 갱신한다.</summary>

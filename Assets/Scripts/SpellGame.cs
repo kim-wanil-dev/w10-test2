@@ -5,9 +5,7 @@ using System.Collections.ObjectModel;
 /// <summary>주문 조각 전투의 카드, 제작판과 턴 상태를 관리한다.</summary>
 public sealed class SpellGame
 {
-    private const int HAMMER_USES_PER_TURN = 1;
     private const float MAX_DECOMPOSITION_CHANCE = 0.9f;
-    private const int GLUE_USES_PER_TURN = 1;
     private const int CURSE_INTERVAL_TURNS = 1;
     private const int CURSE_FAILURE_AMOUNT = 10;
 
@@ -16,7 +14,7 @@ public sealed class SpellGame
     public enum Seal { None, Recall, Shard, Refill, Overpaint }
     public enum Coating { None, Guard, Amplify, Cog }
     public enum RewardKind { None, Piece, Pattern, Seal }
-    public enum Phase { Title, Combat, Reward, Loadout, Victory, Defeat }
+    public enum Phase { Title, Combat, Reward, Loadout, Victory, Defeat, Event, Rest }
     public enum SpellKind { Single, Block, All, Scatter }
     public enum Keyword { None, OneStroke, Mosaic, Purity }
 
@@ -45,6 +43,7 @@ public sealed class SpellGame
     private const int START_HEALTH = 50;
     private const int DEVELOPER_HEALTH = 9999;
     private const int LAST_BATTLE = 6;
+    private const double REST_HEAL_RATIO = 0.3;
 
     /// <summary>도형이 칸 하나에서 차지하는 위·오른쪽·아래·왼쪽 구역 비트다.</summary>
     public struct ShapeCell
@@ -278,6 +277,7 @@ public sealed class SpellGame
     private bool _hasSealerEncounter;
     private bool _hasThiefEncounter;
     private bool _hasCurserEncounter;
+    private bool _hasUsedWorkshop;
     private readonly List<Card> _stolen = new List<Card>();
     private Enemy _theftOwner;
 
@@ -312,8 +312,10 @@ public sealed class SpellGame
     public int Block { get; private set; }
     public int Battle { get; private set; }
     public int Turn { get; private set; }
-    public int HammerUsesLeft { get; private set; }
-    public int GlueUsesLeft { get; private set; }
+    public bool IsWorkshopEvent { get { return CurrentPhase == Phase.Event && Battle == 2; } }
+    public bool CanUseWorkshop { get { return IsWorkshopEvent && !_hasUsedWorkshop; } }
+    public int HammerUsesLeft { get { return CanUseWorkshop ? 1 : 0; } }
+    public int GlueUsesLeft { get { return CanUseWorkshop ? 1 : 0; } }
     public string SealNotice { get; private set; } = "";
     public int Target { get; private set; }
     public int LastAcquiredPattern { get; private set; } = -1;
@@ -553,6 +555,7 @@ public sealed class SpellGame
         _hasCurserEncounter = withCurser;
         IsDeveloperMode = isDeveloperMode; MaxHealth = isDeveloperMode ? DEVELOPER_HEALTH : START_HEALTH;
         _owned.Clear(); _spells.Clear(); _ownedSpells.Clear(); _nextId = 0; Health = MaxHealth; Battle = 0; LastAcquiredPattern = -1;
+        _hasUsedWorkshop = false;
         if (isDeveloperMode) for (int i = 0; i < PATTERN_COUNT; i++) { _ownedSpells.Add(i); _spells.Add(i); }
         else { _ownedSpells.Add(0); _ownedSpells.Add(1); _ownedSpells.Add(7); _spells.Add(0); _spells.Add(1); _spells.Add(7); }
         for (int i = 0; i < 4; i++) AddCard(Shape.QuarterTriangle, Effect.None);
@@ -684,10 +687,10 @@ public sealed class SpellGame
         }
     }
 
-    /// <summary>새 턴의 사용 횟수와 손패를 준비한 뒤 생존 저주술사의 대상 한 장을 지정한다.</summary>
+    /// <summary>턴을 증가시키고 손패를 준비한 뒤 생존 저주술사의 대상 한 장을 지정한다.</summary>
     private void StartTurn()
     {
-        Turn++; HammerUsesLeft = HAMMER_USES_PER_TURN; GlueUsesLeft = GLUE_USES_PER_TURN; Draw(5);
+        Turn++; Draw(5);
         ApplyCardCurse();
     }
 
@@ -729,17 +732,16 @@ public sealed class SpellGame
         }
     }
 
-    /// <summary>손패 카드의 망치 대상 조건과 한 단계 분해 공간을 확인해 거부 사유를 반환한다.</summary>
+    /// <summary>첫 이벤트의 작업 가능 여부와 소유 조각의 분해 조건을 확인해 거부 사유를 반환한다.</summary>
     public string HammerIssue(Card card)
     {
-        if (CurrentPhase != Phase.Combat) return "플레이어 턴에만 망치를 사용할 수 있습니다";
-        if (HammerUsesLeft <= 0) return "이번 턴의 망치를 이미 사용했습니다";
-        if (card == null || !Hand.Contains(card)) return "손패의 조각 하나를 선택하세요";
+        if (!IsWorkshopEvent) return "첫 번째 이벤트에서만 분해할 수 있습니다";
+        if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
+        if (card == null || !_owned.Contains(card)) return "덱에서 분해할 조각 하나를 선택하세요";
         if (card.IsUnique) return "고유 조각은 쪼갤 수 없습니다";
         if (card.Glued == null && card.Shape == Shape.QuarterTriangle) return "1/4 삼각형은 가장 작은 조각이라 분해할 수 없습니다";
         int firstSplit = card.Glued != null ? 2 : SplitOnce(new Fragment(card.Shape, 0, 0, 0)).Length;
         if (firstSplit == 0) return "이 도형은 더 분해할 수 없습니다";
-        if (Hand.Count - 1 + firstSplit > MAX_HAND) return $"손패가 부족합니다. 이 조각은 처음에 {firstSplit}장으로 나뉘므로 조각을 배치해 자리를 비워 주세요";
         return null;
     }
 
@@ -843,13 +845,13 @@ public sealed class SpellGame
         mapped = default; return false;
     }
 
-    /// <summary>현재 손패에서 원본을 교체할 때 허용되는 최대 결과 수를 반환한다. 대상이 무효하면 0이다.</summary>
+    /// <summary>소유 조각을 최소 단위까지 분해할 때 가능한 최대 결과 수를 반환한다. 작업이 무효하면 0이다.</summary>
     public int HammerMaxPieces(Card card)
     {
         if (HammerIssue(card) != null) return 0;
         int smallestPieces = card.Glued == null ? SmallestPieceCount(card.Shape)
             : SmallestPieceCount(card.Glued.First.Shape) + SmallestPieceCount(card.Glued.Second.Shape);
-        return Math.Min(smallestPieces, MAX_HAND - Hand.Count + 1);
+        return smallestPieces;
     }
 
     /// <summary>기본 도형을 모두 1/4까지 나눴을 때 면적에 해당하는 최소 조각 수, 즉 1/4 구역 수를 반환한다.</summary>
@@ -860,7 +862,7 @@ public sealed class SpellGame
         return count;
     }
 
-    /// <summary>강도에 따른 분해 결과로 손패를 교체하고 망치 횟수를 소비한다. 실제 교체된 대상의 저주만 해제한다.</summary>
+    /// <summary>강도에 따른 분해 결과로 덱 원본을 영구 교체하고 이벤트 작업 기회를 소모한다.</summary>
     public bool TryHammer(Card card, float strength, out Shape[] resultShapes)
     {
         resultShapes = Array.Empty<Shape>();
@@ -880,12 +882,11 @@ public sealed class SpellGame
         }
         resultShapes = new Shape[results.Count];
         for (int i = 0; i < results.Count; i++) resultShapes[i] = results[i].Shape;
-        HammerUsesLeft--;
+        _hasUsedWorkshop = true;
         if (resultShapes.Length == 1) return true;
-        int index = _hand.IndexOf(card);
-        _hand.RemoveAt(index);
-        _hand.InsertRange(index, results);
-        ResolveCurse(card, CurseResolution.Hammer);
+        int index = _owned.IndexOf(card);
+        _owned.RemoveAt(index);
+        _owned.InsertRange(index, results);
         return true;
     }
 
@@ -918,20 +919,20 @@ public sealed class SpellGame
             : EffectCount(card.Glued.First, effect) + EffectCount(card.Glued.Second, effect);
     }
 
-    /// <summary>손패의 기본 카드인지 확인해 접착 선택 거부 사유를 반환한다. 특수 효과는 허용한다.</summary>
+    /// <summary>첫 이벤트에서 접착할 수 있는 소유 기본 조각인지 확인해 거부 사유를 반환한다. 특수 효과는 허용한다.</summary>
     public string GlueCardIssue(Card card)
     {
-        if (card == null || !Hand.Contains(card)) return "손패의 조각을 선택하세요";
+        if (!IsWorkshopEvent) return "첫 번째 이벤트에서만 접착할 수 있습니다";
+        if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
+        if (card == null || !_owned.Contains(card)) return "덱에서 조각을 선택하세요";
         if (card.IsUnique) return "고유 조각은 접착할 수 없습니다";
         if (card.Glued != null) return "접착된 카드는 다시 접착할 수 없습니다";
         return null;
     }
 
-    /// <summary>두 손패 조각의 중복·겹침과 실제 삼각 구역의 변 접촉을 검사해 접착 거부 사유를 반환한다.</summary>
+    /// <summary>덱의 두 조각의 중복·겹침과 실제 삼각 구역의 변 접촉을 검사해 접착 거부 사유를 반환한다.</summary>
     public string GlueIssue(Card first, int firstRotation, Card second, int secondRotation, int relativeX, int relativeY)
     {
-        if (CurrentPhase != Phase.Combat) return "플레이어 행동 중에만 접착할 수 있습니다";
-        if (GlueUsesLeft <= 0) return "이번 턴의 접착을 이미 사용했습니다";
         string issue = GlueCardIssue(first) ?? GlueCardIssue(second);
         if (issue != null) return issue;
         if (first == second) return "서로 다른 조각 두 장을 선택하세요";
@@ -961,7 +962,7 @@ public sealed class SpellGame
         return first.Coating != Coating.None && second.Coating != Coating.None && first.Coating != second.Coating;
     }
 
-    /// <summary>두 손패 카드의 접촉을 재검증해 복합 카드로 교체하고 미해결 저주를 결과 인스턴스로 이전한다. 코팅이 서로 다르면 keptCoating이 둘 중 하나여야 한다.</summary>
+    /// <summary>덱의 두 조각을 배치·회전을 보존한 접착 카드 한 장으로 영구 교체하고 작업 기회를 소모한다. 서로 다른 코팅은 keptCoating으로 선택한다.</summary>
     public bool TryGlue(Card first, int firstRotation, Card second, int secondRotation, int relativeX, int relativeY, Coating keptCoating = Coating.None)
     {
         if (GlueIssue(first, firstRotation, second, secondRotation, relativeX, relativeY) != null) return false;
@@ -973,10 +974,10 @@ public sealed class SpellGame
         }
         GluedShape glued = new GluedShape(first, (firstRotation % 4 + 4) % 4, second, (secondRotation % 4 + 4) % 4, relativeX, relativeY);
         Card result = new Card { Id = _nextId + 1, Shape = first.Shape, Effect = Effect.None, Glued = glued, Coating = coating };
-        int index = Math.Min(_hand.IndexOf(first), _hand.IndexOf(second));
-        _hand.Remove(first); _hand.Remove(second); _hand.Insert(index, result);
-        if (IsCursed(first) || IsCursed(second)) Curse.Target = result;
-        _nextId++; GlueUsesLeft--; return true;
+        int index = Math.Min(_owned.IndexOf(first), _owned.IndexOf(second));
+        _owned.Remove(first); _owned.Remove(second); _owned.Insert(index, result);
+        _hasUsedWorkshop = true;
+        _nextId++; return true;
     }
 
     /// <summary>전투 임시 카드와 배치를 정리하고 보상 카드를 포함한 소유 덱을 복구해 지정 화면으로 전환한다.</summary>
@@ -1462,7 +1463,14 @@ public sealed class SpellGame
     public bool ChooseReward(int index)
     {
         if (CurrentPhase != Phase.Reward) return false;
-        if (index == -1) { CurrentPhase = Battle == LAST_BATTLE ? Phase.Victory : Phase.Loadout; ActiveReward = RewardKind.None; return true; }
+        if (index == -1)
+        {
+            CurrentPhase = Battle == LAST_BATTLE ? Phase.Victory
+                : Battle == 2 || Battle == 4 ? Phase.Event
+                : Battle == 5 ? Phase.Rest : Phase.Loadout;
+            ActiveReward = RewardKind.None;
+            return true;
+        }
         IReadOnlyList<Reward> choices = ActiveRewardChoices;
         if (index < 0 || index >= choices.Count) return false;
         Reward reward = choices[index];
@@ -1548,6 +1556,18 @@ public sealed class SpellGame
         foreach (int spell in equipped) if (!_ownedSpells.Contains(spell)) return false;
         _spells.Clear(); _spells.AddRange(equipped); _spells.Sort();
         StartBattle(); return true;
+    }
+
+    /// <summary>휴식 시 회복할 최대 체력 30%를 소수점 이하 버림으로 반환한다.</summary>
+    public int RestHealAmount { get { return (int)(MaxHealth * REST_HEAL_RATIO); } }
+
+    /// <summary>이벤트 또는 휴식을 마치고 도안 배치로 이동한다. 휴식은 체력 상한까지 한 번 회복한다.</summary>
+    public bool ContinueEncounter()
+    {
+        if (CurrentPhase != Phase.Event && CurrentPhase != Phase.Rest) return false;
+        if (CurrentPhase == Phase.Rest) Health = Math.Min(MaxHealth, Health + RestHealAmount);
+        CurrentPhase = Phase.Loadout;
+        return true;
     }
     /// <summary>기본·복합 카드의 지정 회전에서 점유하는 칸 목록을 반환한다.</summary>
     public static IReadOnlyList<ShapeCell> CardCells(Card card, int rotation)
