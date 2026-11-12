@@ -257,7 +257,7 @@ public sealed class SpellTable3D : MonoBehaviour
             int slot = FreeSlot(); piece.DropToHand(slot, SlotPosition(slot), _cellSize, _dropHeight + Random.Range(0f, 0.45f));
         }
         foreach (int spell in _game.Spells) foreach (SpellGame.Placement placement in _game.Boards[spell].Pieces) PlaceOnBoard(GetPiece(placement.Card), spell, placement);
-        RebuildPatterns(); ProjectControls();
+        RebuildPatterns(); ProjectControls(); RefreshCurseTint();
     }
 
     /// <summary>손패 페이지를 변경하고 해당 페이지의 조각을 표시한다.</summary>
@@ -293,7 +293,7 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>집은 조각을 현재 방향의 칸 모양으로 반환한다. 점토는 한 칸으로 보여 준다.</summary>
     private IReadOnlyList<SpellGame.ShapeCell> HeldCells()
     {
-        return SpellGame.ShapeCells(_picked.Card.Shape, _picked.Card.Shape == SpellGame.Shape.Clay ? 0 : _rotation);
+        return SpellGame.CardCells(_picked.Card, _picked.Card.Shape == SpellGame.Shape.Clay ? 0 : _rotation);
     }
 
     /// <summary>카드에 대응하는 3D 조각을 재사용하거나 카드 모양과 효과 색으로 생성한다.</summary>
@@ -437,7 +437,7 @@ public sealed class SpellTable3D : MonoBehaviour
                 if (!collision) { selected = candidate; break; }
             }
             occupied.Add(new Rect(selected.x, -selected.y, width, 36));
-            _screen.Tabs[spell].Bind(SpellGame.PatternName(spell), _ui.PatternColor(spell), selected, width);
+            _screen.Tabs[spell].Bind(SpellGame.PatternName(spell) + (_game.IsSealed(spell) ? " [봉인]" : ""), _ui.PatternColor(spell), selected, width);
             _screen.CastButtons[spell].Rect.anchoredPosition = OverlayPoint(parent, sum / Mathf.Max(1, weight));
         }
     }
@@ -636,7 +636,7 @@ public sealed class SpellTable3D : MonoBehaviour
             bool valid = false;
             foreach (int spell in _game.Spells) for (int y = 0; y < SpellPatternLayout.ROWS; y++) for (int x = 0; x < SpellPatternLayout.COLUMNS; x++)
             {
-                _layout.GridToLocalPlacement(spell, piece.Card.Shape, new Vector2Int(x, y), r, out Vector2Int local, out int localRotation);
+                _layout.GridToLocalPlacement(spell, piece.Card, new Vector2Int(x, y), r, out Vector2Int local, out int localRotation);
                 if (_layout.IsPlaced(spell) && _game.CanPlace(spell, piece.Card, local.x, local.y, localRotation, piece.Board == spell ? piece.Placement : null)) valid = true;
             }
             float delta = Mathf.Abs(Mathf.DeltaAngle(yaw, BOARD_YAW + r * 90f));
@@ -658,7 +658,7 @@ public sealed class SpellTable3D : MonoBehaviour
             foreach (int spell in _game.Spells)
             {
                 if (!_layout.IsPlaced(spell)) continue;
-                _layout.GridToLocalPlacement(spell, _picked.Card.Shape, _anchor, _rotation, out Vector2Int local, out int localRotation);
+                _layout.GridToLocalPlacement(spell, _picked.Card, _anchor, _rotation, out Vector2Int local, out int localRotation);
                 if (!_game.CanPlace(spell, _picked.Card, local.x, local.y, localRotation, _picked.Board == spell ? _picked.Placement : null)) continue;
                 _destination = spell; _local = local; _localRotation = localRotation; break;
             }
@@ -735,4 +735,23 @@ public sealed class SpellTable3D : MonoBehaviour
         if (_pickAction != null) { _pickAction.performed -= RecordPress; _pickAction.canceled -= RecordRelease; _pickAction.Dispose(); }
         if (_rotateAction != null) { _rotateAction.performed -= RecordRotation; _rotateAction.Dispose(); }
     }
+    /// <summary>판 격자 좌표를 카메라의 화면 좌표로 변환한다.</summary>
+    public Vector2 GridToScreen(Vector2 grid)
+    {
+        return _camera.WorldToScreenPoint(_boardRoot.TransformPoint(GridLocal(grid)));
+    }
+
+    /// <summary>저주된 카드의 메시를 붉게 강조하고 해제된 카드의 원래 색상을 복원한다.</summary>
+    public void RefreshCurseTint()
+    {
+        foreach (SpellPiece3D piece in _pieces.Values)
+        {
+            SpellGame.Card card = piece.Card;
+            Color tint = _game.IsCursed(card) ? new Color(1f, 0.15f, 0.15f)
+                : card.Effect == SpellGame.Effect.None ? card.Shape == SpellGame.Shape.Clay ? CLAY_COLOR : NORMAL_COLOR : _ui.EffectColor(card.Effect);
+            piece.SetTint(piece.Placement != null && piece.Placement.HasPersisted ? tint * 0.72f : tint);
+        }
+    }
+
 }
+

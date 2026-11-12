@@ -22,3 +22,4 @@ public sealed class SpellPatternDrag : MonoBehaviour, IBeginDragHandler, IDragHa
         if (isActiveAndEnabled && eventData.button == PointerEventData.InputButton.Left) _ui.EndPatternDrag(eventData);
     }
 }
+

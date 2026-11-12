@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -9,6 +10,9 @@ using UnityEngine.InputSystem;
 /// <summary>주문 조각 PoC의 화면과 입력을 전투 상태에 연결한다.</summary>
 public sealed class SpellGameUI : MonoBehaviour
 {
+    private const float THEFT_MIN_START_DISTANCE = 360;
+    private const float THEFT_ARRIVAL_RADIUS = 12;
+    private enum HammerPhase { None, Selecting, Timing, Striking, Result }
     private const float LEGACY_SCALE = 1.5f;
     private const float LEGACY_CELL = 84f;
     private const float TOAST_SECONDS = 2.2f;
@@ -19,6 +23,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private const float ENEMY_BAR_WIDTH = 320f;
     private const float ENEMY_NARROW_BAR_WIDTH = 280f;
     private const float MENU_GAP = 4f;
+    private static readonly Vector2[] THEFT_START_POINTS = { new Vector2(1180, 130), new Vector2(1180, 430), new Vector2(640, 65), new Vector2(80, 65) };
     private static readonly bool ONBOARDING_ENABLED = false;
     private static readonly Vector2 MESSAGE_POSITION = new Vector2(705, -480);
     private static readonly Vector2 FEEDBACK_POSITION = new Vector2(960, -100);
@@ -57,6 +62,11 @@ public sealed class SpellGameUI : MonoBehaviour
     [SerializeField] private Color _dimColor = new Color(0.224f, 0.267f, 0.416f);
     [SerializeField] private Color _dangerColor = new Color(0.878f, 0.376f, 0.353f);
     [SerializeField] private Color _warnColor = new Color(0.949f, 0.722f, 0.294f);
+
+    private readonly System.Random _random = new System.Random();
+    private RectTransform _featureControls;
+    private RectTransform _testControls;
+    private RectTransform _sealLayer;
 
     private readonly SpellGame _game = new SpellGame();
     private readonly SpellPatternLayout _layout = new SpellPatternLayout();
@@ -109,10 +119,62 @@ public sealed class SpellGameUI : MonoBehaviour
     private Vector2 _onboardingGhostStart;
     private Vector2 _onboardingGhostEnd;
 
+    [Header("망치 프로토타입")]
+    [SerializeField, Min(0.1f)] private float _hammerGaugeSeconds = 0.25f;
+    [SerializeField, Min(0.1f)] private float _hammerStrikeSeconds = 0.24f;
+    [SerializeField, Min(0.2f)] private float _hammerResultSeconds = 1.1f;
+
+    private HammerPhase _hammerPhase;
+    private SpellGame.Card _hammerCard;
+    private int _hammerTurn;
+    private int _hammerBattle;
+    private float _hammerTimingStart;
+    private float _hammerStrikeStart;
+    private float _hammerStrength;
+    private string _hammerMessage = "";
+    private SpellGame.Shape[] _hammerResultShapes = Array.Empty<SpellGame.Shape>();
+    private SpellGame.Card _hammerDragCard;
+    private RectTransform _hammerOverlay;
+    private RectTransform _hammerVisual;
+    private RectTransform _hammerSource;
+    private RectTransform _hammerResults;
+    private RectTransform _hammerMarker;
+    private UnityEngine.UI.Image _hammerGaugeFill;
+    private UnityEngine.UI.Text _hammerHint;
+    private CanvasGroup _hammerImpact;
+
+    private readonly SpellGame.Card[] _glueCards = new SpellGame.Card[2];
+    private readonly Vector2Int[] _gluePositions = { new Vector2Int(2, 1), new Vector2Int(4, 1) };
+    private readonly int[] _glueRotations = new int[2];
+    private RectTransform _glueOverlay;
+    private SpellGlueGraphic _glueGraphic;
+    private UnityEngine.UI.Text _glueHint;
+    private UnityEngine.UI.Button _glueConfirm;
+    private int _glueSelected;
+    private int _glueTurn;
+    private int _glueBattle;
+    private string _glueMessage = "";
+    private SpellGame.Card _glueDragCard;
+    private int _glueDragRotation;
+    private bool _isSealerRun;
+    private bool _isThiefRun;
+    private bool _isCurserRun;
+
+    [Header("도둑손 프로토타입")]
+    [SerializeField, Min(0.1f)] private float _theftIntervalSeconds = 15;
+    [SerializeField, Min(1f)] private float _theftMoveSpeed = 90;
+
+    private float _theftElapsed;
+    private int _theftBattle = -1;
+    private bool _theftApproaching;
+    private bool _theftWasInteractive;
+    private Vector2 _theftPosition;
+    private RectTransform _theftHand;
+
     public SpellGame.Card SelectedCard { get { return _selectedCard; } }
     public int Rotation { get { return _rotation; } }
     public bool IsTableActive { get { return _table != null; } }
-    public bool CanInteract { get { return isActiveAndEnabled && !_showDebugRemote && !_showPauseMenu && !_showHelp && _openPile < 0 && _game.CurrentPhase == SpellGame.Phase.Combat; } }
+    public bool CanInteract { get { return isActiveAndEnabled && _glueOverlay == null && _hammerPhase == HammerPhase.None && !_showDebugRemote && !_showPauseMenu && !_showHelp && _openPile < 0 && _game.CurrentPhase == SpellGame.Phase.Combat; } }
 
     void Awake()
     {
@@ -122,7 +184,7 @@ public sealed class SpellGameUI : MonoBehaviour
         _root.anchorMin = _root.anchorMax = _root.pivot = new Vector2(0.5f, 0.5f);
         _root.anchoredPosition = Vector2.zero;
         _root.localScale = Vector3.one * LEGACY_SCALE;
-        _root.SetSiblingIndex(_combatScreen.transform.GetSiblingIndex() + 1);
+        _root.SetAsLastSibling();
         _boardGraphic = _combatScreen.Board;
         _boardGraphic.Setup(this, _game, _layout);
         SetupCombatScreen();
@@ -130,6 +192,7 @@ public sealed class SpellGameUI : MonoBehaviour
         SetupOtherScreens();
         SetupOverlays();
         SetupDebugRemote();
+        SetupFeatureControls();
         Render();
     }
 
@@ -143,6 +206,7 @@ public sealed class SpellGameUI : MonoBehaviour
 
     void OnDisable()
     {
+        _theftWasInteractive = false; CloseGlue(); CloseHammer();
         ClearSelection();
         _pendingCast = -1;
         _openPile = -1;
@@ -158,8 +222,12 @@ public sealed class SpellGameUI : MonoBehaviour
         if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote) return;
+        UpdateTheft();
+        if (_glueOverlay != null) { UpdateGlue(); return; }
+        if (_hammerPhase != HammerPhase.None) { UpdateHammer(); return; }
         UpdateFeedback();
         UpdateCursorHint();
+        if (_game.CurrentPhase == SpellGame.Phase.Combat && _game.Curse != null) RefreshCurseTint();
         if (ONBOARDING_ENABLED) UpdateOnboarding();
         if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
         {
@@ -172,6 +240,8 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_showPauseMenu || _openPile >= 0 || _showHelp) return;
         if (_game.CurrentPhase != SpellGame.Phase.Combat) return;
         if (_table.IsDragging) return;
+        if (Keyboard.current != null && Keyboard.current.qKey.wasPressedThisFrame) { BeginGlue(); return; }
+        if (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame) { BeginHammer(); return; }
         bool rotate = Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame;
         bool rightClick = Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
         if (!rotate && !rightClick) return;
@@ -302,7 +372,8 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>현재 게임 단계에 맞춰 화면을 갱신한다. 전투 화면은 다시 만들지 않고 값만 갱신한다.</summary>
     private void Render()
     {
-        if (_pendingCast >= 0 && (_game.CurrentPhase != SpellGame.Phase.Combat || !_game.IsComplete(_pendingCast))) _pendingCast = -1;
+        if (_pendingCast >= 0 && (_game.CurrentPhase != SpellGame.Phase.Combat || !_game.IsComplete(_pendingCast) || _game.IsSealed(_pendingCast))) _pendingCast = -1;
+        CloseGlue(); CloseHammer();
         _boardGraphic.CancelDrag();
         if (_dragGhost != null) ClearSelection();
         HideDragGhost(); HideAim();
@@ -324,6 +395,7 @@ public sealed class SpellGameUI : MonoBehaviour
         else if (phase == SpellGame.Phase.Loadout) RefreshLoadout();
         else if (result) _resultScreen.Bind(phase == SpellGame.Phase.Victory ? "승리" : "패배");
         RenderOnboardingLayer(combat);
+        RefreshFeatureControls();
         RefreshOverlays();
         _renderedPhase = phase;
     }
@@ -332,7 +404,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private void SetupOtherScreens()
     {
         _titleScreen.StartButton.SetAction(StartNewGame);
-        _resultScreen.Restart.SetAction(StartNewGame);
+        _resultScreen.Restart.SetAction(() => StartRun(_isSealerRun, _isThiefRun, _isCurserRun));
         _rewardScreen.Skip.SetAction(() => ChooseReward(-1));
         _loadoutScreen.Setup(_layout, _game.OwnedSpells, PatternColor, StartLoadoutBattle);
     }
@@ -363,12 +435,14 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>새 게임을 시작하고 도안 배치와 선택을 초기화한다.</summary>
     private void StartNewGame()
     {
+        ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = false;
         _game.StartGame(); ResetPatterns(); ClearSelection(); Render();
     }
 
     /// <summary>개발자 전투를 시작하고 판에 들어가는 만큼 모든 도안을 배치한다.</summary>
     private void StartDeveloperGame()
     {
+        ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = false;
         _game.StartGame(true); ResetPatterns();
         _layout.EnsurePlaced(_game.Spells); ClearSelection(); Render();
     }
@@ -455,11 +529,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>꺼 둔 첫 주문 온보딩 층을 비우고, 켜져 있으면 전투 중에만 다시 그린다.</summary>
     private void RenderOnboardingLayer(bool combat)
     {
-        _onboardingGhost = null; _onboardingGhostGroup = null; _onboardingGhostIcon = null;
-        foreach (Transform child in _root) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-        bool show = ONBOARDING_ENABLED && combat && !_onboardingComplete;
-        _root.gameObject.SetActive(show);
-        if (show) RenderOnboarding();
+        _root.gameObject.SetActive(true);
     }
 
     /// <summary>일시정지·도움말·더미 열람 오버레이를 상태에 맞게 켜고 내용을 갱신한다.</summary>
@@ -493,7 +563,7 @@ public sealed class SpellGameUI : MonoBehaviour
             screen.ProgressDots[i].color = i < _game.Battle - 1 ? _subColor : i == _game.Battle - 1 ? _textColor : _dimColor;
         int incoming = 0;
         foreach (SpellGame.Enemy enemy in _game.Enemies) if (enemy.Health > 0) incoming += enemy.Intent;
-        screen.PlayerStatus.Bind(_game.Health, _game.MaxHealth, _game.Block, Math.Max(0, incoming - _game.Block));
+        screen.PlayerStatus.Bind(_game.Health, _game.MaxHealth, _game.Block, Math.Max(0, incoming - _game.Block) + (_game.Curse != null && !_game.Curse.IsResolved ? _game.Curse.Amount : 0));
         screen.Placement.gameObject.SetActive(false);
         screen.BoardCount.gameObject.SetActive(false);
         _boardGraphic.MarkStateDirty();
@@ -542,14 +612,14 @@ public sealed class SpellGameUI : MonoBehaviour
         {
             bool show = _game.Spells.Contains(i) && _layout.IsPlaced(i);
             _combatScreen.Tabs[i].gameObject.SetActive(show);
-            bool castable = show && _game.IsComplete(i);
+            bool castable = show && _game.IsComplete(i) && !_game.IsSealed(i);
             _combatScreen.CastButtons[i].gameObject.SetActive(castable);
             if (!show) continue;
             Rect bounds = PatternBounds(i, cell);
             Vector2[] candidates = { new Vector2(bounds.xMin, -bounds.yMin + TAB_HEIGHT), new Vector2(bounds.xMin, -bounds.yMax), new Vector2(bounds.xMin - cell, -bounds.yMin), new Vector2(bounds.xMax, -bounds.yMin) };
             Vector2 position = candidates[0];
             foreach (Vector2 candidate in candidates) if (IsTabPositionFree(i, candidate, cell)) { position = candidate; break; }
-            _combatScreen.Tabs[i].Bind(SpellGame.PatternName(i), PatternColor(i), position, cell);
+            _combatScreen.Tabs[i].Bind(SpellGame.PatternName(i) + (_game.IsSealed(i) ? " [봉인]" : ""), PatternColor(i), position, cell);
             if (castable) _combatScreen.CastButtons[i].Bind(PatternColor(i), _pendingCast == i || (_castDragging && _castDragBoard == i), PatternCenter(i, cell), FormulaText(i));
         }
         _table.ProjectControls();
@@ -894,13 +964,14 @@ public sealed class SpellGameUI : MonoBehaviour
         _pendingCast = -1; ClearSelection(); _game.EndTurn(); _message = "";
         int damage = healthBefore - _game.Health;
         _impactTarget = -1; _impactAll = false;
-        ShowFeedback($"적 공격  ·  방어 {absorbed}  ·  체력 -{damage}", _dangerColor);
+        ShowFeedback($"턴 종료 · 저주 HP -{_game.LastCurseDamage} · 방어 {(_game.LastCurseDamage >= healthBefore ? 0 : absorbed)} · 총 HP -{damage}", _dangerColor);
         Render();
     }
 
     /// <summary>완성된 주문의 시전을 시작하고 단일 대상 주문은 적 선택을 기다린다.</summary>
     private void BeginCast(int board)
     {
+        if (_game.IsSealed(board)) { _pendingCast = -1; _message = "봉인된 주문 도안은 시전할 수 없습니다"; Render(); return; }
         if (!_game.IsComplete(board)) { _message = "도안을 먼저 완성하세요"; Render(); return; }
         ClearSelection();
         if (SpellGame.NeedsTarget(board))
@@ -916,6 +987,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>완성된 도안과 선택한 적으로 주문을 시전하고 결과를 표시한다.</summary>
     private void CastSpell(int board, int target)
     {
+        if (_game.IsSealed(board)) { _pendingCast = -1; _message = "봉인된 주문 도안은 시전할 수 없습니다"; Render(); return; }
         string result = $"{SpellGame.PatternName(board)} 시전  ·  {FormulaText(board)}";
         if (!_game.Cast(board, target)) { _message = "살아 있는 대상을 선택하세요"; Render(); return; }
         _onboardingComplete = true;
@@ -1093,7 +1165,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>도안별 외곽선을 구분할 색을 반환한다.</summary>
     public Color PatternColor(int spell)
     {
-        return _patternColors[spell];
+        return _game.IsSealed(spell) ? _dangerColor : _patternColors[spell];
     }
 
     /// <summary>특수 효과의 표시 색을 반환한다. 일반 조각은 글자색을 반환한다.</summary>
@@ -1154,15 +1226,17 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>카드의 도형과 특수 효과를 표시하는 이름을 반환한다.</summary>
     private string CardName(SpellGame.Card card)
     {
+        if (card.Glued != null) return (_game.IsCursed(card) ? "[저주] " : "") + "접착 조각\n" + CardName(card.Glued.First) + " + " + CardName(card.Glued.Second);
         string effect = EffectText(card);
         if (card.Effect != SpellGame.Effect.None) effect = EffectName(card.Effect) + " · " + effect;
         else if (string.IsNullOrEmpty(effect)) effect = "일반 · 추가 효과 없음";
-        return DisplayName(card) + "\n" + effect;
+        return (_game.IsCursed(card) ? "[저주] " : "") + DisplayName(card) + "\n" + effect;
     }
 
     /// <summary>손패 카드에 쓸 짧은 이름을 반환한다. 특수 조각은 효과 이름을 앞에 붙인다.</summary>
     private static string DisplayName(SpellGame.Card card)
     {
+        if (card.Glued != null) return "접착 조각";
         if (card.Effect == SpellGame.Effect.None) return ShapeName(card.Shape);
         string shape = card.Shape == SpellGame.Shape.Triangle ? "삼각형" : card.Shape == SpellGame.Shape.QuarterTriangle && card.Effect == SpellGame.Effect.Period ? "쐐기" : ShapeName(card.Shape);
         return EffectName(card.Effect) + " " + shape;
@@ -1217,7 +1291,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private void ToLocalPlacement(int board, Vector2Int anchor, out int x, out int y, out int rotation)
     {
         Vector2Int local;
-        _layout.GridToLocalPlacement(board, _selectedCard.Shape, anchor, _rotation, out local, out rotation);
+        _layout.GridToLocalPlacement(board, _selectedCard, anchor, _rotation, out local, out rotation);
         x = local.x; y = local.y;
     }
 
@@ -1288,6 +1362,24 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>손패 카드 드래그를 시작하고 포인터를 따라갈 도형을 표시한다.</summary>
     public void BeginCardDrag(SpellGame.Card card, Vector2 position)
     {
+
+        if (CanDragGlueCard)
+        {
+            string issue = _game.GlueCardIssue(card);
+            if (issue == null && _glueCards[0] != null && _glueCards[1] != null && _glueCards[0] != card && _glueCards[1] != card)
+                issue = "두 장만 선택할 수 있습니다. 기존 선택을 해제하세요";
+            if (issue != null) { _glueMessage = issue; RefreshGlue(); return; }
+            _glueDragCard = card;
+            _glueDragRotation = _glueCards[0] == card ? _glueRotations[0] : _glueCards[1] == card ? _glueRotations[1] : 0;
+            CreateModalDragGhost(card, position); RefreshGlue(); return;
+        }
+        if (CanDragHammerCard)
+        {
+            _hammerDragCard = card;
+            if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+            CreateModalDragGhost(card, position); return;
+        }
+        if (!CanInteract) return;
         ShowPieceTooltip(null, position);
         _pendingCast = -1;
         if (_selectedCard != card) _rotation = 0;
@@ -1310,9 +1402,9 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         RectTransform ghost = _combatScreen.PieceGhost;
         float cell = _boardGraphic.CellSize;
-        ghost.sizeDelta = SpellPiece3D.CellBounds(SpellGame.ShapeCells(card.Shape, 0)) * cell;
+        ghost.sizeDelta = SpellPiece3D.CellBounds(SpellGame.CardCells(card, 0)) * cell;
         ghost.localRotation = Quaternion.Euler(0, 0, -90 * _rotation);
-        _combatScreen.PieceGhostShape.Shape = card.Shape;
+        _combatScreen.PieceGhostShape.SetCard(card, isCursed: _game.IsCursed(card));
         Color color = card.Effect == SpellGame.Effect.None ? Color.white : EffectColor(card.Effect);
         _combatScreen.PieceGhostShape.color = new Color(color.r, color.g, color.b, 0.85f);
         ghost.gameObject.SetActive(true);
@@ -1343,21 +1435,58 @@ public sealed class SpellGameUI : MonoBehaviour
         else { ClearSelection(); _message = "도안이나 손패 위에 놓아 주세요"; Render(); }
     }
 
-    /// <summary>드래그 중인 도형을 화면 좌표로 이동한다.</summary>
+    /// <summary>화면 포인터 좌표를 미리 보기의 실제 부모 평면으로 변환해 드래그 중인 도형을 이동한다.</summary>
     public void MoveCardDrag(Vector2 position)
     {
-        if (_dragGhost != null) _dragGhost.anchoredPosition = ToLayer(position);
+        if (_dragGhost == null) return;
+        RectTransform parent = (RectTransform)_dragGhost.parent;
+        if (RectTransformUtility.ScreenPointToWorldPointInRectangle(parent, position, null, out Vector3 worldPosition))
+            _dragGhost.position = worldPosition;
     }
 
     /// <summary>드래그 중인 카드를 격자 위에 미리 표시한다.</summary>
     public void PreviewCardDrag(PointerEventData eventData)
     {
+        if (CanDragHammerCard || CanDragGlueCard) return;
         _boardGraphic.PreviewCard(eventData);
     }
 
     /// <summary>드롭 지점이 제작판이면 배치하고, 아니면 선택을 유지한다.</summary>
     public void EndCardDrag(PointerEventData eventData)
     {
+
+        if (CanDragGlueCard)
+        {
+            SpellGame.Card card = _glueDragCard;
+            int rotation = _glueDragRotation;
+            _glueDragCard = null;
+            if (_dragGhost != null) { _dragGhost.gameObject.SetActive(false); Destroy(_dragGhost.gameObject); }
+            _dragGhost = null;
+            Vector2Int position;
+            if (card != null && _glueGraphic.TryDropPosition(eventData, out position))
+            {
+                int slot = _glueCards[0] == card ? 0 : _glueCards[1] == card ? 1 : -1;
+                if (slot < 0)
+                {
+                    SelectGlueCard(card);
+                    slot = _glueCards[0] == card ? 0 : _glueCards[1] == card ? 1 : -1;
+                }
+                if (slot >= 0) { _glueSelected = slot; _glueRotations[slot] = rotation; MoveGluePart(slot, position); }
+            }
+            RefreshGlue(); return;
+        }
+        if (CanDragHammerCard)
+        {
+            SpellGame.Card card = _hammerDragCard;
+            _hammerDragCard = null;
+            if (_dragGhost != null) Destroy(_dragGhost.gameObject);
+            _dragGhost = null;
+            Vector2 point;
+            if (card != null && RectTransformUtility.ScreenPointToLocalPointInRectangle(_root, eventData.position, null, out point)
+                && Vector2.Distance(point, new Vector2(_root.rect.xMin + 560, _root.rect.yMax - 340)) <= 210)
+                SelectHammerCard(card);
+            return;
+        }
         if (_selectedCard == null || !CanInteract) return;
         HideDragGhost();
         if (_boardGraphic.TryDrop(eventData)) return;
@@ -1385,4 +1514,607 @@ public sealed class SpellGameUI : MonoBehaviour
         if (CanInteract) _boardGraphic.EndPatternDrag(eventData);
         else _boardGraphic.CancelDrag();
     }
+    /// <summary>선택한 전투 진입 방식으로 새 게임을 시작하고 도안과 안내 상태를 준비한다.</summary>
+    private void StartRun(bool withSealer, bool withThief = false, bool withCurser = false)
+    {
+        ResetTheft(); _isSealerRun = withSealer; _isThiefRun = withThief; _isCurserRun = withCurser;
+        _game.StartGame(false, withSealer, withThief, withCurser); ResetPatterns(); ClearSelection();
+        if (withSealer || withThief || withCurser) _onboardingComplete = true;
+        _message = _game.SealNotice; _feedbackUntil = 0; Render();
+    }
+
+    private bool CanAdvanceTheft
+    {
+        get { return CanInteract && _pendingCast < 0 && Application.isFocused && Time.timeScale > 0
+            && !(ONBOARDING_ENABLED && !_onboardingComplete && !_onboardingPlacementExplained && _game.CraftCount > 0); }
+    }
+
+    /// <summary>절도 대상과 손 UI를 정리하고 다음 주기를 처음부터 시작한다.</summary>
+    private void ClearTheftApproach()
+    {
+        _game.CancelTheft();
+        _theftApproaching = false; _theftElapsed = 0;
+        if (_theftHand != null) { _theftHand.gameObject.SetActive(false); Destroy(_theftHand.gameObject); }
+        _theftHand = null;
+    }
+
+    /// <summary>새 게임의 절도 주기와 전투 식별 상태를 초기화한다.</summary>
+    private void ResetTheft()
+    {
+        ClearTheftApproach(); _theftBattle = -1; _theftWasInteractive = false;
+    }
+
+    /// <summary>현재 목표 카드의 점유 삼각형 중심을 합산해 공유 격자상의 실제 화면 좌표를 반환한다.</summary>
+    private Vector2 TheftTargetPosition(int board, SpellGame.Placement piece)
+    {
+        Vector2 center = Vector2.zero; int count = 0;
+        foreach (SpellGame.ShapeCell cell in _layout.PlacementGridCells(board, piece))
+            for (int side = 0; side < 4; side++)
+            {
+                if ((cell.Mask & (1 << side)) == 0) continue;
+                center += new Vector2(cell.X + (side == 1 ? 5f / 6 : side == 3 ? 1f / 6 : 0.5f), cell.Y + (side == 2 ? 5f / 6 : side == 0 ? 1f / 6 : 0.5f)); count++;
+            }
+        Vector2 screen = _table.GridToScreen(center / count);
+        Vector2 local = ToLayer(screen);
+        return new Vector2(local.x - _root.rect.xMin, _root.rect.yMax - local.y);
+    }
+
+    /// <summary>모달과 포커스 상태에 따라 절도 주기·접근 이동을 멈추거나 이어가고 도착 시 모델에 절도를 요청한다.</summary>
+    private void UpdateTheft()
+    {
+        if (_game.CurrentPhase != SpellGame.Phase.Combat || !_game.HasLivingThief)
+        {
+            if (_theftApproaching || _game.TheftTarget != null) ClearTheftApproach();
+            _theftElapsed = 0; _theftWasInteractive = false; return;
+        }
+        if (_theftBattle != _game.Battle)
+        {
+            ClearTheftApproach(); _theftBattle = _game.Battle; _theftWasInteractive = false;
+        }
+        int board; SpellGame.Placement piece;
+        if (_theftApproaching && !_game.TryGetTheftPlacement(out board, out piece)) ClearTheftApproach();
+        bool interactive = CanAdvanceTheft;
+        if (_theftHand != null) _theftHand.gameObject.SetActive(interactive);
+        if (!interactive) { _theftWasInteractive = false; return; }
+        if (!_theftWasInteractive) { _theftWasInteractive = true; return; }
+        float delta = Time.unscaledDeltaTime;
+        if (!_theftApproaching)
+        {
+            _theftElapsed = Mathf.Min(_theftElapsed + delta, Mathf.Max(0.1f, _theftIntervalSeconds));
+            if (_theftElapsed < Mathf.Max(0.1f, _theftIntervalSeconds) || !_game.BeginTheft()) return;
+            if (!_game.TryGetTheftPlacement(out board, out piece)) { ClearTheftApproach(); return; }
+            Vector2 target = TheftTargetPosition(board, piece);
+            _theftPosition = new Vector2(1180, 300); int choices = 0;
+            foreach (Vector2 start in THEFT_START_POINTS)
+                if (Vector2.Distance(start, target) >= THEFT_MIN_START_DISTANCE && _random.Next(++choices) == 0) _theftPosition = start;
+            _theftApproaching = true; _theftElapsed = 0;
+            RenderTheftHand(); return;
+        }
+        if (!_game.TryGetTheftPlacement(out board, out piece)) { ClearTheftApproach(); return; }
+        Vector2 destination = TheftTargetPosition(board, piece);
+        _theftPosition = Vector2.MoveTowards(_theftPosition, destination, Mathf.Max(1, _theftMoveSpeed) * delta);
+        if (_theftHand == null) RenderTheftHand();
+        _theftHand.anchoredPosition = new Vector2(_theftPosition.x, -_theftPosition.y);
+        Vector2 direction = destination - _theftPosition;
+        _theftHand.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(-direction.y, direction.x) * Mathf.Rad2Deg - 90);
+        if (Vector2.Distance(_theftPosition, destination) > THEFT_ARRIVAL_RADIUS) return;
+        SpellGame.Card targetCard = _game.TheftTarget;
+        bool stolen = _game.ResolveTheft();
+        ClearTheftApproach();
+        if (!stolen) return;
+        if (_selectedCard == targetCard) ClearSelection();
+        _message = "도둑손이 조각을 훔쳤습니다 · 전투 종료 후 복구됩니다";
+        ShowFeedback("조각을 빼앗겼습니다!", new Color(0.95f, 0.48f, 0.35f)); Render();
+    }
+
+    /// <summary>현재 절도 대상과 연결된 손 그래픽을 생성한다. UI 재생성 시에도 접근 위치를 유지한다.</summary>
+    private void RenderTheftHand()
+    {
+        if (!_theftApproaching || _game.TheftTarget == null || _theftHand != null) return;
+        _theftHand = Element("Thief Hand", _root, _theftPosition.x, _theftPosition.y, 96, 96);
+        _theftHand.pivot = new Vector2(0.5f, 0.5f);
+        _theftHand.gameObject.AddComponent<CanvasRenderer>();
+        _theftHand.gameObject.AddComponent<SpellThiefHandGraphic>().Setup(this, _game.TheftTarget);
+        _theftHand.gameObject.SetActive(CanAdvanceTheft);
+    }
+
+    /// <summary>클릭된 손의 대상이 현재 시도와 일치할 때만 절도를 저지하며 카드와 배치 비용을 유지한다.</summary>
+    public void StopTheft(SpellGame.Card expectedTarget)
+    {
+        if (!_theftApproaching || !CanAdvanceTheft || _game.TheftTarget != expectedTarget) return;
+        ClearTheftApproach();
+        _message = "도둑손 저지!"; ShowFeedback(_message, new Color(0.4f, 0.9f, 0.8f)); Render();
+    }
+
+    /// <summary>봉인된 도안의 현재 격자 위치에 수직 막대기와 잠금 표시를 그린다. 포인터 입력은 통과시킨다.</summary>
+    private void RenderSeals(RectTransform panel)
+    {
+        foreach (Transform child in panel) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
+        foreach (int spell in _game.Spells)
+        {
+            if (!_game.IsSealed(spell) || !_layout.IsPlaced(spell)) continue;
+            Vector2 center = Vector2.zero; int count = 0;
+            for (int y = 0; y < SpellPatternLayout.ROWS; y++) for (int x = 0; x < SpellPatternLayout.COLUMNS; x++)
+                if (_layout.PlacedMask(spell, x, y) != 0) { center += new Vector2(x + 0.5f, y + 0.5f); count++; }
+            Vector2 point = ToLayer(_table.GridToScreen(center / count));
+            float px = point.x - _root.rect.xMin, py = _root.rect.yMax - point.y;
+            RectTransform rod = Panel(panel, px - 3, py - 70, 6, 140, _dangerColor);
+            rod.GetComponent<UnityEngine.UI.Image>().raycastTarget = false;
+            Label(panel, "봉인", px - 35, py - 95, 70, 25, 17);
+        }
+    }
+
+
+    /// <summary>충돌하는 입력과 모달을 제외하고 망치 대상 선택 화면을 연다.</summary>
+    private void BeginHammer()
+    {
+        if (!CanInteract || _pendingCast >= 0 || _dragGhost != null || _boardGraphic.IsDragging || _table.IsDragging) return;
+        if (ONBOARDING_ENABLED && !_onboardingComplete && !_onboardingPlacementExplained && _game.CraftCount > 0) return;
+        if (_game.HammerUsesLeft <= 0) { _message = "이번 턴의 망치를 이미 사용했습니다"; Render(); return; }
+        ClearSelection(); Render();
+        if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+        _hammerTurn = _game.Turn; _hammerBattle = _game.Battle;
+        _hammerPhase = HammerPhase.Selecting;
+        _hammerMessage = _game.Hand.Count == 0 ? "손패가 비어 있습니다. Esc로 돌아가세요" : "분해할 조각 하나를 선택하세요";
+        RenderHammer();
+    }
+
+    /// <summary>망치 화면과 선택 참조를 정리한다. 이미 확정한 타격 결과는 되돌리지 않는다.</summary>
+    private void CloseHammer()
+    {
+        if (_hammerDragCard != null && _dragGhost != null) { _dragGhost.gameObject.SetActive(false); Destroy(_dragGhost.gameObject); _dragGhost = null; }
+        _hammerDragCard = null;
+        if (_hammerOverlay != null) { _hammerOverlay.gameObject.SetActive(false); Destroy(_hammerOverlay.gameObject); }
+        _hammerOverlay = null; _hammerCard = null; _hammerPhase = HammerPhase.None;
+        _hammerResultShapes = Array.Empty<SpellGame.Shape>();
+        _hammerHint = null; _hammerMarker = null; _hammerGaugeFill = null;
+        _onboardingActivity = Time.unscaledTime;
+    }
+
+    /// <summary>선택한 손패의 분해 조건을 안내하고 유효하면 타이밍 게이지를 시작한다.</summary>
+    private void SelectHammerCard(SpellGame.Card card)
+    {
+        if (_hammerPhase != HammerPhase.Selecting && _hammerPhase != HammerPhase.Timing) return;
+        string issue = _game.HammerIssue(card);
+        _hammerCard = issue == null ? card : null;
+        _hammerMessage = issue ?? "높은 게이지에서 Space를 누르세요";
+        _hammerPhase = issue == null ? HammerPhase.Timing : HammerPhase.Selecting;
+        _hammerTimingStart = Time.unscaledTime;
+        RenderHammer();
+    }
+
+    /// <summary>현재 강도와 손패 한도로 발생 가능한 분해 결과별 확률을 안내한다.</summary>
+    private string HammerOdds(float strength)
+    {
+        float chance = SpellGame.DecompositionChance(strength);
+        return $"강도 {strength:P0}\n기본 분해 보장\n각 자식은 {chance:P0}로 추가 분해\n최대 {_game.HammerMaxPieces(_hammerCard)}장 · 혼합 결과 가능";
+    }
+
+    /// <summary>확정된 혼합 도형을 종류별 장수로 묶어 결과 안내를 반환한다.</summary>
+    private string HammerResultMessage()
+    {
+        if (_hammerResultShapes.Length == 1) return "추가 분해 불가 · 원본 유지";
+        string message = "분해 결과: ";
+        for (int shape = 0; shape < 4; shape++)
+        {
+            int count = 0;
+            foreach (SpellGame.Shape piece in _hammerResultShapes) if ((int)piece == shape) count++;
+            if (count > 0) message += $"{HammerShapeName((SpellGame.Shape)shape)} {count}장  ";
+        }
+        return message;
+    }
+
+    /// <summary>타이밍 시작 시각과 왕복 시간으로 현재 0~1 강도를 계산한다.</summary>
+    private float HammerStrength()
+    {
+        return Mathf.PingPong((Time.unscaledTime - _hammerTimingStart) / Mathf.Max(0.1f, _hammerGaugeSeconds), 1f);
+    }
+
+    /// <summary>망치 결과에 사용할 기존 도형의 한국어 이름을 반환한다.</summary>
+    private string HammerShapeName(SpellGame.Shape shape)
+    {
+        return shape == SpellGame.Shape.Rectangle ? "직사각형" : shape == SpellGame.Shape.Square ? "정사각형" : shape == SpellGame.Shape.Triangle ? "반칸 삼각형" : "1/4 삼각형";
+    }
+
+    /// <summary>기존 도형 그래픽으로 망치 대상이나 결과 아이콘을 중앙 좌표에 생성한다.</summary>
+    private RectTransform HammerShape(RectTransform parent, SpellGame.Shape shape, float x, float y, float size)
+    {
+        RectTransform rect = Element("Hammer Piece", parent, x, y, shape == SpellGame.Shape.Rectangle ? size * 2 : size, size);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.gameObject.AddComponent<CanvasRenderer>();
+        SpellShapeGraphic graphic = rect.gameObject.AddComponent<SpellShapeGraphic>();
+        graphic.Shape = shape; graphic.raycastTarget = false; graphic.color = new Color(0.72f, 0.9f, 0.94f);
+        return rect;
+    }
+
+    /// <summary>어두운 모달, 원형 나무판, 손패 선택과 오른쪽 강도 게이지를 생성한다.</summary>
+    private void RenderHammer()
+    {
+        if (_hammerDragCard != null && _dragGhost != null) { _dragGhost.gameObject.SetActive(false); Destroy(_dragGhost.gameObject); _dragGhost = null; }
+        _hammerDragCard = null;
+        if (_hammerOverlay != null) { _hammerOverlay.gameObject.SetActive(false); Destroy(_hammerOverlay.gameObject); }
+        _hammerOverlay = Panel(_root, 0, 0, 1280, 720, new Color(0.015f, 0.02f, 0.03f, 0.94f));
+        Label(_hammerOverlay, "망치 작업대", 350, 35, 420, 42, 30);
+        Label(_hammerOverlay, "일반·특수·접착 조각 분해 · 효과는 원본별 가장 큰 조각에 유지 · 배치 비용 없음", 140, 85, 1000, 32, 16);
+        RectTransform board = Element("Hammer Workbench", _hammerOverlay, 350, 130, 420, 420);
+        board.gameObject.AddComponent<CanvasRenderer>();
+        board.gameObject.AddComponent<SpellHammerGraphic>().raycastTarget = false;
+        Label(_hammerOverlay, _hammerPhase == HammerPhase.Selecting ? "조각을 클릭하거나 작업대로 드래그하세요" : "Space: 타격   ·   Esc: 타격 전 취소", 260, 550, 600, 32, 19);
+
+        _hammerSource = _hammerCard == null ? null : HammerShape(_hammerOverlay, _hammerCard.Shape, 560, 340, 144);
+        if (_hammerSource != null) _hammerSource.GetComponent<SpellShapeGraphic>().SetCard(_hammerCard, isCursed: _game.IsCursed(_hammerCard));
+        Panel(_hammerOverlay, 886, 181, 66, 278, new Color(0.40f, 0.34f, 0.27f));
+        HammerBand(0, 0.25f, new Color(0.28f, 0.30f, 0.33f));
+        HammerBand(0.25f, 0.5f, new Color(0.25f, 0.54f, 0.45f));
+        HammerBand(0.5f, 0.8f, new Color(0.74f, 0.55f, 0.22f));
+        HammerBand(0.8f, 1, new Color(0.8f, 0.29f, 0.20f));
+        _hammerGaugeFill = Panel(_hammerOverlay, 934, 450, 10, 0, new Color(1f, 0.9f, 0.6f)).GetComponent<UnityEngine.UI.Image>();
+        _hammerMarker = Panel(_hammerOverlay, 880, 446, 80, 6, Color.white);
+        Label(_hammerOverlay, "강한 타격", 856, 140, 130, 30, 17);
+        Label(_hammerOverlay, "약한 타격", 856, 460, 130, 30, 17);
+        Label(_hammerOverlay, "임시 확률 규칙\n기본 분해는 항상 성공\n강할수록 추가 분해 확률 증가\n최소 1/4 · 손패 7장 제한", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
+        Label(_hammerOverlay, _hammerMessage, 800, 495, 440, 75, 17);
+        RectTransform hint = Element("Hammer Preview", _hammerOverlay, 980, 360, 240, 120);
+        _hammerHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
+        _hammerHint.font = _font; _hammerHint.fontSize = 18; _hammerHint.color = Color.white; _hammerHint.raycastTarget = false;
+
+        _hammerResults = Element("Hammer Results", _hammerOverlay, 560, 340, 0, 0);
+        _hammerResults.gameObject.SetActive(false);
+        _hammerVisual = Element("Hammer", _hammerOverlay, 820, 0, 0, 0);
+        Panel(_hammerVisual, -12, 25, 24, 150, new Color(0.45f, 0.25f, 0.12f));
+        Panel(_hammerVisual, -87, -57, 174, 94, new Color(0.16f, 0.19f, 0.22f));
+        Panel(_hammerVisual, -80, -50, 160, 80, new Color(0.56f, 0.64f, 0.68f));
+        Panel(_hammerVisual, -80, -50, 160, 10, new Color(0.82f, 0.88f, 0.91f));
+        _hammerVisual.gameObject.SetActive(false);
+        RectTransform impact = Element("Hammer Impact", _hammerOverlay, 560, 340, 0, 0);
+        _hammerImpact = impact.gameObject.AddComponent<CanvasGroup>();
+        _hammerImpact.blocksRaycasts = false; _hammerImpact.alpha = 0;
+        for (int i = 0; i < 12; i++)
+        {
+            float angle = i * Mathf.PI / 6;
+            RectTransform ray = Panel(impact, 0, 0, 25 + _hammerStrength * 45, 4, new Color(1f, 0.82f, 0.42f));
+            ray.pivot = new Vector2(0, 0.5f);
+            ray.anchoredPosition = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (95 + _hammerStrength * 45);
+            ray.localRotation = Quaternion.Euler(0, 0, i * 30);
+        }
+        if (_hammerPhase == HammerPhase.Selecting || _hammerPhase == HammerPhase.Timing)
+        {
+            for (int i = 0; i < _game.Hand.Count; i++)
+            {
+                SpellGame.Card card = _game.Hand[i];
+                RectTransform panel = Panel(_hammerOverlay, 80 + i * 160, 590, 148, 115, CardColor(card, card == _hammerCard));
+                UnityEngine.UI.Button button = panel.gameObject.AddComponent<UnityEngine.UI.Button>();
+                UnityEngine.UI.Navigation navigation = button.navigation; navigation.mode = UnityEngine.UI.Navigation.Mode.None; button.navigation = navigation;
+                button.onClick.AddListener(() => SelectHammerCard(card));
+                panel.gameObject.AddComponent<SpellCardDrag>().Setup(this, card);
+                HammerShape(panel, card.Shape, 74, 32, 54).GetComponent<SpellShapeGraphic>().SetCard(card, isCursed: _game.IsCursed(card));
+                Label(panel, CardName(card), 2, 65, 144, 48, 12);
+            }
+        }
+        else
+        {
+            _hammerVisual.gameObject.SetActive(true);
+            foreach (SpellGame.Shape shape in _hammerResultShapes) HammerShape(_hammerResults, shape, 0, 0, 70);
+        }
+    }
+
+    /// <summary>강도 구간의 색을 오른쪽 게이지의 하한부터 상한까지 표시한다.</summary>
+    private void HammerBand(float low, float high, Color color)
+    {
+        Panel(_hammerOverlay, 894, 190 + 260 * (1 - high), 32, 260 * (high - low), color);
+    }
+
+    /// <summary>Space 순간의 강도를 기록해 모델에 한 번만 적용하고 타격 연출을 시작한다.</summary>
+    private void StrikeHammer()
+    {
+        _hammerStrength = HammerStrength();
+        if (!_game.TryHammer(_hammerCard, _hammerStrength, out _hammerResultShapes))
+        {
+            _hammerMessage = _game.HammerIssue(_hammerCard); _hammerCard = null; _hammerPhase = HammerPhase.Selecting; RenderHammer(); return;
+        }
+        _hammerStrikeStart = Time.unscaledTime;
+        _hammerPhase = HammerPhase.Striking;
+        _hammerMessage = HammerResultMessage();
+        RenderHammer();
+    }
+
+    /// <summary>상태 유효성, 취소와 타이밍 입력을 처리하고 타격·충격·분해 결과를 시간에 맞춰 표시한다.</summary>
+    private void UpdateHammer()
+    {
+        if (_game.CurrentPhase != SpellGame.Phase.Combat || _game.Turn != _hammerTurn || _game.Battle != _hammerBattle)
+        {
+            CloseHammer(); Render(); return;
+        }
+        bool beforeStrike = _hammerPhase == HammerPhase.Selecting || _hammerPhase == HammerPhase.Timing;
+        if (beforeStrike && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+        {
+            CloseHammer(); Render(); return;
+        }
+        if (_hammerPhase == HammerPhase.Timing)
+        {
+            if (_game.HammerIssue(_hammerCard) != null) { SelectHammerCard(_hammerCard); return; }
+            float strength = HammerStrength();
+            _hammerMarker.anchoredPosition = new Vector2(880, -(446 - strength * 260));
+            _hammerGaugeFill.rectTransform.anchoredPosition = new Vector2(934, -(450 - strength * 260));
+            _hammerGaugeFill.rectTransform.sizeDelta = new Vector2(10, strength * 260);
+            _hammerHint.text = HammerOdds(strength);
+            if (_hammerDragCard == null && Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) StrikeHammer();
+            return;
+        }
+        if (beforeStrike) return;
+        float elapsed = Time.unscaledTime - _hammerStrikeStart;
+        float strikeSeconds = Mathf.Max(0.1f, _hammerStrikeSeconds);
+        float progress = Mathf.Clamp01(elapsed / strikeSeconds);
+        _hammerVisual.anchoredPosition = Vector2.Lerp(new Vector2(820, 30), new Vector2(560, -335), progress * progress);
+        _hammerVisual.localRotation = Quaternion.Euler(0, 0, Mathf.Lerp(-45, 0, progress));
+        _hammerMarker.anchoredPosition = new Vector2(880, -(446 - _hammerStrength * 260));
+        _hammerGaugeFill.rectTransform.anchoredPosition = new Vector2(934, -(450 - _hammerStrength * 260));
+        _hammerGaugeFill.rectTransform.sizeDelta = new Vector2(10, _hammerStrength * 260);
+        _hammerHint.text = $"확정 강도 {_hammerStrength:P0}\n{_hammerMessage}";
+        if (elapsed < strikeSeconds) return;
+        _hammerPhase = HammerPhase.Result;
+        float resultTime = elapsed - strikeSeconds;
+        _hammerVisual.gameObject.SetActive(resultTime < 0.12f);
+        _hammerImpact.alpha = Mathf.Clamp01(1 - resultTime / 0.4f) * (0.45f + _hammerStrength * 0.55f);
+        if (_hammerSource != null) _hammerSource.gameObject.SetActive(_hammerResultShapes.Length == 1);
+        _hammerResults.gameObject.SetActive(_hammerResultShapes.Length > 1);
+        int columns = _hammerResultShapes.Length > 4 ? 4 : 2;
+        int rows = (_hammerResultShapes.Length + columns - 1) / columns;
+        float spread = Mathf.SmoothStep(0, 1, Mathf.Clamp01(resultTime / 0.3f));
+        for (int i = 0; i < _hammerResults.childCount; i++)
+        {
+            RectTransform piece = (RectTransform)_hammerResults.GetChild(i);
+            piece.anchoredPosition = new Vector2((i % columns - (columns - 1) / 2f) * 85, -(i / columns - (rows - 1) / 2f) * 85) * spread;
+            piece.localRotation = Quaternion.Euler(0, 0, i * (360f / _hammerResultShapes.Length) * spread);
+        }
+        float shake = Mathf.Sin(resultTime * 90) * Mathf.Max(0, 1 - resultTime / 0.25f) * (2 + _hammerStrength * 6);
+        _hammerResults.anchoredPosition = new Vector2(560 + shake, -340);
+        if (resultTime >= Mathf.Max(0.2f, _hammerResultSeconds))
+        {
+            _message = _hammerMessage; CloseHammer(); Render();
+        }
+    }
+
+    /// <summary>일반 카드 수와 모달·드래그 상태를 확인하고 접착 작업을 시작한다.</summary>
+    private void BeginGlue()
+    {
+        if (!CanInteract || _pendingCast >= 0 || _dragGhost != null || _boardGraphic.IsDragging || _table.IsDragging) return;
+        if (ONBOARDING_ENABLED && !_onboardingComplete && !_onboardingPlacementExplained && _game.CraftCount > 0) return;
+        int count = 0;
+        foreach (SpellGame.Card card in _game.Hand) if (_game.GlueCardIssue(card) == null) count++;
+        if (_game.GlueUsesLeft == 0 || count < 2)
+        {
+            _message = _game.GlueUsesLeft == 0 ? "이번 턴의 접착을 이미 사용했습니다" : "접착 가능한 조각이 두 장 이상 필요합니다";
+            Render(); return;
+        }
+        ClearSelection(); Render();
+        if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+        _glueTurn = _game.Turn; _glueBattle = _game.Battle;
+        RenderGlue();
+    }
+
+    /// <summary>접착 미리 보기와 선택을 삭제한다. 확인 전에는 카드나 사용 횟수를 변경하지 않는다.</summary>
+    private void CloseGlue()
+    {
+        if (_glueDragCard != null && _dragGhost != null) { _dragGhost.gameObject.SetActive(false); Destroy(_dragGhost.gameObject); _dragGhost = null; }
+        _glueDragCard = null;
+        _glueDragRotation = 0;
+        if (_glueOverlay != null) { _glueOverlay.gameObject.SetActive(false); Destroy(_glueOverlay.gameObject); }
+        _glueOverlay = null; _glueGraphic = null; _glueHint = null; _glueConfirm = null;
+        for (int i = 0; i < 2; i++) { _glueCards[i] = null; _gluePositions[i] = new Vector2Int(2 + i * 2, 1); _glueRotations[i] = 0; }
+        _glueSelected = 0; _glueMessage = ""; _onboardingActivity = Time.unscaledTime;
+    }
+
+    /// <summary>손패에서 접착할 서로 다른 일반 카드 두 장을 선택하거나 선택을 해제한다.</summary>
+    private void SelectGlueCard(SpellGame.Card card)
+    {
+        string issue = _game.GlueCardIssue(card);
+        if (issue != null) { _glueMessage = issue; RefreshGlue(); return; }
+        for (int i = 0; i < 2; i++)
+            if (_glueCards[i] == card) { _glueCards[i] = null; _glueMessage = ""; RenderGlue(); return; }
+        int slot = _glueCards[0] == null ? 0 : _glueCards[1] == null ? 1 : -1;
+        if (slot < 0) { _glueMessage = "두 장만 선택할 수 있습니다. 기존 선택을 해제하세요"; RefreshGlue(); return; }
+        _glueCards[slot] = card; _glueSelected = slot;
+        _gluePositions[slot] = new Vector2Int(2 + slot * 2, 1); _glueRotations[slot] = 0;
+        _glueMessage = ""; RenderGlue();
+    }
+
+    /// <summary>접착 미리 보기의 지정 원본 카드를 반환한다.</summary>
+    public SpellGame.Card GlueCard(int index) { return _glueCards[index]; }
+
+    /// <summary>지정 접착 작업 조각이 현재 미해결 저주 대상인지 반환한다.</summary>
+    public bool IsGluePartCursed(int index) { return _game.IsCursed(_glueCards[index]); }
+
+    /// <summary>작업 공간에서 지정 조각의 스냅 좌표를 반환한다.</summary>
+    public Vector2Int GluePosition(int index) { return _gluePositions[index]; }
+
+    /// <summary>작업 공간에서 지정 조각의 회전 방향을 반환한다.</summary>
+    public int GlueRotation(int index) { return _glueRotations[index]; }
+
+    public int SelectedGluePart { get { return _glueSelected; } }
+
+    /// <summary>회전과 이동의 대상이 될 작업 공간 조각을 선택한다.</summary>
+    public void SelectGluePart(int index)
+    {
+        if (_glueOverlay == null || _glueCards[index] == null) return;
+        _glueSelected = index; _glueMessage = ""; RefreshGlue();
+    }
+
+    /// <summary>회전한 조각 전체가 작업 공간 안에 남도록 이동 좌표를 제한하고 접촉 상태를 갱신한다.</summary>
+    public void MoveGluePart(int index, Vector2Int position)
+    {
+        if (_glueOverlay == null || _glueCards[index] == null) return;
+        int width = SpellGame.ShapeWidth(_glueCards[index], _glueRotations[index]);
+        int height = SpellGame.ShapeHeight(_glueCards[index], _glueRotations[index]);
+        _gluePositions[index] = new Vector2Int(Mathf.Clamp(position.x, 0, 8 - width), Mathf.Clamp(position.y, 0, 4 - height));
+        _glueMessage = ""; RefreshGlue();
+    }
+
+    /// <summary>작업 공간 범위와 모델의 실제 겹침·변 접촉을 검사해 확인 불가 사유를 반환한다.</summary>
+    public string GluePlacementIssue()
+    {
+        if (_glueCards[0] == null || _glueCards[1] == null) return "접착할 조각 2개를 선택하세요";
+        for (int i = 0; i < 2; i++)
+        {
+            Vector2Int pos = _gluePositions[i];
+            if (pos.x < 0 || pos.y < 0 || pos.x + SpellGame.ShapeWidth(_glueCards[i], _glueRotations[i]) > 8
+                || pos.y + SpellGame.ShapeHeight(_glueCards[i], _glueRotations[i]) > 4) return "조각을 작업 공간 안으로 옮기세요";
+        }
+        Vector2Int relative = _gluePositions[1] - _gluePositions[0];
+        return _game.GlueIssue(_glueCards[0], _glueRotations[0], _glueCards[1], _glueRotations[1], relative.x, relative.y);
+    }
+
+    /// <summary>접착 상태 색상과 확인 가능 여부만 갱신해 진행 중 드래그 객체를 유지한다.</summary>
+    private void RefreshGlue()
+    {
+        if (_glueOverlay == null) return;
+        string issue = GluePlacementIssue();
+        _glueHint.text = (_glueMessage.Length > 0 ? _glueMessage : issue ?? "접착 가능 · 확인하면 카드 한 장으로 합쳐집니다")
+            + $"\n선택 조각 {_glueSelected + 1} · R / 우클릭 회전";
+        _glueHint.color = issue == null ? new Color(0.55f, 1f, 0.7f) : new Color(1f, 0.55f, 0.5f);
+        _glueConfirm.interactable = issue == null && !_glueGraphic.IsDragging && _glueDragCard == null;
+        _glueGraphic.SetVerticesDirty();
+    }
+
+    /// <summary>두 카드의 유효성과 접촉을 다시 확인한 후 접착을 한 번 확정하고 전투 화면으로 복귀한다.</summary>
+    private void ConfirmGlue()
+    {
+        if (_glueOverlay == null || _glueGraphic.IsDragging || _glueDragCard != null || GluePlacementIssue() != null) return;
+        Vector2Int relative = _gluePositions[1] - _gluePositions[0];
+        if (!_game.TryGlue(_glueCards[0], _glueRotations[0], _glueCards[1], _glueRotations[1], relative.x, relative.y))
+        {
+            _glueMessage = "카드 상태가 바뀌어 접착하지 못했습니다"; RefreshGlue(); return;
+        }
+        _message = "접착 완료 · 전체 모양을 한 장으로 배치합니다";
+        CloseGlue(); Render();
+    }
+
+    /// <summary>접착 모달의 턴·카드 유효성을 확인하고 취소와 선택 조각의 회전을 처리한다.</summary>
+    private void UpdateGlue()
+    {
+        bool invalid = _game.CurrentPhase != SpellGame.Phase.Combat || _game.Turn != _glueTurn || _game.Battle != _glueBattle;
+        foreach (SpellGame.Card card in _glueCards) if (card != null && _game.GlueCardIssue(card) != null) invalid = true;
+        if (invalid || (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)) { CloseGlue(); Render(); return; }
+        bool rotate = (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
+            || (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame);
+        if (rotate) RotateGluePart();
+    }
+
+    /// <summary>선택한 접착 원본을 한 번 회전하고 전체 점유·접촉 미리 보기를 갱신한다.</summary>
+    private void RotateGluePart()
+    {
+        if (_glueOverlay == null) return;
+        if (_glueDragCard != null)
+        {
+            _glueDragRotation = (_glueDragRotation + 1) % 4;
+            _dragGhost.sizeDelta = new Vector2(72 * SpellGame.ShapeWidth(_glueDragCard, _glueDragRotation), 72 * SpellGame.ShapeHeight(_glueDragCard, _glueDragRotation));
+            _dragGhost.GetComponent<SpellShapeGraphic>().SetCard(_glueDragCard, _glueDragRotation, _game.IsCursed(_glueDragCard));
+            return;
+        }
+        int part = _glueGraphic.IsDragging ? _glueGraphic.DragPart : _glueSelected;
+        if (_glueCards[part] == null) return;
+        int previousHeight = SpellGame.ShapeHeight(_glueCards[part], _glueRotations[part]);
+        _glueRotations[part] = (_glueRotations[part] + 1) % 4;
+        if (_glueGraphic.IsDragging) _glueGraphic.RotateDragOffset(previousHeight);
+        else MoveGluePart(part, _gluePositions[part]);
+    }
+
+    /// <summary>접착 모달 전용 버튼을 만들고 오래된 화면 콜백과 Space 제출을 방지한다.</summary>
+    private UnityEngine.UI.Button GlueButton(RectTransform overlay, string caption, float x, float y, float width, float height, Action action)
+    {
+        RectTransform rect = Panel(overlay, x, y, width, height, new Color(0.23f, 0.32f, 0.37f));
+        UnityEngine.UI.Button button = rect.gameObject.AddComponent<UnityEngine.UI.Button>();
+        UnityEngine.UI.Navigation navigation = button.navigation; navigation.mode = UnityEngine.UI.Navigation.Mode.None; button.navigation = navigation;
+        button.onClick.AddListener(() => { if (isActiveAndEnabled && _glueOverlay != null && _glueOverlay == overlay) action(); });
+        Label(rect, caption, 4, 2, width - 8, height - 4, 18);
+        return button;
+    }
+
+    /// <summary>전투와 분리된 접착 작업 격자, 손패 선택 및 확인·취소 UI를 생성한다.</summary>
+    private void RenderGlue()
+    {
+        if (_glueOverlay != null) { _glueOverlay.gameObject.SetActive(false); Destroy(_glueOverlay.gameObject); }
+        _glueOverlay = Panel(_root, 0, 0, 1280, 720, new Color(0.025f, 0.035f, 0.04f, 0.96f));
+        Label(_glueOverlay, "접착 작업대", 350, 25, 580, 45, 30);
+        Label(_glueOverlay, "일반·특수 조각 2장 선택 → 드래그·R로 변 맞추기 → 접착 확인", 140, 85, 1000, 35, 19);
+        RectTransform board = Element("Glue Workbench", _glueOverlay, 200, 170, 576, 288);
+        board.gameObject.AddComponent<CanvasRenderer>();
+        _glueGraphic = board.gameObject.AddComponent<SpellGlueGraphic>(); _glueGraphic.Setup(this);
+        RectTransform hint = Element("Glue Status", _glueOverlay, 825, 175, 400, 110);
+        _glueHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
+        _glueHint.font = _font; _glueHint.fontSize = 20; _glueHint.color = Color.white; _glueHint.raycastTarget = false;
+        GlueButton(_glueOverlay, "회전 · R", 850, 295, 280, 45, RotateGluePart);
+        _glueConfirm = GlueButton(_glueOverlay, "접착 확인", 850, 360, 280, 55, ConfirmGlue);
+        GlueButton(_glueOverlay, "취소 · Esc", 850, 435, 280, 45, () => { CloseGlue(); Render(); });
+        GlueButton(_glueOverlay, "선택 조각 중앙으로", 850, 505, 280, 40, () => MoveGluePart(_glueSelected, new Vector2Int(3, 1)));
+        Label(_glueOverlay, "카드 2장 → 1장 · 현재 전투만 유지\n드래그 또는 빈 칸 클릭으로 이동 · 손패 재클릭으로 선택 해제", 100, 490, 660, 65, 17);
+        for (int i = 0; i < _game.Hand.Count; i++)
+        {
+            SpellGame.Card card = _game.Hand[i];
+            bool selected = _glueCards[0] == card || _glueCards[1] == card;
+            UnityEngine.UI.Button button = GlueButton(_glueOverlay, "", 65 + i * 165, 585, 155, 120, () => SelectGlueCard(card));
+            button.GetComponent<UnityEngine.UI.Image>().color = CardColor(card, selected);
+            button.gameObject.AddComponent<SpellCardDrag>().Setup(this, card);
+            RectTransform iconRect = Element("Glue Hand Shape", (RectTransform)button.transform, 5, 3, 145, 64);
+            iconRect.gameObject.AddComponent<CanvasRenderer>();
+            SpellShapeGraphic icon = iconRect.gameObject.AddComponent<SpellShapeGraphic>(); icon.SetCard(card, isCursed: _game.IsCursed(card)); icon.raycastTarget = false;
+            Label((RectTransform)button.transform, CardName(card), 3, 70, 149, 45, 13);
+        }
+        RefreshGlue();
+    }
+
+
+    public bool CanDragHammerCard { get { return isActiveAndEnabled && (_hammerPhase == HammerPhase.Selecting || _hammerPhase == HammerPhase.Timing); } }
+    public bool CanDragGlueCard { get { return isActiveAndEnabled && _glueOverlay != null; } }
+
+    /// <summary>모달 손패에서 끄는 카드 전체 모양을 포인터 위치에 표시한다.</summary>
+    private void CreateModalDragGhost(SpellGame.Card card, Vector2 position)
+    {
+        int rotation = CanDragGlueCard ? _glueDragRotation : CanDragHammerCard ? 0 : _rotation;
+        _dragGhost = Element("Drag Preview", _root, 0, 0, 72 * SpellGame.ShapeWidth(card, rotation), 72 * SpellGame.ShapeHeight(card, rotation));
+        _dragGhost.pivot = new Vector2(0.5f, 0.5f);
+        _dragGhost.gameObject.AddComponent<CanvasRenderer>();
+        SpellShapeGraphic icon = _dragGhost.gameObject.AddComponent<SpellShapeGraphic>();
+        icon.raycastTarget = false; icon.SetCard(card, rotation, _game.IsCursed(card));
+        MoveCardDrag(position);
+    }
+    /// <summary>선택 여부와 카드 효과에 맞춘 모달 손패 배경색을 반환한다.</summary>
+    private Color CardColor(SpellGame.Card card, bool selected)
+    {
+        return selected ? new Color(0.65f, 0.57f, 0.3f) : card.Effect == SpellGame.Effect.None ? _dimColor : EffectColor(card.Effect) * 0.65f;
+    }
+
+    /// <summary>기존 UI 위에 망치·접착 버튼과 TestScene 전용 적 진입 버튼을 연결한다.</summary>
+    private void SetupFeatureControls()
+    {
+        _featureControls = Element("Piece Tools", _root, 0, 0, 1280, 720);
+        Button(_featureControls, "E 망치", 1020, 645, 105, 40, BeginHammer, null, 16);
+        Button(_featureControls, "Q 접착", 1140, 645, 105, 40, BeginGlue, null, 16);
+        _sealLayer = Element("Sealed Patterns", _root, 0, 0, 1280, 720);
+        _testControls = Element("Enemy Encounters", _root, 0, 0, 1280, 720);
+        Button(_testControls, "형상 봉인자", 120, 620, 260, 50, () => StartRun(true), null, 18);
+        Button(_testControls, "도둑손", 510, 620, 260, 50, () => StartRun(false, true), null, 18);
+        Button(_testControls, "조각 저주술사", 900, 620, 260, 50, () => StartRun(false, false, true), null, 18);
+    }
+
+    /// <summary>단계에 따라 기능 버튼·봉인·저주 안내와 적 진입 버튼을 갱신한다.</summary>
+    private void RefreshFeatureControls()
+    {
+        bool combat = _game.CurrentPhase == SpellGame.Phase.Combat;
+        _featureControls.gameObject.SetActive(combat && !_showPauseMenu && !_showHelp && _openPile < 0 && !_showDebugRemote);
+        _sealLayer.gameObject.SetActive(combat);
+        _testControls.gameObject.SetActive(_game.CurrentPhase == SpellGame.Phase.Title && SceneManager.GetActiveScene().path == "Assets/Scenes/TestScene.unity");
+        if (!combat) { ClearTheftApproach(); return; }
+        RenderSeals(_sealLayer); RenderTheftHand();
+        if (_game.Curse != null && !_game.Curse.IsResolved)
+            Label(_sealLayer, $"[저주] 카드 #{_game.Curse.Target.Id} · 시전/망치 분해로 해제 · 미해결 HP -{_game.Curse.Amount}", 180, 20, 920, 35, 18);
+    }
+
+    /// <summary>현재 저주 대상의 실제 3D 조각 색상을 갱신한다.</summary>
+    private void RefreshCurseTint()
+    {
+        _table.RefreshCurseTint();
+    }
+
 }
+

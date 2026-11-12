@@ -253,7 +253,7 @@ public sealed class SpellPatternLayout
     {
         List<SpellGame.ShapeCell> cells = PlacementGridCells(spell, piece);
         anchor = Normalize(cells);
-        gridRotation = piece.Card.Shape == SpellGame.Shape.Clay ? 0 : MatchOrientation(piece.Card.Shape, cells, Wrap(piece.Rotation + _rotations[spell]));
+        gridRotation = piece.Card.Shape == SpellGame.Shape.Clay ? 0 : MatchOrientation(piece.Card, cells, Wrap(piece.Rotation + _rotations[spell]));
     }
 
     /// <summary>배치된 조각이 격자에서 차지하는 칸과 구역 마스크를 격자 좌표로 반환한다.</summary>
@@ -306,4 +306,40 @@ public sealed class SpellPatternLayout
         if (direction == 1) { nx = x; ny = y; nSector = (sector + 3) % 4; return; }
         nx = x + SIDE_OFFSETS[sector].x; ny = y + SIDE_OFFSETS[sector].y; nSector = (sector + 2) % 4;
     }
+    /// <summary>복합 카드를 포함한 격자 앵커·회전을 도안 기준으로 변환한다.</summary>
+    public void GridToLocalPlacement(int spell, SpellGame.Card card, Vector2Int anchor, int gridRotation, out Vector2Int local, out int localRotation)
+    {
+        int patternRotation = _rotations[spell];
+        if (card.Glued == null && card.Shape == SpellGame.Shape.Clay)
+        {
+            local = UnrotateCell(spell, patternRotation, anchor - _origins[spell]); localRotation = 0; return;
+        }
+        List<SpellGame.ShapeCell> cells = new List<SpellGame.ShapeCell>();
+        foreach (SpellGame.ShapeCell cell in SpellGame.CardCells(card, gridRotation))
+        {
+            Vector2Int l = UnrotateCell(spell, patternRotation, anchor + new Vector2Int(cell.X, cell.Y) - _origins[spell]);
+            cells.Add(new SpellGame.ShapeCell(l.x, l.y, RotateMask(cell.Mask, -patternRotation)));
+        }
+        local = Normalize(cells);
+        localRotation = MatchOrientation(card, cells, Wrap(gridRotation - patternRotation));
+    }
+    /// <summary>복합 카드의 전체 점유 칸과 일치하는 회전을 반환한다.</summary>
+    private static int MatchOrientation(SpellGame.Card card, List<SpellGame.ShapeCell> cells, int fallback)
+    {
+        for (int rotation = 0; rotation < 4; rotation++)
+        {
+            IReadOnlyList<SpellGame.ShapeCell> candidate = SpellGame.CardCells(card, rotation);
+            if (candidate.Count != cells.Count) continue;
+            bool same = true;
+            foreach (SpellGame.ShapeCell cell in cells)
+            {
+                bool found = false;
+                foreach (SpellGame.ShapeCell other in candidate) if (other.X == cell.X && other.Y == cell.Y && other.Mask == cell.Mask) found = true;
+                if (!found) { same = false; break; }
+            }
+            if (same) return rotation;
+        }
+        return fallback;
+    }
 }
+

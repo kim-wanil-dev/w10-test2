@@ -51,7 +51,7 @@ public sealed class SpellPiece3D : MonoBehaviour
     private void SetHandMesh()
     {
         if (_card.Shape == SpellGame.Shape.Clay) ReplaceMesh(CreateLump());
-        else SetCells(SpellGame.ShapeCells(_card.Shape, 0));
+        else SetCells(SpellGame.CardCells(_card, 0));
     }
 
     /// <summary>점토 손패용 팔각 덩어리 메시를 만든다.</summary>
@@ -195,3 +195,4 @@ public sealed class SpellPiece3D : MonoBehaviour
         if (_material != null) Destroy(_material);
     }
 }
+

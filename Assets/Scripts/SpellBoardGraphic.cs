@@ -55,6 +55,7 @@ public sealed class SpellBoardGraphic : UnityEngine.UI.MaskableGraphic, IPointer
     private SpellGame.Card _targetsCard;
     private int _targetsRotation = -1;
 
+    public bool IsDragging { get { return _dragPiece || IsDraggingPattern; } }
     public bool IsDraggingPattern { get { return _dragPattern >= 0; } }
     public float CellSize { get { return _cellSize; } }
     public int PreviewPatternIndex { get { return _hasPatternPreview ? _dragPattern : -1; } }
@@ -443,3 +444,4 @@ public sealed class SpellBoardGraphic : UnityEngine.UI.MaskableGraphic, IPointer
         if (IsDraggingPattern) EndPatternDrag(data);
     }
 }
+
