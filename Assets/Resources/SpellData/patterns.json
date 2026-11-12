@@ -253,18 +253,13 @@
       "id": "smash",
       "name": "강타",
       "kind": "Single",
-      "baseValue": 9,
-      "keyword": "None",
+      "baseValue": 6,
+      "keyword": "Purity",
       "cells": [
         {
           "x": 0,
           "y": 0,
           "mask": 6
-        },
-        {
-          "x": 1,
-          "y": 0,
-          "mask": 12
         },
         {
           "x": 0,
@@ -274,6 +269,11 @@
         {
           "x": 1,
           "y": 1,
+          "mask": 12
+        },
+        {
+          "x": 1,
+          "y": 2,
           "mask": 9
         }
       ],
