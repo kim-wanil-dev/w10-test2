@@ -1,0 +1,303 @@
+{
+  "version": 1,
+  "pieces": [
+    {
+      "shape": "Square",
+      "name": "마름모",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 6
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 9
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "Triangle",
+      "name": "반칸 삼각형",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 9
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "Rectangle",
+      "name": "직사각형",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 6
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "mask": 12
+        },
+        {
+          "x": 1,
+          "y": 2,
+          "mask": 3
+        },
+        {
+          "x": 2,
+          "y": 2,
+          "mask": 9
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "QuarterTriangle",
+      "name": "1/4 삼각형",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 12
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "Diamond",
+      "name": "정사각형",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 15
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "Parallelogram",
+      "name": "평행사변형",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "mask": 12
+        }
+      ],
+      "rotation": "MirrorAlternate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "MediumTriangle",
+      "name": "중간 삼각형",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 15
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 3
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "House",
+      "name": "맞춤 조각",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 6
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 15
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 9
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "LargeTriangle",
+      "name": "큰 삼각형",
+      "cells": [
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 6
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 6
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 3,
+          "y": 1,
+          "mask": 12
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "LShape",
+      "name": "L자 조각",
+      "cells": [
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 6
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 6
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "mask": 9
+        },
+        {
+          "x": 0,
+          "y": 2,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 2,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 2,
+          "mask": 12
+        },
+        {
+          "x": 1,
+          "y": 3,
+          "mask": 3
+        },
+        {
+          "x": 2,
+          "y": 3,
+          "mask": 9
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    },
+    {
+      "shape": "Clay",
+      "name": "점토",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 15
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true
+    }
+  ]
+}

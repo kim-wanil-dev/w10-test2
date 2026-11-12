@@ -1,0 +1,10 @@
+<linker>
+  <!-- Newtonsoft가 리플렉션으로만 생성·설정하는 JSON 데이터 클래스를 IL2CPP 코드 스트리핑에서 보존한다. -->
+  <assembly fullname="Assembly-CSharp">
+    <type fullname="SpellCellData" preserve="all"/>
+    <type fullname="SpellPatternData" preserve="all"/>
+    <type fullname="SpellPieceData" preserve="all"/>
+    <type fullname="SpellPatternTable" preserve="all"/>
+    <type fullname="SpellPieceTable" preserve="all"/>
+  </assembly>
+</linker>
