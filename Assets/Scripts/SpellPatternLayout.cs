@@ -270,6 +270,18 @@ public sealed class SpellPatternLayout
         return cells;
     }
 
+    /// <summary>배치된 조각의 씰링 위치를 PlacementGridCells와 같은 격자 좌표로 반환한다.</summary>
+    public List<SpellGame.SealSpot> PlacementGridSeals(int spell, SpellGame.Placement piece)
+    {
+        List<SpellGame.SealSpot> seals = new List<SpellGame.SealSpot>();
+        foreach (SpellGame.SealSpot seal in SpellGame.SealSpots(piece.Card, piece.Rotation))
+        {
+            Vector2Int grid = LocalToGrid(spell, new Vector2Int(piece.X + seal.X, piece.Y + seal.Y));
+            seals.Add(new SpellGame.SealSpot(grid.x, grid.y, Wrap(seal.Sector + _rotations[spell]), seal.Seal));
+        }
+        return seals;
+    }
+
     /// <summary>칸 목록을 범위 왼쪽 위가 (0, 0)이 되게 옮기고 원래 왼쪽 위 좌표를 반환한다.</summary>
     private static Vector2Int Normalize(List<SpellGame.ShapeCell> cells)
     {
@@ -279,11 +291,12 @@ public sealed class SpellPatternLayout
         return min;
     }
 
-    /// <summary>정규화된 칸 목록과 같은 모양인 도형 방향을 찾는다. 없으면 fallback을 반환한다.</summary>
+    /// <summary>정규화된 칸 목록과 같은 모양인 도형 방향을 찾는다. 대칭 도형에서도 씰링 위치가 유지되도록 fallback을 먼저 확인하고, 없으면 fallback을 반환한다.</summary>
     private static int MatchOrientation(SpellGame.Shape shape, List<SpellGame.ShapeCell> cells, int fallback)
     {
-        for (int rotation = 0; rotation < 4; rotation++)
+        for (int i = 0; i < 4; i++)
         {
+            int rotation = (fallback + i) % 4;
             IReadOnlyList<SpellGame.ShapeCell> candidate = SpellGame.ShapeCells(shape, rotation);
             if (candidate.Count != cells.Count) continue;
             bool same = true;
@@ -323,11 +336,12 @@ public sealed class SpellPatternLayout
         local = Normalize(cells);
         localRotation = MatchOrientation(card, cells, Wrap(gridRotation - patternRotation));
     }
-    /// <summary>복합 카드의 전체 점유 칸과 일치하는 회전을 반환한다.</summary>
+    /// <summary>카드의 전체 점유 칸과 일치하는 회전을 반환한다. 대칭 도형에서도 씰링 위치가 유지되도록 회전 합으로 구한 fallback을 먼저 확인한다.</summary>
     private static int MatchOrientation(SpellGame.Card card, List<SpellGame.ShapeCell> cells, int fallback)
     {
-        for (int rotation = 0; rotation < 4; rotation++)
+        for (int i = 0; i < 4; i++)
         {
+            int rotation = (fallback + i) % 4;
             IReadOnlyList<SpellGame.ShapeCell> candidate = SpellGame.CardCells(card, rotation);
             if (candidate.Count != cells.Count) continue;
             bool same = true;

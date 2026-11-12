@@ -908,6 +908,11 @@ MonoBehaviour:
   _dimColor: {r: 0.224, g: 0.267, b: 0.416, a: 1}
   _dangerColor: {r: 0.878, g: 0.376, b: 0.353, a: 1}
   _warnColor: {r: 0.949, g: 0.722, b: 0.294, a: 1}
+  _hammerGaugeSeconds: 0.25
+  _hammerStrikeSeconds: 0.24
+  _hammerResultSeconds: 1.1
+  _theftIntervalSeconds: 15
+  _theftMoveSpeed: 90
 --- !u!4 &824533483
 Transform:
   m_ObjectHideFlags: 0
@@ -942,6 +947,10 @@ MonoBehaviour:
   _dropHeight: 1.6
   _pieceMaterial: {fileID: 2100000, guid: dc9de70129098bd42a73685db1b95e32, type: 2}
   _lineMaterial: {fileID: 2100000, guid: 035a3e286f0be03479c08af9c7bb1e32, type: 2}
+  _guardMaterial: {fileID: 2100000, guid: 1d1a95ee2e30b56459eb68c810372114, type: 2}
+  _amplifyMaterial: {fileID: 2100000, guid: 6c735a1e9f806224297013399edddc2f, type: 2}
+  _cogMaterial: {fileID: 2100000, guid: 4f96d96e5eaeff84ca3c7a0989e1c1d6, type: 2}
+  _sealMaterial: {fileID: 2100000, guid: b3d9f1fc468bce94abe01f6b6c6a9b69, type: 2}
 --- !u!1001 &831914423
 PrefabInstance:
   m_ObjectHideFlags: 0

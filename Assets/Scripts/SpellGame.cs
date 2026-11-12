@@ -12,7 +12,9 @@ public sealed class SpellGame
     private const int CURSE_FAILURE_AMOUNT = 10;
 
     public enum Shape { Square, Triangle, Rectangle, QuarterTriangle, Diamond, Parallelogram, MediumTriangle, House, LargeTriangle, LShape, Clay }
-    public enum Effect { None, Flame, Guard, Scribe, Afterimage, Spark, Period, Resonance, Cog, Overpaint }
+    public enum Effect { None, Period, Resonance }
+    public enum Seal { None, Recall, Shard, Refill, Overpaint }
+    public enum Coating { None, Guard, Amplify, Cog }
     public enum Phase { Title, Combat, Reward, Loadout, Victory, Defeat }
     public enum SpellKind { Single, Block, All, Scatter }
     public enum Keyword { None, OneStroke, Mosaic, Purity }
@@ -20,13 +22,15 @@ public sealed class SpellGame
     public const int PATTERN_COUNT = 8;
     public const int MAX_HAND = 7;
     public const int MAX_HITS = 6;
-    public const int SPARK_DAMAGE = 2;
+    public const int SHARD_DAMAGE = 2;
     private const int LOCAL_SIZE = 3;
     private const int CELL_COUNT = LOCAL_SIZE * LOCAL_SIZE;
     private const int FULL_MASK = 15;
-    private const int FLAME_BONUS = 2;
-    private const int FLAME_HIT_BONUS = 1;
+    private const int AMPLIFY_BONUS = 2;
+    private const int AMPLIFY_HIT_BONUS = 1;
     private const int GUARD_BONUS = 3;
+    private const int REWARD_PIECE_COUNT = 3;
+    private const double REWARD_SEAL_CHANCE = 0.5;
     private const int PERIOD_BONUS = 3;
     private const int RESONANCE_BONUS = 3;
     private const int RESONANCE_COUNT = 3;
@@ -46,17 +50,41 @@ public sealed class SpellGame
         public ShapeCell(int x, int y, int mask) { X = x; Y = y; Mask = mask; }
     }
 
-    /// <summary>보상 후보 하나. 도안이면 Pattern이 0 이상이다.</summary>
+    /// <summary>조각의 1/4 구역 하나에 붙은 씰링이다. 좌표는 카드 저장 시 기본 방향(회전 0), 표시용 반환값은 요청한 방향 기준이다.</summary>
+    public readonly struct SealSpot
+    {
+        public int X { get; }
+        public int Y { get; }
+        public int Sector { get; }
+        public Seal Seal { get; }
+
+        /// <summary>칸 좌표, 위·오른쪽·아래·왼쪽 구역 번호와 씰링 종류를 보관한다.</summary>
+        public SealSpot(int x, int y, int sector, Seal seal) { X = x; Y = y; Sector = sector; Seal = seal; }
+    }
+
+    /// <summary>보상 후보 하나. 도안이면 Pattern이 0 이상이고, 조각이면 Piece에 아직 보유하지 않은 카드가 들어 있다.</summary>
     public struct Reward
     {
-        public int Pattern; public Shape Shape; public Effect Effect;
+        public int Pattern; public Card Piece;
         public bool IsPattern { get { return Pattern >= 0; } }
+    }
+
+    /// <summary>쪼개기 결과 조각 하나의 도형과 방향, 원본 기본 방향 기준 왼쪽 위 칸이다.</summary>
+    private readonly struct Fragment
+    {
+        public Shape Shape { get; }
+        public int Rotation { get; }
+        public int X { get; }
+        public int Y { get; }
+
+        /// <summary>도형, 0~3으로 맞춘 방향과 원본 기준 위치를 보관한다.</summary>
+        public Fragment(Shape shape, int rotation, int x, int y) { Shape = shape; Rotation = (rotation % 4 + 4) % 4; X = x; Y = y; }
     }
 
     /// <summary>시전 순간의 판 상태로 계산한 주문 결과다. Value는 다타 주문이면 타격 하나의 피해다.</summary>
     public sealed class SpellEvaluation
     {
-        public SpellKind Kind; public int Base; public int Value; public int Hits = 1; public int Block; public int SparkHits; public int Draws; public int Afterimages;
+        public SpellKind Kind; public int Base; public int Value; public int Hits = 1; public int Block; public int ShardHits; public int Draws; public int Recalls;
         public readonly List<string> Terms = new List<string>();
         public int Total { get { return Kind == SpellKind.Scatter ? Value * Hits : Value; } }
     }
@@ -81,11 +109,15 @@ public sealed class SpellGame
 
     public sealed class Card
     {
+        internal readonly List<SealSpot> SealList = new List<SealSpot>();
+
         public int Id { get; internal set; }
         public Shape Shape { get; internal set; }
         public Effect Effect { get; internal set; }
-        public bool HasPersisted { get; internal set; }
+        public Coating Coating { get; internal set; }
+        public IReadOnlyList<SealSpot> Seals { get { return SealList; } }
         public GluedShape Glued { get; internal set; }
+        public bool IsUnique { get { return Glued == null && Shape == Shape.Clay; } }
     }
 
     public sealed class GluedShape
@@ -135,7 +167,6 @@ public sealed class SpellGame
         public int Y { get; internal set; }
         public int Rotation { get; internal set; }
         public int Turn { get; internal set; }
-        public bool HasPersisted { get { return Card.HasPersisted; } }
         public bool CanRefund { get; internal set; }
 
         /// <summary>도안 기준 칸 (x, y)에서 이 조각이 차지한 구역 마스크를 반환한다.</summary>
@@ -209,13 +240,10 @@ public sealed class SpellGame
         new[] { new ShapeCell(0, 0, 15), new ShapeCell(1, 0, 9), new ShapeCell(0, 1, 9) },
         new[] { new ShapeCell(0, 0, 15), new ShapeCell(0, 1, 15), new ShapeCell(1, 1, 15) },
         new[] { new ShapeCell(0, 0, 15) } };
-    private static readonly Reward[] CARD_POOL = {
-        Piece(Shape.Square, Effect.None), Piece(Shape.Triangle, Effect.None), Piece(Shape.Rectangle, Effect.None), Piece(Shape.QuarterTriangle, Effect.None),
-        Piece(Shape.Triangle, Effect.Flame), Piece(Shape.Square, Effect.Guard), Piece(Shape.Rectangle, Effect.Scribe), Piece(Shape.QuarterTriangle, Effect.Afterimage),
-        Piece(Shape.House, Effect.None), Piece(Shape.LShape, Effect.None), Piece(Shape.LargeTriangle, Effect.None), Piece(Shape.Square, Effect.Afterimage), Piece(Shape.Clay, Effect.None),
-        Piece(Shape.Diamond, Effect.None), Piece(Shape.Parallelogram, Effect.None), Piece(Shape.MediumTriangle, Effect.None),
-        Piece(Shape.QuarterTriangle, Effect.Spark), Piece(Shape.QuarterTriangle, Effect.Period), Piece(Shape.Triangle, Effect.Resonance),
-        Piece(Shape.Triangle, Effect.Cog), Piece(Shape.Triangle, Effect.Overpaint), Piece(Shape.MediumTriangle, Effect.Scribe) };
+    private static readonly int SHAPE_KIND_COUNT = Enum.GetValues(typeof(Shape)).Length;
+    private static readonly int SEAL_KIND_COUNT = Enum.GetValues(typeof(Seal)).Length - 1;
+    private static readonly int COATING_KIND_COUNT = Enum.GetValues(typeof(Coating)).Length - 1;
+    private static readonly Card[] DEBUG_PIECES = CreateDebugPieces();
     private static readonly ShapeCell[][][] SHAPE_ORIENTATIONS = CreateOrientations();
 
     private readonly Random _random = new Random();
@@ -246,7 +274,7 @@ public sealed class SpellGame
 
     public ReadOnlyCollection<Card> Hand { get; }
     public IReadOnlyList<Card> OwnedCards { get { return _owned; } }
-    public static IReadOnlyList<Reward> AvailableCards { get { return Array.AsReadOnly(CARD_POOL); } }
+    public static IReadOnlyList<Card> DebugPieces { get { return Array.AsReadOnly(DEBUG_PIECES); } }
     public ReadOnlyCollection<Enemy> Enemies { get; }
     public ReadOnlyCollection<int> Spells { get; }
     public ReadOnlyCollection<int> OwnedSpells { get; }
@@ -283,8 +311,20 @@ public sealed class SpellGame
         return boards;
     }
 
-    /// <summary>모양과 효과로 조각 보상 후보를 만든다.</summary>
-    private static Reward Piece(Shape shape, Effect effect) { return new Reward { Pattern = -1, Shape = shape, Effect = effect }; }
+    /// <summary>개발자 패널에서 추가할 조각 원형을 만든다. 일반 도형 전체, 씰링·코팅별 정사각형과 보상에서 빠진 이전 효과 조각이다.</summary>
+    private static Card[] CreateDebugPieces()
+    {
+        List<Card> pieces = new List<Card>();
+        foreach (Shape shape in Enum.GetValues(typeof(Shape))) pieces.Add(new Card { Shape = shape });
+        for (int seal = 1; seal <= SEAL_KIND_COUNT; seal++)
+        {
+            Card card = new Card { Shape = Shape.Square }; card.SealList.Add(new SealSpot(0, 0, 0, (Seal)seal)); pieces.Add(card);
+        }
+        for (int coating = 1; coating <= COATING_KIND_COUNT; coating++) pieces.Add(new Card { Shape = Shape.Square, Coating = (Coating)coating });
+        pieces.Add(new Card { Shape = Shape.QuarterTriangle, Effect = Effect.Period });
+        pieces.Add(new Card { Shape = Shape.Triangle, Effect = Effect.Resonance });
+        return pieces.ToArray();
+    }
 
     /// <summary>모든 도형의 네 방향 칸 목록을 미리 계산한다. 평행사변형은 뒤집힌 두 방향을 회전 순서에 포함한다.</summary>
     private static ShapeCell[][][] CreateOrientations()
@@ -341,6 +381,54 @@ public sealed class SpellGame
     public static IReadOnlyList<ShapeCell> ShapeCells(Shape shape, int rotation)
     {
         return SHAPE_ORIENTATIONS[(int)shape][(rotation % 4 + 4) % 4];
+    }
+
+    /// <summary>기본 방향의 구역 번호를 도형의 지정 방향 구역 번호로 바꾼다. 평행사변형의 2·3 방향은 좌우를 뒤집은 뒤 돌린다.</summary>
+    private static int RotateSector(Shape shape, int rotation, int sector)
+    {
+        rotation = (rotation % 4 + 4) % 4;
+        if (shape == Shape.Parallelogram && rotation >= 2) { sector = sector == 1 ? 3 : sector == 3 ? 1 : sector; rotation -= 2; }
+        return (sector + rotation) % 4;
+    }
+
+    /// <summary>카드를 지정 방향으로 돌렸을 때 씰링 위치를 CardCells와 같은 좌표계로 반환한다. 접착 카드는 두 원본의 씰링을 모두 포함한다.</summary>
+    public static List<SealSpot> SealSpots(Card card, int rotation)
+    {
+        List<SealSpot> result = new List<SealSpot>();
+        rotation = (rotation % 4 + 4) % 4;
+        if (card.Glued == null)
+        {
+            IReadOnlyList<ShapeCell> baseCells = ShapeCells(card.Shape, 0), cells = ShapeCells(card.Shape, rotation);
+            foreach (SealSpot seal in card.Seals)
+                for (int i = 0; i < baseCells.Count; i++)
+                {
+                    if (baseCells[i].X != seal.X || baseCells[i].Y != seal.Y) continue;
+                    result.Add(new SealSpot(cells[i].X, cells[i].Y, RotateSector(card.Shape, rotation, seal.Sector), seal.Seal)); break;
+                }
+            return result;
+        }
+        GluedShape glued = card.Glued;
+        int left = Math.Min(0, glued.RelativeX), top = Math.Min(0, glued.RelativeY);
+        List<SealSpot> flat = new List<SealSpot>();
+        foreach (SealSpot s in SealSpots(glued.First, glued.FirstRotation)) flat.Add(new SealSpot(s.X - left, s.Y - top, s.Sector, s.Seal));
+        foreach (SealSpot s in SealSpots(glued.Second, glued.SecondRotation)) flat.Add(new SealSpot(s.X + glued.RelativeX - left, s.Y + glued.RelativeY - top, s.Sector, s.Seal));
+        foreach (SealSpot s in flat)
+        {
+            int x = s.X, y = s.Y, width = glued.Width, height = glued.Height;
+            // GluedShape.RotatedCell의 역방향과 같은 시계 방향 90도 회전을 rotation번 적용한다.
+            for (int r = 0; r < rotation; r++) { int nx = height - 1 - y; y = x; x = nx; int w = width; width = height; height = w; }
+            result.Add(new SealSpot(x, y, (s.Sector + rotation) % 4, s.Seal));
+        }
+        return result;
+    }
+
+    /// <summary>카드에 붙은 지정 씰링 수를 반환한다. 접착 카드는 두 원본의 씰링을 합산한다.</summary>
+    public static int SealCount(Card card, Seal seal)
+    {
+        if (card.Glued != null) return SealCount(card.Glued.First, seal) + SealCount(card.Glued.Second, seal);
+        int count = 0;
+        foreach (SealSpot spot in card.Seals) if (spot.Seal == seal) count++;
+        return count;
     }
 
     /// <summary>도형을 앵커 (x, y)와 방향으로 놓았을 때 칸 (cellX, cellY)에서 차지하는 구역 마스크를 반환한다.</summary>
@@ -401,17 +489,28 @@ public sealed class SpellGame
         return area;
     }
 
-    /// <summary>드로우 또는 버림 더미의 조각별 수량을 읽기 전용 요약으로 반환한다.</summary>
-    public Dictionary<string, int> GetPileSummary(bool isDrawPile)
+    /// <summary>드로우 또는 버림 더미를 도형·코팅·씰링이 같은 조각끼리 묶어 대표 카드와 수량 목록으로 반환한다.</summary>
+    public List<KeyValuePair<Card, int>> GetPileSummary(bool isDrawPile)
     {
-        Dictionary<string, int> summary = new Dictionary<string, int>();
+        List<KeyValuePair<Card, int>> summary = new List<KeyValuePair<Card, int>>();
+        Dictionary<string, int> indices = new Dictionary<string, int>();
         foreach (Card card in isDrawPile ? _draw : _discard)
         {
-            string key = card.Shape + ":" + card.Effect;
-            if (!summary.ContainsKey(key)) summary.Add(key, 0);
-            summary[key]++;
+            string key = CardKey(card);
+            if (indices.TryGetValue(key, out int index)) summary[index] = new KeyValuePair<Card, int>(summary[index].Key, summary[index].Value + 1);
+            else { indices.Add(key, summary.Count); summary.Add(new KeyValuePair<Card, int>(card, 1)); }
         }
         return summary;
+    }
+
+    /// <summary>더미 요약에서 같은 조각으로 묶을 기준 문자열을 만든다. 접착 카드는 모양이 제각각이라 카드마다 따로 센다.</summary>
+    private static string CardKey(Card card)
+    {
+        if (card.Glued != null) return "Glued:" + card.Id;
+        List<string> seals = new List<string>();
+        foreach (SealSpot seal in card.Seals) seals.Add($"{seal.X},{seal.Y},{seal.Sector},{seal.Seal}");
+        seals.Sort(StringComparer.Ordinal);
+        return $"{card.Shape}:{card.Effect}:{card.Coating}:{string.Join(";", seals)}";
     }
 
     /// <summary>지정한 도안을 지금 시전했을 때의 공격 피해 합을 반환한다. 방어 도안은 0이다.</summary>
@@ -447,13 +546,25 @@ public sealed class SpellGame
         _owned.Add(new Card { Id = ++_nextId, Shape = shape, Effect = effect });
     }
 
-    /// <summary>조각 정의를 보유 덱과 현재 손패에 한 장 추가한다.</summary>
+    /// <summary>원본 카드의 도형·효과·코팅·씰링과 접착 구성을 새 ID로 복사한다. keepRecall이 false면 회수 씰링만 뺀다.</summary>
+    private Card CopyCard(Card source, bool keepRecall)
+    {
+        Card copy = new Card { Id = ++_nextId, Shape = source.Shape, Effect = source.Effect, Coating = source.Coating };
+        foreach (SealSpot seal in source.Seals) if (keepRecall || seal.Seal != Seal.Recall) copy.SealList.Add(seal);
+        if (source.Glued != null)
+        {
+            GluedShape glued = source.Glued;
+            copy.Glued = new GluedShape(CopyCard(glued.First, keepRecall), glued.FirstRotation, CopyCard(glued.Second, keepRecall), glued.SecondRotation, glued.RelativeX, glued.RelativeY);
+        }
+        return copy;
+    }
+
+    /// <summary>개발자 조각 원형을 복사해 보유 덱과 현재 손패에 한 장 추가한다.</summary>
     public bool AddDebugCard(int index)
     {
-        if (CurrentPhase != Phase.Combat || index < 0 || index >= CARD_POOL.Length) return false;
-        Reward definition = CARD_POOL[index];
-        AddCard(definition.Shape, definition.Effect);
-        _hand.Add(_owned[_owned.Count - 1]);
+        if (CurrentPhase != Phase.Combat || index < 0 || index >= DEBUG_PIECES.Length) return false;
+        Card card = CopyCard(DEBUG_PIECES[index], true);
+        _owned.Add(card); _hand.Add(card);
         return true;
     }
 
@@ -487,7 +598,6 @@ public sealed class SpellGame
         CancelTheft(); _stolen.Clear();
         Battle++; Turn = 0; Block = 0; Target = 0; _enemies.Clear(); _hand.Clear(); _discard.Clear(); _draw.Clear();
         foreach (Board board in Boards) { board.MutablePieces.Clear(); board.Completer = null; }
-        foreach (Card card in _owned) card.HasPersisted = false;
         _draw.AddRange(_owned); Shuffle(_draw);
         GuaranteeOpeningShape(Shape.Square, _draw.Count - 1); GuaranteeOpeningShape(Shape.QuarterTriangle, _draw.Count - 2);
         if (IsDeveloperMode)
@@ -580,6 +690,7 @@ public sealed class SpellGame
         if (CurrentPhase != Phase.Combat) return "플레이어 턴에만 망치를 사용할 수 있습니다";
         if (HammerUsesLeft <= 0) return "이번 턴의 망치를 이미 사용했습니다";
         if (card == null || !Hand.Contains(card)) return "손패의 조각 하나를 선택하세요";
+        if (card.IsUnique) return "고유 조각은 쪼갤 수 없습니다";
         if (card.Glued == null && card.Shape > Shape.QuarterTriangle) return "이 도형은 망치 분해를 지원하지 않습니다";
         if (card.Glued != null && (card.Glued.First.Shape > Shape.QuarterTriangle || card.Glued.Second.Shape > Shape.QuarterTriangle)) return "이 접착 도형은 망치 분해를 지원하지 않습니다";
         if (card.Glued == null && card.Shape == Shape.QuarterTriangle) return "1/4 삼각형은 가장 작은 조각이라 분해할 수 없습니다";
@@ -587,10 +698,17 @@ public sealed class SpellGame
         return null;
     }
 
-    /// <summary>도형의 한 단계 작은 기존 도형을 반환하며 1/4 삼각형은 그대로 유지한다.</summary>
-    private static Shape SmallerShape(Shape shape)
+    /// <summary>조각을 한 단계 작은 두 조각으로 나눈다. 직사각형은 두 칸, 정사각형은 대각선 두 삼각형, 삼각형은 1/4 삼각형 둘이 된다.</summary>
+    private static Fragment[] SplitOnce(Fragment fragment)
     {
-        return shape == Shape.Rectangle ? Shape.Square : shape == Shape.Square ? Shape.Triangle : Shape.QuarterTriangle;
+        if (fragment.Shape == Shape.Rectangle)
+        {
+            IReadOnlyList<ShapeCell> cells = ShapeCells(Shape.Rectangle, fragment.Rotation);
+            return new[] { new Fragment(Shape.Square, 0, fragment.X + cells[0].X, fragment.Y + cells[0].Y), new Fragment(Shape.Square, 0, fragment.X + cells[1].X, fragment.Y + cells[1].Y) };
+        }
+        if (fragment.Shape == Shape.Square)
+            return new[] { new Fragment(Shape.Triangle, fragment.Rotation, fragment.X, fragment.Y), new Fragment(Shape.Triangle, fragment.Rotation + 2, fragment.X, fragment.Y) };
+        return new[] { new Fragment(Shape.QuarterTriangle, fragment.Rotation, fragment.X, fragment.Y), new Fragment(Shape.QuarterTriangle, fragment.Rotation + 1, fragment.X, fragment.Y) };
     }
 
     /// <summary>강도 0~1에서 첫 분해 이후 자식의 추가 분해 확률을 반환한다.</summary>
@@ -606,27 +724,44 @@ public sealed class SpellGame
         if (shape < Shape.Square || shape > Shape.QuarterTriangle) throw new ArgumentOutOfRangeException(nameof(shape));
         if (maxPieces < 1) throw new ArgumentOutOfRangeException(nameof(maxPieces));
         if (random == null) throw new ArgumentNullException(nameof(random));
-        float chance = DecompositionChance(strength);
-        List<Shape> pieces = new List<Shape>();
-        if (shape == Shape.QuarterTriangle || maxPieces == 1) return new[] { shape };
-        int splitsLeft = maxPieces - 2;
-        Shape smaller = SmallerShape(shape);
-        SplitShape(smaller, chance, random, pieces, ref splitsLeft);
-        SplitShape(smaller, chance, random, pieces, ref splitsLeft);
-        return pieces.ToArray();
+        List<Fragment> fragments = Decompose(shape, DecompositionChance(strength), maxPieces, random);
+        Shape[] shapes = new Shape[fragments.Count];
+        for (int i = 0; i < fragments.Count; i++) shapes[i] = fragments[i].Shape;
+        return shapes;
     }
 
-    /// <summary>남은 분할 수 안에서 각 자식의 추가 분해를 추첨해 면적이 보존된 최종 도형을 누적한다.</summary>
-    private static void SplitShape(Shape shape, float chance, Random random, List<Shape> pieces, ref int splitsLeft)
+    /// <summary>원본을 반드시 한 번 나누고 남은 분할 수 안에서 추가 분해를 추첨해 원본 기본 방향 기준 위치를 가진 조각 목록을 반환한다.</summary>
+    private static List<Fragment> Decompose(Shape shape, float chance, int maxPieces, Random random)
     {
-        if (shape == Shape.QuarterTriangle || splitsLeft == 0 || random.NextDouble() >= chance)
+        List<Fragment> pieces = new List<Fragment>();
+        Fragment root = new Fragment(shape, 0, 0, 0);
+        if (shape == Shape.QuarterTriangle || maxPieces == 1) { pieces.Add(root); return pieces; }
+        int splitsLeft = maxPieces - 2;
+        foreach (Fragment child in SplitOnce(root)) SplitFragment(child, chance, random, pieces, ref splitsLeft);
+        return pieces;
+    }
+
+    /// <summary>남은 분할 수 안에서 각 자식의 추가 분해를 추첨해 면적이 보존된 최종 조각을 누적한다.</summary>
+    private static void SplitFragment(Fragment fragment, float chance, Random random, List<Fragment> pieces, ref int splitsLeft)
+    {
+        if (fragment.Shape == Shape.QuarterTriangle || splitsLeft == 0 || random.NextDouble() >= chance)
         {
-            pieces.Add(shape); return;
+            pieces.Add(fragment); return;
         }
         splitsLeft--;
-        Shape smaller = SmallerShape(shape);
-        SplitShape(smaller, chance, random, pieces, ref splitsLeft);
-        SplitShape(smaller, chance, random, pieces, ref splitsLeft);
+        foreach (Fragment child in SplitOnce(fragment)) SplitFragment(child, chance, random, pieces, ref splitsLeft);
+    }
+
+    /// <summary>원본 기본 방향 기준 씰링이 쪼갠 조각 안에 있으면 그 조각의 기본 방향 기준 씰링으로 바꿔 반환한다.</summary>
+    private static bool TryMapSeal(Fragment fragment, SealSpot seal, out SealSpot mapped)
+    {
+        IReadOnlyList<ShapeCell> cells = ShapeCells(fragment.Shape, fragment.Rotation), baseCells = ShapeCells(fragment.Shape, 0);
+        for (int i = 0; i < cells.Count; i++)
+        {
+            if (fragment.X + cells[i].X != seal.X || fragment.Y + cells[i].Y != seal.Y || (cells[i].Mask & (1 << seal.Sector)) == 0) continue;
+            mapped = new SealSpot(baseCells[i].X, baseCells[i].Y, ((seal.Sector - fragment.Rotation) % 4 + 4) % 4, seal.Seal); return true;
+        }
+        mapped = default; return false;
     }
 
     /// <summary>현재 손패에서 원본을 교체할 때 허용되는 최대 결과 수를 반환한다. 대상이 무효하면 0이다.</summary>
@@ -651,23 +786,19 @@ public sealed class SpellGame
         int maxPieces = HammerMaxPieces(card);
         if (maxPieces == 0) return false;
         List<Card> results = new List<Card>();
-        if (card.Glued == null)
-        {
-            resultShapes = DecomposeShape(card.Shape, strength, maxPieces, _random);
-            AddHammerCards(card, resultShapes, card.HasPersisted, results);
-        }
+        float chance = DecompositionChance(strength);
+        if (card.Glued == null) AddHammerCards(card, Decompose(card.Shape, chance, maxPieces, _random), card.Coating, results);
         else
         {
-            float chance = DecompositionChance(strength);
-            List<Shape> firstPieces = new List<Shape>(), secondPieces = new List<Shape>();
+            List<Fragment> firstPieces = new List<Fragment>(), secondPieces = new List<Fragment>();
             int splitsLeft = maxPieces - 2;
-            SplitShape(card.Glued.First.Shape, chance, _random, firstPieces, ref splitsLeft);
-            SplitShape(card.Glued.Second.Shape, chance, _random, secondPieces, ref splitsLeft);
-            AddHammerCards(card.Glued.First, firstPieces, card.HasPersisted, results);
-            AddHammerCards(card.Glued.Second, secondPieces, card.HasPersisted, results);
-            resultShapes = new Shape[results.Count];
-            for (int i = 0; i < results.Count; i++) resultShapes[i] = results[i].Shape;
+            SplitFragment(new Fragment(card.Glued.First.Shape, 0, 0, 0), chance, _random, firstPieces, ref splitsLeft);
+            SplitFragment(new Fragment(card.Glued.Second.Shape, 0, 0, 0), chance, _random, secondPieces, ref splitsLeft);
+            AddHammerCards(card.Glued.First, firstPieces, card.Coating, results);
+            AddHammerCards(card.Glued.Second, secondPieces, card.Coating, results);
         }
+        resultShapes = new Shape[results.Count];
+        for (int i = 0; i < results.Count; i++) resultShapes[i] = results[i].Shape;
         HammerUsesLeft--;
         if (resultShapes.Length == 1) return true;
         int index = _hand.IndexOf(card);
@@ -677,23 +808,24 @@ public sealed class SpellGame
         return true;
     }
 
-    /// <summary>원본별 가장 큰 결과 한 장에만 효과와 잔상 이력을 남긴 카드를 생성한다. 최대 크기 동률은 무작위로 고른다.</summary>
-    private void AddHammerCards(Card source, IReadOnlyList<Shape> shapes, bool hasPersisted, List<Card> results)
+    /// <summary>쪼갠 조각마다 카드를 만든다. 코팅은 모든 조각에 적용하고, 씰링은 그 1/4 구역을 가진 조각에만 남긴다. 이전 효과는 가장 큰 조각 한 장에만 남기며 동률은 무작위로 고른다.</summary>
+    private void AddHammerCards(Card source, IReadOnlyList<Fragment> fragments, Coating coating, List<Card> results)
     {
         int effectIndex = 0, largest = 0, ties = 0;
         if (source.Effect != Effect.None)
         {
-            for (int i = 0; i < shapes.Count; i++)
+            for (int i = 0; i < fragments.Count; i++)
             {
-                int area = SmallestPieceCount(shapes[i]);
+                int area = SmallestPieceCount(fragments[i].Shape);
                 if (area > largest) { largest = area; effectIndex = i; ties = 1; }
                 else if (area == largest && _random.Next(++ties) == 0) effectIndex = i;
             }
         }
-        for (int i = 0; i < shapes.Count; i++)
+        for (int i = 0; i < fragments.Count; i++)
         {
-            Effect effect = i == effectIndex ? source.Effect : Effect.None;
-            results.Add(new Card { Id = ++_nextId, Shape = shapes[i], Effect = effect, HasPersisted = effect == Effect.Afterimage && hasPersisted });
+            Card card = new Card { Id = ++_nextId, Shape = fragments[i].Shape, Effect = i == effectIndex ? source.Effect : Effect.None, Coating = coating };
+            foreach (SealSpot seal in source.Seals) if (TryMapSeal(fragments[i], seal, out SealSpot mapped)) card.SealList.Add(mapped);
+            results.Add(card);
         }
     }
 
@@ -709,7 +841,7 @@ public sealed class SpellGame
     public string GlueCardIssue(Card card)
     {
         if (card == null || !Hand.Contains(card)) return "손패의 조각을 선택하세요";
-        if (card.Shape == Shape.Clay) return "점토는 고정된 모양이 없어 접착할 수 없습니다";
+        if (card.IsUnique) return "고유 조각은 접착할 수 없습니다";
         if (card.Glued != null) return "접착된 카드는 다시 접착할 수 없습니다";
         return null;
     }
@@ -742,13 +874,24 @@ public sealed class SpellGame
         return touching ? null : "실제 도형의 변을 맞대세요. 꼭짓점만 닿으면 접착할 수 없습니다";
     }
 
-    /// <summary>두 손패 카드의 접촉을 재검증해 복합 카드로 교체하고 미해결 저주를 결과 인스턴스로 이전한다.</summary>
-    public bool TryGlue(Card first, int firstRotation, Card second, int secondRotation, int relativeX, int relativeY)
+    /// <summary>두 조각에 서로 다른 코팅이 있어 붙이기 전에 유지할 코팅을 골라야 하는지 반환한다.</summary>
+    public static bool NeedsCoatingChoice(Card first, Card second)
+    {
+        return first.Coating != Coating.None && second.Coating != Coating.None && first.Coating != second.Coating;
+    }
+
+    /// <summary>두 손패 카드의 접촉을 재검증해 복합 카드로 교체하고 미해결 저주를 결과 인스턴스로 이전한다. 코팅이 서로 다르면 keptCoating이 둘 중 하나여야 한다.</summary>
+    public bool TryGlue(Card first, int firstRotation, Card second, int secondRotation, int relativeX, int relativeY, Coating keptCoating = Coating.None)
     {
         if (GlueIssue(first, firstRotation, second, secondRotation, relativeX, relativeY) != null) return false;
+        Coating coating = first.Coating != Coating.None ? first.Coating : second.Coating;
+        if (NeedsCoatingChoice(first, second))
+        {
+            if (keptCoating != first.Coating && keptCoating != second.Coating) return false;
+            coating = keptCoating;
+        }
         GluedShape glued = new GluedShape(first, (firstRotation % 4 + 4) % 4, second, (secondRotation % 4 + 4) % 4, relativeX, relativeY);
-        Card result = new Card { Id = _nextId + 1, Shape = first.Shape, Effect = Effect.None, Glued = glued,
-            HasPersisted = (EffectCount(first, Effect.Afterimage) > 0 && first.HasPersisted) || (EffectCount(second, Effect.Afterimage) > 0 && second.HasPersisted) };
+        Card result = new Card { Id = _nextId + 1, Shape = first.Shape, Effect = Effect.None, Glued = glued, Coating = coating };
         int index = Math.Min(_hand.IndexOf(first), _hand.IndexOf(second));
         _hand.Remove(first); _hand.Remove(second); _hand.Insert(index, result);
         if (IsCursed(first) || IsCursed(second)) Curse.Target = result;
@@ -764,7 +907,6 @@ public sealed class SpellGame
         SealNotice = "";
         _hand.Clear(); _draw.Clear(); _discard.Clear();
         foreach (Board board in Boards) { board.MutablePieces.Clear(); board.Completer = null; }
-        foreach (Card card in _owned) card.HasPersisted = false;
         _draw.AddRange(_owned);
         CurrentPhase = phase;
     }
@@ -780,11 +922,10 @@ public sealed class SpellGame
         }
     }
 
-    /// <summary>카드를 버림 더미로 보내고 다음 순환을 위해 잔상 시전 이력을 초기화한다.</summary>
+    /// <summary>카드를 버림 더미로 보낸다. 절도 대상이었다면 절도를 취소한다.</summary>
     private void Discard(Card card)
     {
         if (TheftTarget == card) CancelTheft();
-        card.HasPersisted = false;
         _discard.Add(card);
     }
 
@@ -911,7 +1052,7 @@ public sealed class SpellGame
         return PlacementIssue(boardIndex, card, x, y, rotation, ignored) == null;
     }
 
-    /// <summary>배치가 불가능한 이유를 반환하고, 가능하면 null을 반환한다. 덧칠 조각은 구역마다 한 겹까지 겹칠 수 있다.</summary>
+    /// <summary>배치가 불가능한 이유를 반환하고, 가능하면 null을 반환한다. 덧칠 씰링이 있는 조각은 조각 전체를 구역마다 한 겹까지 겹칠 수 있다.</summary>
     public string PlacementIssue(int boardIndex, Card card, int x, int y, int rotation, Placement ignored = null)
     {
         if (CurrentPhase != Phase.Combat || boardIndex < 0 || boardIndex >= Boards.Count || card == null) return "지금은 배치할 수 없습니다";
@@ -922,7 +1063,7 @@ public sealed class SpellGame
         int[] allowed = SPELL_MASKS[board.Spell];
         for (int i = 0; i < CELL_COUNT; i++) if ((candidate[i] & ~allowed[i]) != 0) return "도안 밖으로 벗어납니다";
         int[] coverage = Coverage(board, ignored);
-        bool overpaint = EffectCount(card, Effect.Overpaint) > 0;
+        bool overpaint = SealCount(card, Seal.Overpaint) > 0;
         for (int i = 0; i < CELL_COUNT; i++) for (int s = 0; s < 4; s++)
         {
             if ((candidate[i] & (1 << s)) == 0) continue;
@@ -971,7 +1112,7 @@ public sealed class SpellGame
     }
 
     /// <summary>현재 턴에 배치한 미시전 조각만 개별 이동하거나 회수할 수 있는지 반환한다.</summary>
-    public bool CanMovePiece(Placement piece) { return piece != null && piece.Turn == Turn && !piece.HasPersisted && piece.CanRefund; }
+    public bool CanMovePiece(Placement piece) { return piece != null && piece.Turn == Turn && piece.CanRefund; }
 
     /// <summary>배치된 조각을 비용 없이 다른 위치 또는 판으로 옮긴다.</summary>
     public bool Move(int source, Placement piece, int destination, int x, int y, int rotation)
@@ -1097,35 +1238,33 @@ public sealed class SpellGame
         return false;
     }
 
-    /// <summary>도안을 지금 시전했을 때의 결과를 시전 순간의 판 상태로 계산한다. 이전 시전에서 남은 잔상은 조각 수에 세지 않는다.</summary>
+    /// <summary>도안을 지금 시전했을 때의 결과를 시전 순간의 판 상태로 계산한다. 코팅은 조각당 하나, 씰링은 붙은 개수만큼 적용한다.</summary>
     public SpellEvaluation Evaluate(int boardIndex)
     {
         Board board = Boards[boardIndex]; int spell = board.Spell;
         SpellEvaluation e = new SpellEvaluation { Kind = PATTERN_KINDS[spell], Base = PATTERN_BASE[spell] };
-        int counted = 0, flame = 0, guard = 0, resonance = 0, overpaint = 0, cog = 0;
+        int counted = board.Pieces.Count, amplify = 0, guard = 0, resonance = 0, overpaint = 0, cog = 0;
         bool pure = board.Pieces.Count > 0; Shape first = board.Pieces.Count > 0 ? board.Pieces[0].Card.Shape : Shape.Square;
         foreach (Placement p in board.Pieces)
         {
-            if (!p.HasPersisted) counted++;
             if (p.Card.Glued != null || p.Card.Shape != first) pure = false;
-            flame += EffectCount(p.Card, Effect.Flame);
-            guard += EffectCount(p.Card, Effect.Guard);
-            e.Draws += EffectCount(p.Card, Effect.Scribe);
-            e.SparkHits += EffectCount(p.Card, Effect.Spark);
-            resonance += EffectCount(p.Card, Effect.Resonance);
-            overpaint += EffectCount(p.Card, Effect.Overpaint);
-            if (!p.HasPersisted) e.Afterimages += EffectCount(p.Card, Effect.Afterimage);
-            int cogCount = EffectCount(p.Card, Effect.Cog);
-            if (cogCount > 0)
+            if (p.Card.Coating == Coating.Amplify) amplify++;
+            else if (p.Card.Coating == Coating.Guard) guard++;
+            else if (p.Card.Coating == Coating.Cog)
             {
                 int touching = 0;
                 foreach (Placement other in board.Pieces) if (other != p && Touches(p, other)) touching++;
-                cog += cogCount * Math.Min(COG_LIMIT, touching);
+                cog += Math.Min(COG_LIMIT, touching);
             }
+            e.Draws += SealCount(p.Card, Seal.Refill);
+            e.ShardHits += SealCount(p.Card, Seal.Shard);
+            e.Recalls += SealCount(p.Card, Seal.Recall);
+            overpaint += SealCount(p.Card, Seal.Overpaint);
+            resonance += EffectCount(p.Card, Effect.Resonance);
         }
         bool attack = e.Kind != SpellKind.Block;
         int value = e.Base;
-        if (attack && flame > 0) { int bonus = flame * (e.Kind == SpellKind.Scatter ? FLAME_HIT_BONUS : FLAME_BONUS); value += bonus; e.Terms.Add($"불꽃 +{bonus}"); }
+        if (attack && amplify > 0) { int bonus = amplify * (e.Kind == SpellKind.Scatter ? AMPLIFY_HIT_BONUS : AMPLIFY_BONUS); value += bonus; e.Terms.Add($"증폭 +{bonus}"); }
         if (attack && cog > 0) { value += cog; e.Terms.Add($"톱니 +{cog}"); }
         if (board.Completer != null && EffectCount(board.Completer.Card, Effect.Period) > 0) { int bonus = PERIOD_BONUS * EffectCount(board.Completer.Card, Effect.Period); value += bonus; e.Terms.Add($"마침표 +{bonus}"); }
         if (resonance > 0 && counted >= RESONANCE_COUNT) { value += resonance * RESONANCE_BONUS; e.Terms.Add($"공명 +{resonance * RESONANCE_BONUS}"); }
@@ -1164,29 +1303,57 @@ public sealed class SpellGame
         if (e.Kind == SpellKind.Single) DamageEnemy(Enemies[Target], e.Value);
         else if (e.Kind == SpellKind.All) { foreach (Enemy enemy in Enemies) if (enemy.Health > 0) DamageEnemy(enemy, e.Value); }
         else if (e.Kind == SpellKind.Scatter) for (int i = 0; i < e.Hits; i++) HitRandom(e.Value);
-        for (int i = 0; i < e.SparkHits; i++) HitRandom(SPARK_DAMAGE);
+        for (int i = 0; i < e.ShardHits; i++) HitRandom(SHARD_DAMAGE);
         bool alive = false; for (int i = 0; i < Enemies.Count; i++) if (Enemies[i].Health > 0) { if (!alive && Enemies[Target].Health <= 0) Target = i; alive = true; }
+        List<Card> recalled = new List<Card>();
         for (int i = board.Pieces.Count - 1; i >= 0; i--)
         {
             Placement piece = board.Pieces[i];
             ResolveCurse(piece.Card, CurseResolution.Spell);
-            piece.CanRefund = false;
-            if (EffectCount(piece.Card, Effect.Afterimage) > 0 && !piece.HasPersisted) piece.Card.HasPersisted = true;
-            else { Discard(piece.Card); board.MutablePieces.RemoveAt(i); }
+            int recalls = SealCount(piece.Card, Seal.Recall);
+            for (int k = 0; k < recalls; k++) recalled.Add(CopyCard(piece.Card, false));
+            Discard(piece.Card); board.MutablePieces.RemoveAt(i);
         }
         board.Completer = null;
+        // 회수 복사본은 이번 전투에만 쓰는 임시 카드라 보유 덱에 넣지 않고, 손패 한도도 무시한다.
+        _hand.AddRange(recalled);
         if (e.Draws > 0 && alive) Draw(e.Draws);
         if (!alive) { if (Battle == LAST_BATTLE) FinishCombat(Phase.Victory); else { Health = Math.Min(MaxHealth, Health + VICTORY_HEAL); FinishCombat(Phase.Reward); EnterReward(); } }
         return true;
     }
 
-    /// <summary>모든 조각 카드와 아직 없는 도안을 보상 후보로 만들고 보상 단계로 넘어간다.</summary>
+    /// <summary>씰링 또는 코팅이 붙은 랜덤 조각 3개와 아직 없는 도안을 보상 후보로 만들고 보상 단계로 넘어간다. 점토는 한 번에 최대 1개다.</summary>
     private void EnterReward()
     {
         _rewards.Clear();
+        bool hasClay = false;
+        for (int i = 0; i < REWARD_PIECE_COUNT; i++)
+        {
+            Card piece = RandomRewardPiece(!hasClay);
+            hasClay |= piece.IsUnique;
+            _rewards.Add(new Reward { Pattern = -1, Piece = piece });
+        }
         for (int spell = 0; spell < PATTERN_COUNT; spell++) if (!_ownedSpells.Contains(spell)) _rewards.Add(new Reward { Pattern = spell });
-        _rewards.AddRange(CARD_POOL);
         CurrentPhase = Phase.Reward;
+    }
+
+    /// <summary>보상용 랜덤 조각을 만든다. 도형을 고른 뒤 반반 확률로 무작위 1/4 구역에 씰링 1개 또는 코팅 1개를 붙인다. 고유 조각 점토는 아무것도 붙이지 않는다.</summary>
+    private Card RandomRewardPiece(bool canBeClay)
+    {
+        // Clay가 Shape의 마지막 값이므로 점토를 빼려면 마지막 하나를 제외하고 뽑는다.
+        Shape shape = (Shape)_random.Next(canBeClay ? SHAPE_KIND_COUNT : SHAPE_KIND_COUNT - 1);
+        Card card = new Card { Shape = shape };
+        if (card.IsUnique) return card;
+        if (_random.NextDouble() < REWARD_SEAL_CHANCE)
+        {
+            List<SealSpot> sectors = new List<SealSpot>();
+            foreach (ShapeCell cell in ShapeCells(shape, 0))
+                for (int sector = 0; sector < 4; sector++) if ((cell.Mask & (1 << sector)) != 0) sectors.Add(new SealSpot(cell.X, cell.Y, sector, Seal.None));
+            SealSpot spot = sectors[_random.Next(sectors.Count)];
+            card.SealList.Add(new SealSpot(spot.X, spot.Y, spot.Sector, (Seal)(1 + _random.Next(SEAL_KIND_COUNT))));
+        }
+        else card.Coating = (Coating)(1 + _random.Next(COATING_KIND_COUNT));
+        return card;
     }
 
     /// <summary>보상 후보 하나를 얻고 도안 장착 단계로 넘어간다. -1은 건너뛰기다.</summary>
@@ -1198,7 +1365,7 @@ public sealed class SpellGame
         {
             Reward reward = _rewards[index];
             if (reward.IsPattern) { _ownedSpells.Add(reward.Pattern); LastAcquiredPattern = reward.Pattern; }
-            else AddCard(reward.Shape, reward.Effect);
+            else _owned.Add(CopyCard(reward.Piece, true));
         }
         CurrentPhase = Phase.Loadout; return true;
     }
