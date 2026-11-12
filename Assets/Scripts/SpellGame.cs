@@ -19,7 +19,6 @@ public sealed class SpellGame
     public enum SpellKind { Single, Block, All, Scatter }
     public enum Keyword { None, OneStroke, Mosaic, Purity }
 
-    public const int PATTERN_COUNT = 8;
     public const int MAX_HAND = 7;
     public const int MAX_HITS = 6;
     public const int SHARD_DAMAGE = 2;
@@ -215,36 +214,18 @@ public sealed class SpellGame
         }
     }
 
-    private static readonly string[] PATTERN_NAMES = { "불씨", "방벽", "번개", "유성", "섬광", "산탄", "만화경", "강타" };
-    private static readonly SpellKind[] PATTERN_KINDS = { SpellKind.Single, SpellKind.Block, SpellKind.Single, SpellKind.All, SpellKind.Single, SpellKind.Scatter, SpellKind.All, SpellKind.Single };
-    private static readonly int[] PATTERN_BASE = { 6, 7, 12, 10, 8, 2, 6, 9 };
-    private static readonly Keyword[] PATTERN_KEYWORDS = { Keyword.None, Keyword.None, Keyword.OneStroke, Keyword.None, Keyword.OneStroke, Keyword.Mosaic, Keyword.Purity, Keyword.None };
-    private static readonly int[][] SPELL_MASKS = {
-        new[] { 3, 8, 0, 0, 0, 0, 0, 0, 0 },
-        new[] { 2, 8, 0, 0, 0, 0, 0, 0, 0 },
-        new[] { 15, 0, 0, 15, 15, 0, 0, 0, 0 },
-        new[] { 15, 15, 0, 15, 15, 0, 0, 0, 0 },
-        new[] { 15, 9, 0, 9, 0, 0, 0, 0, 0 },
-        new[] { 6, 15, 12, 0, 0, 0, 0, 0, 0 },
-        new[] { 6, 12, 0, 3, 9, 0, 0, 0, 0 },
-        new[] { 15, 0, 0, 0, 0, 0, 0, 0, 0 } };
-    private static readonly ShapeCell[][] BASE_SHAPES = {
-        new[] { new ShapeCell(0, 0, 15) },
-        new[] { new ShapeCell(0, 0, 3) },
-        new[] { new ShapeCell(0, 0, 15), new ShapeCell(1, 0, 15) },
-        new[] { new ShapeCell(0, 0, 1) },
-        new[] { new ShapeCell(0, 0, 2), new ShapeCell(1, 0, 8) },
-        new[] { new ShapeCell(0, 0, 6), new ShapeCell(1, 0, 9) },
-        new[] { new ShapeCell(0, 0, 6), new ShapeCell(1, 0, 12) },
-        new[] { new ShapeCell(0, 0, 4), new ShapeCell(0, 1, 15) },
-        new[] { new ShapeCell(0, 0, 15), new ShapeCell(1, 0, 9), new ShapeCell(0, 1, 9) },
-        new[] { new ShapeCell(0, 0, 15), new ShapeCell(0, 1, 15), new ShapeCell(1, 1, 15) },
-        new[] { new ShapeCell(0, 0, 15) } };
     private static readonly int SHAPE_KIND_COUNT = Enum.GetValues(typeof(Shape)).Length;
     private static readonly int SEAL_KIND_COUNT = Enum.GetValues(typeof(Seal)).Length - 1;
     private static readonly int COATING_KIND_COUNT = Enum.GetValues(typeof(Coating)).Length - 1;
     private static readonly Card[] DEBUG_PIECES = CreateDebugPieces();
-    private static readonly ShapeCell[][][] SHAPE_ORIENTATIONS = CreateOrientations();
+    // 아래 데이터 필드는 JSON을 읽는 static 생성자에서 순서대로 채운다.
+    private static readonly SpellPatternData[] PATTERNS;
+    private static readonly int[][] SPELL_MASKS;
+    private static readonly ShapeCell[][] BASE_SHAPES;
+    private static readonly string[] SHAPE_NAMES;
+    private static readonly bool[] SHAPE_MIRRORED;
+    private static readonly Shape[] REWARD_SHAPES;
+    private static readonly ShapeCell[][][] SHAPE_ORIENTATIONS;
 
     private readonly Random _random = new Random();
     private readonly List<Card> _owned = new List<Card>();
@@ -295,6 +276,36 @@ public sealed class SpellGame
     public int DrawCount { get { return _draw.Count; } }
     public int DiscardCount { get { return _discard.Count; } }
     public int CraftCount { get { int count = 0; foreach (Board board in Boards) count += board.Pieces.Count; return count; } }
+    public static int PatternCount { get { return PATTERNS.Length; } }
+
+    /// <summary>Resources의 도안·조각 JSON을 읽어 도안 정보, 도안 칸, 도형 칸·이름·회전 방식, 보상 도형과 네 방향 칸을 채운다. 데이터 오류는 예외로 전달한다.</summary>
+    static SpellGame()
+    {
+        PATTERNS = SpellDataStore.LoadPatterns().Patterns.ToArray();
+        SPELL_MASKS = new int[PATTERNS.Length][];
+        for (int i = 0; i < PATTERNS.Length; i++)
+        {
+            SPELL_MASKS[i] = new int[CELL_COUNT];
+            foreach (SpellCellData cell in PATTERNS[i].Cells) SPELL_MASKS[i][cell.Y * LOCAL_SIZE + cell.X] = cell.Mask;
+        }
+        BASE_SHAPES = new ShapeCell[SHAPE_KIND_COUNT][];
+        SHAPE_NAMES = new string[SHAPE_KIND_COUNT];
+        SHAPE_MIRRORED = new bool[SHAPE_KIND_COUNT];
+        bool[] isReward = new bool[SHAPE_KIND_COUNT];
+        foreach (SpellPieceData piece in SpellDataStore.LoadPieces().Pieces)
+        {
+            int shape = (int)piece.Shape;
+            BASE_SHAPES[shape] = new ShapeCell[piece.Cells.Count];
+            for (int i = 0; i < piece.Cells.Count; i++) BASE_SHAPES[shape][i] = new ShapeCell(piece.Cells[i].X, piece.Cells[i].Y, piece.Cells[i].Mask);
+            SHAPE_NAMES[shape] = piece.Name;
+            SHAPE_MIRRORED[shape] = piece.Rotation == SpellPieceData.RotationMode.MirrorAlternate;
+            isReward[shape] = piece.IsInRewardPool;
+        }
+        List<Shape> rewards = new List<Shape>();
+        for (int shape = 0; shape < SHAPE_KIND_COUNT; shape++) if (isReward[shape]) rewards.Add((Shape)shape);
+        REWARD_SHAPES = rewards.ToArray();
+        SHAPE_ORIENTATIONS = CreateOrientations();
+    }
 
     /// <summary>카드, 적, 도안과 제작판의 읽기 전용 목록을 연결한다.</summary>
     public SpellGame()
@@ -306,7 +317,7 @@ public sealed class SpellGame
     /// <summary>도안 수만큼 빈 제작판을 만든다.</summary>
     private static Board[] CreateBoards()
     {
-        Board[] boards = new Board[PATTERN_COUNT];
+        Board[] boards = new Board[PatternCount];
         for (int i = 0; i < boards.Length; i++) boards[i] = new Board(i);
         return boards;
     }
@@ -326,22 +337,26 @@ public sealed class SpellGame
         return pieces.ToArray();
     }
 
-    /// <summary>모든 도형의 네 방향 칸 목록을 미리 계산한다. 평행사변형은 뒤집힌 두 방향을 회전 순서에 포함한다.</summary>
+    /// <summary>모든 도형의 네 방향 칸 목록을 미리 계산한다. 뒤집기 회전 도형은 뒤집힌 두 방향을 회전 순서에 포함한다.</summary>
     private static ShapeCell[][][] CreateOrientations()
     {
         ShapeCell[][][] result = new ShapeCell[BASE_SHAPES.Length][][];
         for (int shape = 0; shape < BASE_SHAPES.Length; shape++)
         {
             result[shape] = new ShapeCell[4][];
-            ShapeCell[] baseCells = BASE_SHAPES[shape];
-            ShapeCell[] mirrored = Mirror(baseCells);
-            for (int rotation = 0; rotation < 4; rotation++)
-            {
-                if ((Shape)shape == Shape.Parallelogram) result[shape][rotation] = Rotate(rotation < 2 ? baseCells : mirrored, rotation % 2);
-                else result[shape][rotation] = Rotate(baseCells, rotation);
-            }
+            for (int rotation = 0; rotation < 4; rotation++) result[shape][rotation] = OrientCells(BASE_SHAPES[shape], SHAPE_MIRRORED[shape], rotation);
         }
         return result;
+    }
+
+    /// <summary>기본 방향 칸 목록을 지정 방향으로 바꾼 새 목록을 반환한다. isMirrored면 2·3 방향에 좌우를 뒤집은 모양을 쓴다. 왼쪽 위가 (0, 0)이다.</summary>
+    public static ShapeCell[] OrientCells(IReadOnlyList<ShapeCell> baseCells, bool isMirrored, int rotation)
+    {
+        rotation = (rotation % 4 + 4) % 4;
+        ShapeCell[] cells = new ShapeCell[baseCells.Count];
+        for (int i = 0; i < cells.Length; i++) cells[i] = baseCells[i];
+        if (!isMirrored) return Rotate(cells, rotation);
+        return Rotate(rotation < 2 ? cells : Mirror(cells), rotation % 2);
     }
 
     /// <summary>칸 목록을 좌우로 뒤집는다. 오른쪽과 왼쪽 구역 비트도 맞바꾼다.</summary>
@@ -383,11 +398,11 @@ public sealed class SpellGame
         return SHAPE_ORIENTATIONS[(int)shape][(rotation % 4 + 4) % 4];
     }
 
-    /// <summary>기본 방향의 구역 번호를 도형의 지정 방향 구역 번호로 바꾼다. 평행사변형의 2·3 방향은 좌우를 뒤집은 뒤 돌린다.</summary>
+    /// <summary>기본 방향의 구역 번호를 도형의 지정 방향 구역 번호로 바꾼다. 뒤집기 회전 도형의 2·3 방향은 좌우를 뒤집은 뒤 돌린다.</summary>
     private static int RotateSector(Shape shape, int rotation, int sector)
     {
         rotation = (rotation % 4 + 4) % 4;
-        if (shape == Shape.Parallelogram && rotation >= 2) { sector = sector == 1 ? 3 : sector == 3 ? 1 : sector; rotation -= 2; }
+        if (SHAPE_MIRRORED[(int)shape] && rotation >= 2) { sector = sector == 1 ? 3 : sector == 3 ? 1 : sector; rotation -= 2; }
         return (sector + rotation) % 4;
     }
 
@@ -454,26 +469,45 @@ public sealed class SpellGame
     }
 
     /// <summary>도안 이름을 반환한다.</summary>
-    public static string PatternName(int spell) { return PATTERN_NAMES[spell]; }
+    public static string PatternName(int spell) { return PATTERNS[spell].Name; }
+
+    /// <summary>도안 JSON의 식별자를 반환한다.</summary>
+    public static string PatternId(int spell) { return PATTERNS[spell].Id; }
 
     /// <summary>도안의 기본 효과 종류를 반환한다.</summary>
-    public static SpellKind PatternKind(int spell) { return PATTERN_KINDS[spell]; }
+    public static SpellKind PatternKind(int spell) { return PATTERNS[spell].Kind; }
 
     /// <summary>도안의 특수 키워드를 반환한다.</summary>
-    public static Keyword PatternKeyword(int spell) { return PATTERN_KEYWORDS[spell]; }
+    public static Keyword PatternKeyword(int spell) { return PATTERNS[spell].Keyword; }
 
     /// <summary>도안의 기본 수치를 반환한다. 다타 도안은 타격 하나의 피해다.</summary>
-    public static int PatternBase(int spell) { return PATTERN_BASE[spell]; }
+    public static int PatternBase(int spell) { return PATTERNS[spell].BaseValue; }
+
+    /// <summary>장착 화면 공유 판에서 도안의 기본 좌상단 격자 좌표와 회전(0~3)을 반환한다.</summary>
+    public static void PatternLayout(int spell, out int x, out int y, out int rotation)
+    {
+        x = PATTERNS[spell].LayoutX; y = PATTERNS[spell].LayoutY; rotation = PATTERNS[spell].LayoutRotation;
+    }
+
+    /// <summary>도안 표시 색을 "#RRGGBB" 형식 문자열로 반환한다.</summary>
+    public static string PatternColorCode(int spell) { return PATTERNS[spell].Color; }
+
+    /// <summary>새 게임 시작 시 기본으로 보유·장착하는 도안인지 반환한다.</summary>
+    public static bool IsStarterPattern(int spell) { return PATTERNS[spell].IsStarter; }
+
+    /// <summary>도형의 표시 이름을 반환한다.</summary>
+    public static string ShapeName(Shape shape) { return SHAPE_NAMES[(int)shape]; }
 
     /// <summary>단일 대상을 골라야 하는 도안인지 반환한다.</summary>
-    public static bool NeedsTarget(int spell) { return spell >= 0 && spell < PATTERN_COUNT && PATTERN_KINDS[spell] == SpellKind.Single; }
+    public static bool NeedsTarget(int spell) { return spell >= 0 && spell < PatternCount && PATTERNS[spell].Kind == SpellKind.Single; }
 
     /// <summary>도안의 기본 효과와 키워드를 한 줄 설명으로 반환한다.</summary>
     public static string PatternDescription(int spell)
     {
-        int value = PATTERN_BASE[spell];
-        string text = PATTERN_KINDS[spell] == SpellKind.Single ? $"단일 피해 {value}" : PATTERN_KINDS[spell] == SpellKind.Block ? $"방어 {value}" : PATTERN_KINDS[spell] == SpellKind.All ? $"전체 피해 {value}" : $"조각 1장마다 무작위 피해 {value} (최대 {MAX_HITS}타)";
-        switch (PATTERN_KEYWORDS[spell])
+        int value = PATTERNS[spell].BaseValue;
+        SpellKind kind = PATTERNS[spell].Kind;
+        string text = kind == SpellKind.Single ? $"단일 피해 {value}" : kind == SpellKind.Block ? $"방어 {value}" : kind == SpellKind.All ? $"전체 피해 {value}" : $"조각 1장마다 무작위 피해 {value} (최대 {MAX_HITS}타)";
+        switch (PATTERNS[spell].Keyword)
         {
             case Keyword.OneStroke: return text + $" · 한 방: 조각 1장으로 완성하면 +{ONE_STROKE_BONUS}";
             case Keyword.Mosaic: return "모자이크 · " + text;
@@ -516,7 +550,7 @@ public sealed class SpellGame
     /// <summary>지정한 도안을 지금 시전했을 때의 공격 피해 합을 반환한다. 방어 도안은 0이다.</summary>
     public int GetSpellDamage(int boardIndex)
     {
-        if (boardIndex < 0 || boardIndex >= Boards.Count || PATTERN_KINDS[boardIndex] == SpellKind.Block) return 0;
+        if (boardIndex < 0 || boardIndex >= Boards.Count || PATTERNS[boardIndex].Kind == SpellKind.Block) return 0;
         return Evaluate(boardIndex).Total;
     }
 
@@ -528,8 +562,11 @@ public sealed class SpellGame
         _hasCurserEncounter = withCurser;
         IsDeveloperMode = isDeveloperMode; MaxHealth = isDeveloperMode ? DEVELOPER_HEALTH : START_HEALTH;
         _owned.Clear(); _spells.Clear(); _ownedSpells.Clear(); _nextId = 0; Health = MaxHealth; Battle = 0; LastAcquiredPattern = -1;
-        if (isDeveloperMode) for (int i = 0; i < PATTERN_COUNT; i++) { _ownedSpells.Add(i); _spells.Add(i); }
-        else { _ownedSpells.Add(0); _ownedSpells.Add(1); _ownedSpells.Add(7); _spells.Add(0); _spells.Add(1); _spells.Add(7); }
+        for (int i = 0; i < PatternCount; i++)
+        {
+            if (!isDeveloperMode && !PATTERNS[i].IsStarter) continue;
+            _ownedSpells.Add(i); _spells.Add(i);
+        }
         for (int i = 0; i < 4; i++) AddCard(Shape.QuarterTriangle, Effect.None);
         for (int i = 0; i < 3; i++) AddCard(Shape.Triangle, Effect.None);
         for (int i = 0; i < 4; i++) AddCard(Shape.Diamond, Effect.None);
@@ -585,7 +622,7 @@ public sealed class SpellGame
     /// <summary>도안을 보유 목록과 전투 장착 목록에 추가한다.</summary>
     public bool AddDebugPattern(int spell)
     {
-        if (CurrentPhase != Phase.Combat || spell < 0 || spell >= PATTERN_COUNT || _spells.Contains(spell)) return false;
+        if (CurrentPhase != Phase.Combat || spell < 0 || spell >= PatternCount || _spells.Contains(spell)) return false;
         if (!_ownedSpells.Contains(spell)) _ownedSpells.Add(spell);
         _spells.Add(spell);
         return true;
@@ -1242,7 +1279,7 @@ public sealed class SpellGame
     public SpellEvaluation Evaluate(int boardIndex)
     {
         Board board = Boards[boardIndex]; int spell = board.Spell;
-        SpellEvaluation e = new SpellEvaluation { Kind = PATTERN_KINDS[spell], Base = PATTERN_BASE[spell] };
+        SpellEvaluation e = new SpellEvaluation { Kind = PATTERNS[spell].Kind, Base = PATTERNS[spell].BaseValue };
         int counted = board.Pieces.Count, amplify = 0, guard = 0, resonance = 0, overpaint = 0, cog = 0;
         bool pure = board.Pieces.Count > 0; Shape first = board.Pieces.Count > 0 ? board.Pieces[0].Card.Shape : Shape.Square;
         foreach (Placement p in board.Pieces)
@@ -1269,8 +1306,8 @@ public sealed class SpellGame
         if (board.Completer != null && EffectCount(board.Completer.Card, Effect.Period) > 0) { int bonus = PERIOD_BONUS * EffectCount(board.Completer.Card, Effect.Period); value += bonus; e.Terms.Add($"마침표 +{bonus}"); }
         if (resonance > 0 && counted >= RESONANCE_COUNT) { value += resonance * RESONANCE_BONUS; e.Terms.Add($"공명 +{resonance * RESONANCE_BONUS}"); }
         if (overpaint > 0) { value += overpaint * OVERPAINT_BONUS; e.Terms.Add($"덧칠 +{overpaint * OVERPAINT_BONUS}"); }
-        if (PATTERN_KEYWORDS[spell] == Keyword.OneStroke && counted == 1) { value += ONE_STROKE_BONUS; e.Terms.Add($"한 방 +{ONE_STROKE_BONUS}"); }
-        if (PATTERN_KEYWORDS[spell] == Keyword.Purity && pure) { value += PURITY_BONUS; e.Terms.Add($"순수 +{PURITY_BONUS}"); }
+        if (PATTERNS[spell].Keyword == Keyword.OneStroke && counted == 1) { value += ONE_STROKE_BONUS; e.Terms.Add($"한 방 +{ONE_STROKE_BONUS}"); }
+        if (PATTERNS[spell].Keyword == Keyword.Purity && pure) { value += PURITY_BONUS; e.Terms.Add($"순수 +{PURITY_BONUS}"); }
         if (e.Kind == SpellKind.Scatter) e.Hits = Math.Max(1, Math.Min(MAX_HITS, counted));
         e.Value = value;
         e.Block = (e.Kind == SpellKind.Block ? value : 0) + guard * GUARD_BONUS;
@@ -1333,15 +1370,18 @@ public sealed class SpellGame
             hasClay |= piece.IsUnique;
             _rewards.Add(new Reward { Pattern = -1, Piece = piece });
         }
-        for (int spell = 0; spell < PATTERN_COUNT; spell++) if (!_ownedSpells.Contains(spell)) _rewards.Add(new Reward { Pattern = spell });
+        for (int spell = 0; spell < PatternCount; spell++) if (!_ownedSpells.Contains(spell)) _rewards.Add(new Reward { Pattern = spell });
         CurrentPhase = Phase.Reward;
     }
 
     /// <summary>보상용 랜덤 조각을 만든다. 도형을 고른 뒤 반반 확률로 무작위 1/4 구역에 씰링 1개 또는 코팅 1개를 붙인다. 고유 조각 점토는 아무것도 붙이지 않는다.</summary>
     private Card RandomRewardPiece(bool canBeClay)
     {
-        // Clay가 Shape의 마지막 값이므로 점토를 빼려면 마지막 하나를 제외하고 뽑는다.
-        Shape shape = (Shape)_random.Next(canBeClay ? SHAPE_KIND_COUNT : SHAPE_KIND_COUNT - 1);
+        // 점토를 뺄 때는 보상 도형 목록에서 점토를 제외한 칸 중에서 뽑는다.
+        int clayIndex = canBeClay ? -1 : Array.IndexOf(REWARD_SHAPES, Shape.Clay);
+        int pick = _random.Next(REWARD_SHAPES.Length - (clayIndex >= 0 ? 1 : 0));
+        if (clayIndex >= 0 && pick >= clayIndex) pick++;
+        Shape shape = REWARD_SHAPES[pick];
         Card card = new Card { Shape = shape };
         if (card.IsUnique) return card;
         if (_random.NextDouble() < REWARD_SEAL_CHANCE)

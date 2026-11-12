@@ -10,7 +10,6 @@ public sealed class SpellPatternLayout
     public const int ROWS = 4;
     // 화면 기준 판 한 변의 길이를 격자 칸 한 변 단위로 나타낸 값이다.
     public const float BOARD_SIZE = 2 * SQRT2;
-    private const int PATTERN_COUNT = SpellGame.PATTERN_COUNT;
     private const int LOCAL_SIZE = 3;
     private const int FULL_MASK = 15;
     private const float SQRT2 = 1.41421356f;
@@ -22,24 +21,29 @@ public sealed class SpellPatternLayout
         6, 15, 15, 12,
         3, 15, 15, 9,
         0, 3, 9, 0 };
-    private static readonly Vector2Int[] DEFAULT_ORIGINS = { new Vector2Int(1, 1), new Vector2Int(2, 2), new Vector2Int(1, 1), new Vector2Int(1, 1), new Vector2Int(1, 1), new Vector2Int(0, 1), new Vector2Int(1, 1), new Vector2Int(1, 2) };
-    private static readonly int[] DEFAULT_ROTATIONS = { 0, 0, 0, 0, 0, 0, 0, 0 };
     private static readonly Vector2Int[] SIDE_OFFSETS = { new Vector2Int(0, -1), new Vector2Int(1, 0), new Vector2Int(0, 1), new Vector2Int(-1, 0) };
 
-    private readonly Vector2Int[] _origins = new Vector2Int[PATTERN_COUNT];
-    private readonly int[] _rotations = new int[PATTERN_COUNT];
-    private readonly bool[] _placed = new bool[PATTERN_COUNT];
+    private readonly Vector2Int[] _origins;
+    private readonly int[] _rotations;
+    private readonly bool[] _placed;
 
-    /// <summary>모든 도안을 기본 위치·회전의 미배치 상태로 만든다.</summary>
+    /// <summary>도안 수만큼 배치 상태를 만들고 모든 도안을 기본 위치·회전의 미배치 상태로 만든다.</summary>
     public SpellPatternLayout()
     {
+        _origins = new Vector2Int[SpellGame.PatternCount];
+        _rotations = new int[SpellGame.PatternCount];
+        _placed = new bool[SpellGame.PatternCount];
         Reset();
     }
 
-    /// <summary>모든 도안을 기본 위치, 회전 0, 미배치 상태로 되돌린다.</summary>
+    /// <summary>모든 도안을 도안 데이터의 기본 위치·회전, 미배치 상태로 되돌린다.</summary>
     public void Reset()
     {
-        for (int i = 0; i < PATTERN_COUNT; i++) { _origins[i] = DEFAULT_ORIGINS[i]; _rotations[i] = DEFAULT_ROTATIONS[i]; _placed[i] = false; }
+        for (int i = 0; i < _origins.Length; i++)
+        {
+            SpellGame.PatternLayout(i, out int x, out int y, out int rotation);
+            _origins[i] = new Vector2Int(x, y); _rotations[i] = rotation; _placed[i] = false;
+        }
     }
 
     /// <summary>격자 칸 (x, y)에서 판에 속한 구역 마스크를 반환한다. 판 범위 밖이면 0이다.</summary>

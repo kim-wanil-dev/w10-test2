@@ -1,0 +1,227 @@
+{
+  "version": 1,
+  "patterns": [
+    {
+      "id": "ember",
+      "name": "불씨",
+      "kind": "Single",
+      "baseValue": 6,
+      "keyword": "None",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 8
+        }
+      ],
+      "layoutX": 1,
+      "layoutY": 1,
+      "layoutRotation": 0,
+      "color": "#F4C95D",
+      "isStarter": true
+    },
+    {
+      "id": "barrier",
+      "name": "방벽",
+      "kind": "Block",
+      "baseValue": 7,
+      "keyword": "None",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 2
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 8
+        }
+      ],
+      "layoutX": 2,
+      "layoutY": 2,
+      "layoutRotation": 0,
+      "color": "#E6EBF0",
+      "isStarter": true
+    },
+    {
+      "id": "lightning",
+      "name": "번개",
+      "kind": "Single",
+      "baseValue": 12,
+      "keyword": "OneStroke",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 6
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 9
+        }
+      ],
+      "layoutX": 1,
+      "layoutY": 1,
+      "layoutRotation": 0,
+      "color": "#B9E36B",
+      "isStarter": false
+    },
+    {
+      "id": "meteor",
+      "name": "유성",
+      "kind": "All",
+      "baseValue": 10,
+      "keyword": "None",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 15
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 15
+        }
+      ],
+      "layoutX": 1,
+      "layoutY": 1,
+      "layoutRotation": 0,
+      "color": "#F28DB2",
+      "isStarter": false
+    },
+    {
+      "id": "flash",
+      "name": "섬광",
+      "kind": "Single",
+      "baseValue": 8,
+      "keyword": "OneStroke",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 15
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 9
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 9
+        }
+      ],
+      "layoutX": 1,
+      "layoutY": 1,
+      "layoutRotation": 0,
+      "color": "#8CD9F2",
+      "isStarter": false
+    },
+    {
+      "id": "buckshot",
+      "name": "산탄",
+      "kind": "Scatter",
+      "baseValue": 2,
+      "keyword": "Mosaic",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 6
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "mask": 12
+        }
+      ],
+      "layoutX": 0,
+      "layoutY": 1,
+      "layoutRotation": 0,
+      "color": "#F59959",
+      "isStarter": false
+    },
+    {
+      "id": "kaleidoscope",
+      "name": "만화경",
+      "kind": "All",
+      "baseValue": 6,
+      "keyword": "Purity",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 6
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 9
+        }
+      ],
+      "layoutX": 1,
+      "layoutY": 1,
+      "layoutRotation": 0,
+      "color": "#B89EFA",
+      "isStarter": false
+    },
+    {
+      "id": "smash",
+      "name": "강타",
+      "kind": "Single",
+      "baseValue": 9,
+      "keyword": "None",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 15
+        }
+      ],
+      "layoutX": 1,
+      "layoutY": 2,
+      "layoutRotation": 0,
+      "color": "#E65959",
+      "isStarter": true
+    }
+  ]
+}

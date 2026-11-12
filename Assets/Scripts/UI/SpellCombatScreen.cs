@@ -1,3 +1,5 @@
+using System;
+
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -66,4 +68,26 @@ public sealed class SpellCombatScreen : MonoBehaviour
     public RectTransform AimLine { get { return _aimLine; } }
     public RectTransform CursorHint { get { return _cursorHint; } }
     public Text CursorHintText { get { return _cursorHintText; } }
+
+    /// <summary>도안 탭과 시전 버튼이 도안 수보다 적으면 마지막 요소를 같은 부모에 복제해 count개로 늘린다. Prefab 자산은 바꾸지 않는다.</summary>
+    public void EnsurePatternCount(int count)
+    {
+        _tabs = Grow(_tabs, count);
+        _castButtons = Grow(_castButtons, count);
+    }
+
+    /// <summary>뷰 배열이 count보다 짧으면 마지막 뷰를 복제해 덧붙인 새 배열을 반환한다. 충분하면 원래 배열을 반환한다.</summary>
+    private static T[] Grow<T>(T[] views, int count) where T : Component
+    {
+        if (views.Length >= count) return views;
+        T[] result = new T[count];
+        Array.Copy(views, result, views.Length);
+        T template = views[views.Length - 1];
+        for (int i = views.Length; i < count; i++)
+        {
+            result[i] = Instantiate(template, template.transform.parent);
+            result[i].name = $"{template.name} ({i})";
+        }
+        return result;
+    }
 }
