@@ -10,8 +10,8 @@ public sealed class SpellTable3D : MonoBehaviour
 {
     private const int TABLE_LAYER = 30;
     private const float BOARD_MARGIN = 0.22f;
-    // 마름모 칸 격자의 +x 축이 화면 오른쪽 아래를 향하도록 판 위 조각을 돌리는 각도다.
-    private const float BOARD_YAW = 45f;
+    // 도안 이름표 너비를 칸 한 변 단위로 나타낸 값이다. 두 글자 이름과 핸들이 한 줄에 들어가는 폭이다.
+    private const float TAB_WIDTH_CELLS = 1.5f;
     private static readonly Vector3 WORLD_ORIGIN = new Vector3(1000, 0, 0);
     private static readonly Color NORMAL_COLOR = new Color(0.77f, 0.82f, 0.84f);
     private static readonly Color CLAY_COLOR = new Color(0.72f, 0.56f, 0.44f);
@@ -182,7 +182,7 @@ public sealed class SpellTable3D : MonoBehaviour
         line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; line.receiveShadows = false;
     }
 
-    /// <summary>격자 좌표를 45도 돌린 마름모 배치로 판 중심 기준 로컬 좌표에 바꾼다.</summary>
+    /// <summary>격자 좌표를 판 중심 기준 로컬 좌표로 바꾼다. 격자 +y는 화면 아래(-z)다.</summary>
     private Vector3 GridLocal(Vector2 point, float height = 0.025f)
     {
         Vector2 board = SpellPatternLayout.GridToBoard(point) * _cellSize;
@@ -289,7 +289,7 @@ public sealed class SpellTable3D : MonoBehaviour
         for (int i = 0; i < cells.Count; i++) cells[i] = new SpellGame.ShapeCell(cells[i].X - anchor.x, cells[i].Y - anchor.y, cells[i].Mask);
         for (int i = 0; i < seals.Count; i++) seals[i] = new SpellGame.SealSpot(seals[i].X - anchor.x, seals[i].Y - anchor.y, seals[i].Sector, seals[i].Seal);
         float layer = IsLayered(spell, placement) ? SpellPiece3D.Thickness * _cellSize : 0;
-        piece.PlaceOnBoard(spell, placement, cells, seals, PiecePosition(anchor, cells, 0.045f + layer), Quaternion.Euler(0, BOARD_YAW, 0), _cellSize);
+        piece.PlaceOnBoard(spell, placement, cells, seals, PiecePosition(anchor, cells, 0.045f + layer), Quaternion.identity, _cellSize);
     }
 
     /// <summary>덧칠 씰링이 있는 조각이 같은 판의 다른 조각과 구역을 공유하는지 반환한다.</summary>
@@ -299,7 +299,7 @@ public sealed class SpellTable3D : MonoBehaviour
         foreach (SpellGame.Placement other in _game.Boards[spell].Pieces)
         {
             if (other == placement) continue;
-            for (int y = 0; y < 3; y++) for (int x = 0; x < 3; x++) if ((other.CellMask(x, y) & placement.CellMask(x, y)) != 0) return true;
+            for (int y = 0; y < SpellGame.LOCAL_SIZE; y++) for (int x = 0; x < SpellGame.LOCAL_SIZE; x++) if ((other.CellMask(x, y) & placement.CellMask(x, y)) != 0) return true;
         }
         return false;
     }
@@ -450,7 +450,7 @@ public sealed class SpellTable3D : MonoBehaviour
                 for (int sector = 0; sector < 4; sector++)
                 {
                     if ((mask & (1 << sector)) == 0) continue;
-                    // 마름모 배치에서는 격자 축 경계가 화면 경계와 다르므로 삼각형 꼭짓점을 투영해 범위를 구한다.
+                    // 카메라 각도에 따른 원근을 반영하도록 삼각형 꼭짓점을 투영해 범위를 구한다.
                     foreach (Vector2 point in new[] { corners[sector], corners[(sector + 1) % 4], center })
                     {
                         Vector2 overlay = OverlayPoint(parent, point);
@@ -460,7 +460,7 @@ public sealed class SpellTable3D : MonoBehaviour
                 }
             }
             Vector2 leftTop = new Vector2(min.x, max.y), rightBottom = new Vector2(max.x, min.y);
-            float width = Vector2.Distance(OverlayPoint(parent, Vector2.right), OverlayPoint(parent, Vector2.zero));
+            float width = Vector2.Distance(OverlayPoint(parent, Vector2.right * TAB_WIDTH_CELLS), OverlayPoint(parent, Vector2.zero));
             Vector2[] candidates = { leftTop + Vector2.up * 36, new Vector2(leftTop.x, rightBottom.y), leftTop + Vector2.left * width, new Vector2(rightBottom.x, leftTop.y) };
             Vector2 selected = candidates[0];
             foreach (Vector2 candidate in candidates)
@@ -668,7 +668,7 @@ public sealed class SpellTable3D : MonoBehaviour
     {
         _picked = piece; _pressPosition = pointer; _isHolding = true; _isClickSelected = false;
         float yaw = piece.transform.eulerAngles.y, nearest = float.PositiveInfinity;
-        _rotation = (Mathf.RoundToInt((yaw - BOARD_YAW) / 90f) % 4 + 4) % 4;
+        _rotation = (Mathf.RoundToInt(yaw / 90f) % 4 + 4) % 4;
         // 판에 놓인 조각은 메시가 방향을 담고 있으므로 놓인 방향 그대로 집는다.
         if (!piece.IsHand) { _layout.PieceToGrid(piece.Board, piece.Placement, out Vector2Int _, out _rotation); nearest = 0; }
         for (int r = 0; r < 4 && piece.IsHand; r++)
@@ -679,11 +679,11 @@ public sealed class SpellTable3D : MonoBehaviour
                 _layout.GridToLocalPlacement(spell, piece.Card, new Vector2Int(x, y), r, out Vector2Int local, out int localRotation);
                 if (_layout.IsPlaced(spell) && _game.CanPlace(spell, piece.Card, local.x, local.y, localRotation, piece.Board == spell ? piece.Placement : null)) valid = true;
             }
-            float delta = Mathf.Abs(Mathf.DeltaAngle(yaw, BOARD_YAW + r * 90f));
+            float delta = Mathf.Abs(Mathf.DeltaAngle(yaw, r * 90f));
             if (valid && delta < nearest) { _rotation = r; nearest = delta; }
         }
         BeginPivot(piece, pointer);
-        _picked.Pick(_cellSize, HeldCells(), HeldSeals(), Quaternion.Euler(0, BOARD_YAW, 0)); HideHover(pointer);
+        _picked.Pick(_cellSize, HeldCells(), HeldSeals(), Quaternion.identity); HideHover(pointer);
         _hasAutoCell = false; _isAutoRotateLocked = false;
         UpdateAutoRotation(pointer);
         PreviewPick(pointer);
@@ -714,7 +714,7 @@ public sealed class SpellTable3D : MonoBehaviour
             Vector2 center = grid + _pivotOffset - _pivot + SpellPiece3D.CellBounds(cells) / 2;
             _picked.transform.position = _boardRoot.TransformPoint(GridLocal(center, 0.42f));
         }
-        _picked.transform.rotation = Quaternion.Euler(0, BOARD_YAW, 0);
+        _picked.transform.rotation = Quaternion.identity;
         _picked.SetTint(_destination >= 0 ? new Color(0.55f, 0.95f, 0.68f) : new Color(1f, 0.5f, 0.4f));
     }
 
@@ -747,13 +747,10 @@ public sealed class SpellTable3D : MonoBehaviour
         return SpellGame.CardCells(_picked.Card, _picked.Card.Glued == null && _picked.Card.Shape == SpellGame.Shape.Clay ? 0 : rotation);
     }
 
-    /// <summary>범위 중심에 가장 가까운 칸 중심 또는 꼭짓점을 피벗 점으로 정한다. 가로·세로 홀짝이 다르면 칸 중심 쪽으로 반 칸 옮긴다.</summary>
+    /// <summary>조각 범위의 중심을 피벗 점으로 정한다. 커서가 가리키는 위치에 조각 중심이 가장 가까운 칸 경계로 맞춰진다.</summary>
     private static Vector2 PivotPoint(IReadOnlyList<SpellGame.ShapeCell> cells)
     {
-        Vector2 center = SpellPiece3D.CellBounds(cells) / 2;
-        bool isHalfX = !Mathf.Approximately(center.x, Mathf.Round(center.x)), isHalfY = !Mathf.Approximately(center.y, Mathf.Round(center.y));
-        if (isHalfX == isHalfY) return center;
-        return isHalfX ? new Vector2(center.x, center.y - 0.5f) : new Vector2(center.x - 0.5f, center.y);
+        return SpellPiece3D.CellBounds(cells) / 2;
     }
 
     /// <summary>피벗 점이 커서 위치와 고정 차이만큼 떨어진 격자 지점에 오도록 지정 피벗의 정수 앵커를 반환한다.</summary>

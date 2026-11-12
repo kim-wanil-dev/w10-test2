@@ -24,11 +24,11 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
         set { _shape = value; _cells.Clear(); _cells.AddRange(SpellGame.ShapeCells(value, 0)); _seals.Clear(); _sealColors.Clear(); SetVerticesDirty(); }
     }
 
-    /// <summary>도안의 3×3 구역 마스크를 그릴 모양으로 설정한다.</summary>
+    /// <summary>도안 기준 범위의 구역 마스크를 그릴 모양으로 설정한다.</summary>
     public void SetPattern(int spell)
     {
         _cells.Clear(); _seals.Clear(); _sealColors.Clear();
-        for (int y = 0; y < 3; y++) for (int x = 0; x < 3; x++)
+        for (int y = 0; y < SpellGame.LOCAL_SIZE; y++) for (int x = 0; x < SpellGame.LOCAL_SIZE; x++)
         {
             int mask = SpellGame.PatternMask(spell, x, y);
             if (mask != 0) _cells.Add(new SpellGame.ShapeCell(x, y, mask));
@@ -36,7 +36,7 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
         SetVerticesDirty();
     }
 
-    /// <summary>판과 같은 45도 마름모 방향으로 켜진 구역 삼각형의 범위를 구해 영역 가운데에 맞춰 채운다.</summary>
+    /// <summary>판과 같은 정사각형 칸 방향으로 켜진 구역 삼각형의 범위를 구해 영역 가운데에 맞춰 채운다.</summary>
     protected override void OnPopulateMesh(UnityEngine.UI.VertexHelper vh)
     {
         vh.Clear();
@@ -109,7 +109,7 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
     }
 
 
-    /// <summary>칸의 구역 삼각형 꼭짓점(바깥 두 모서리와 칸 중심)을 마름모 방향 좌표(x 오른쪽, y 아래)로 반환한다.</summary>
+    /// <summary>칸의 구역 삼각형 꼭짓점(바깥 두 모서리와 칸 중심)을 판 방향 좌표(x 오른쪽, y 아래)로 반환한다.</summary>
     private static Vector2[] SectorPoints(SpellGame.ShapeCell cell, int sector)
     {
         Vector2[] corners = { new Vector2(cell.X, cell.Y), new Vector2(cell.X + 1, cell.Y), new Vector2(cell.X + 1, cell.Y + 1), new Vector2(cell.X, cell.Y + 1) };

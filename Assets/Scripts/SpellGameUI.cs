@@ -151,7 +151,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private CanvasGroup _hammerImpact;
 
     private readonly SpellGame.Card[] _glueCards = new SpellGame.Card[2];
-    private readonly Vector2Int[] _gluePositions = { new Vector2Int(3, 5), new Vector2Int(6, 4) };
+    private readonly Vector2Int[] _gluePositions = { new Vector2Int(2, 2), new Vector2Int(7, 2) };
     private readonly int[] _glueRotations = new int[2];
     private RectTransform _glueOverlay;
     private SpellGlueGraphic _glueGraphic;
@@ -930,7 +930,7 @@ public sealed class SpellGameUI : MonoBehaviour
                         foreach (int spell in _game.Spells)
                         {
                             if (!_layout.IsPlaced(spell)) continue;
-                            for (int y = 0; y < 3 && cardIndex < 0; y++) for (int x = 0; x < 3 && cardIndex < 0; x++) for (int r = 0; r < 4; r++)
+                            for (int y = 0; y < SpellGame.LOCAL_SIZE && cardIndex < 0; y++) for (int x = 0; x < SpellGame.LOCAL_SIZE && cardIndex < 0; x++) for (int r = 0; r < 4; r++)
                                 if (_game.CanPlace(spell, candidate, x, y, r)) { cardIndex = i; board = spell; cellX = x; cellY = y; rotation = r; break; }
                             if (cardIndex >= 0) break;
                         }
@@ -1393,11 +1393,11 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         switch (shape)
         {
-            case SpellGame.Shape.Square: return "정사각형";
+            case SpellGame.Shape.Square: return "마름모";
             case SpellGame.Shape.Triangle: return "반칸 삼각형";
             case SpellGame.Shape.Rectangle: return "직사각형";
             case SpellGame.Shape.QuarterTriangle: return "1/4 삼각형";
-            case SpellGame.Shape.Diamond: return "마름모";
+            case SpellGame.Shape.Diamond: return "정사각형";
             case SpellGame.Shape.Parallelogram: return "평행사변형";
             case SpellGame.Shape.MediumTriangle: return "중간 삼각형";
             case SpellGame.Shape.House: return "맞춤 조각";
@@ -2311,25 +2311,27 @@ public sealed class SpellGameUI : MonoBehaviour
         _glueMessage = ""; RefreshGlue();
     }
 
-    /// <summary>요청 좌표에서 가장 가까운, 조각 전체가 45도 작업 공간 안에 들어가는 좌표를 반환한다. 없으면 현재 좌표를 유지한다.</summary>
+    /// <summary>요청 좌표를 조각 전체가 작업 공간 안에 들어가는 가장 가까운 좌표로 제한해 반환한다.</summary>
     private Vector2Int NearestGluePosition(int index, Vector2Int position)
     {
         SpellGame.Card card = _glueCards[index];
         int rotation = _glueRotations[index];
-        Vector2Int best = _gluePositions[index];
-        int bestDistance = int.MaxValue;
-        for (int y = -SpellGame.ShapeHeight(card, rotation); y <= SpellGlueGraphic.GRID_SIZE; y++)
-            for (int x = -SpellGame.ShapeWidth(card, rotation); x <= SpellGlueGraphic.GRID_SIZE; x++)
-            {
-                Vector2Int candidate = new Vector2Int(x, y);
-                int distance = (candidate - position).sqrMagnitude;
-                if (distance < bestDistance && SpellGlueGraphic.Contains(card, rotation, candidate)) { best = candidate; bestDistance = distance; }
-            }
-        return best;
+        int maxX = Mathf.Max(0, SpellGlueGraphic.GRID_WIDTH - SpellGame.ShapeWidth(card, rotation));
+        int maxY = Mathf.Max(0, SpellGlueGraphic.GRID_HEIGHT - SpellGame.ShapeHeight(card, rotation));
+        return new Vector2Int(Mathf.Clamp(position.x, 0, maxX), Mathf.Clamp(position.y, 0, maxY));
     }
 
     /// <summary>원본 번호별 처음 놓는 작업 공간 좌표다. 화면에서 0번은 왼쪽, 1번은 오른쪽에 놓인다.</summary>
-    private static Vector2Int DefaultGluePosition(int index) { return index == 0 ? new Vector2Int(3, 5) : new Vector2Int(6, 4); }
+    private static Vector2Int DefaultGluePosition(int index) { return index == 0 ? new Vector2Int(2, 2) : new Vector2Int(7, 2); }
+
+    /// <summary>선택한 작업 조각의 범위 중심이 작업 공간 중심에 오도록 옮긴다.</summary>
+    private void CenterGluePart()
+    {
+        SpellGame.Card card = _glueCards[_glueSelected];
+        if (card == null) return;
+        int rotation = _glueRotations[_glueSelected];
+        MoveGluePart(_glueSelected, new Vector2Int((SpellGlueGraphic.GRID_WIDTH - SpellGame.ShapeWidth(card, rotation)) / 2, (SpellGlueGraphic.GRID_HEIGHT - SpellGame.ShapeHeight(card, rotation)) / 2));
+    }
 
     /// <summary>작업 공간 범위와 모델의 실제 겹침·변 접촉을 검사해 확인 불가 사유를 반환한다.</summary>
     public string GluePlacementIssue()
@@ -2428,7 +2430,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_glueDragCard != null)
         {
             _glueDragRotation = (_glueDragRotation + 1) % 4;
-            _dragGhost.sizeDelta = new Vector2(72 * SpellGame.ShapeWidth(_glueDragCard, _glueDragRotation), 72 * SpellGame.ShapeHeight(_glueDragCard, _glueDragRotation));
+            _dragGhost.sizeDelta = new Vector2(SpellGlueGraphic.CELL_SIZE * SpellGame.ShapeWidth(_glueDragCard, _glueDragRotation), SpellGlueGraphic.CELL_SIZE * SpellGame.ShapeHeight(_glueDragCard, _glueDragRotation));
             _dragGhost.GetComponent<SpellShapeGraphic>().SetCard(_glueDragCard, _glueDragRotation, _game.IsCursed(_glueDragCard), SealColor);
             return;
         }
@@ -2468,7 +2470,7 @@ public sealed class SpellGameUI : MonoBehaviour
         GlueButton(_glueOverlay, "회전 · R", 850, 295, 280, 45, RotateGluePart);
         _glueConfirm = GlueButton(_glueOverlay, "접착 확인", 850, 360, 280, 55, ConfirmGlue);
         GlueButton(_glueOverlay, "취소 · Esc", 850, 435, 280, 45, () => { CloseGlue(); Render(); });
-        GlueButton(_glueOverlay, "선택 조각 중앙으로", 850, 505, 280, 40, () => MoveGluePart(_glueSelected, new Vector2Int(4, 4)));
+        GlueButton(_glueOverlay, "선택 조각 중앙으로", 850, 505, 280, 40, CenterGluePart);
         Label(_glueOverlay, "카드 2장 → 1장 · 현재 전투만 유지\n드래그 또는 빈 칸 클릭으로 이동 · 손패 재클릭으로 선택 해제", 100, 490, 660, 65, 17);
         for (int i = 0; i < _game.Hand.Count; i++)
         {
@@ -2493,7 +2495,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private void CreateModalDragGhost(SpellGame.Card card, Vector2 position)
     {
         int rotation = CanDragGlueCard ? _glueDragRotation : CanDragHammerCard ? 0 : _rotation;
-        _dragGhost = Element("Drag Preview", _root, 0, 0, 72 * SpellGame.ShapeWidth(card, rotation), 72 * SpellGame.ShapeHeight(card, rotation));
+        _dragGhost = Element("Drag Preview", _root, 0, 0, SpellGlueGraphic.CELL_SIZE * SpellGame.ShapeWidth(card, rotation), SpellGlueGraphic.CELL_SIZE * SpellGame.ShapeHeight(card, rotation));
         _dragGhost.pivot = new Vector2(0.5f, 0.5f);
         _dragGhost.gameObject.AddComponent<CanvasRenderer>();
         SpellShapeGraphic icon = _dragGhost.gameObject.AddComponent<SpellShapeGraphic>();
