@@ -78,6 +78,9 @@ public sealed class SpellGameUI : MonoBehaviour
     private UnityEngine.UI.Button _workshopHammer;
     private UnityEngine.UI.Button _workshopGlue;
     private UnityEngine.UI.Button _restChoice;
+    private RectTransform _sealStaffRect;
+    private SpellSealStaffGraphic _sealStaff;
+    private int _sealStaffSpell = -1;
 
     // SpellGame은 처음 쓰일 때 Resources에서 JSON을 읽으므로 필드 초기화식이 아닌 Awake에서 만든다.
     private SpellGame _game;
@@ -256,6 +259,7 @@ public sealed class SpellGameUI : MonoBehaviour
             return;
         }
         UpdateTheft();
+        UpdateSealStaff();
         if (_glueOverlay != null) { UpdateGlue(); return; }
         if (_hammerPhase != HammerPhase.None) { UpdateHammer(); return; }
         UpdateFeedback();
@@ -2041,22 +2045,40 @@ public sealed class SpellGameUI : MonoBehaviour
         _message = "도둑손 저지!"; ShowFeedback(_message, new Color(0.4f, 0.9f, 0.8f)); Render();
     }
 
-    /// <summary>봉인된 도안의 현재 격자 위치에 수직 막대기와 잠금 표시를 그린다. 포인터 입력은 통과시킨다.</summary>
+    /// <summary>봉인 안내 레이어의 이전 자식을 정리한다. 막대기는 도안을 따라 매 프레임 갱신한다.</summary>
     private void RenderSeals(RectTransform panel)
     {
         foreach (Transform child in panel) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-        foreach (int spell in _game.Spells)
+    }
+
+    /// <summary>봉인된 도안의 점유 구역 중심에 막대기를 붙이고, 봉인 생성·해제에 맞춰 내려꽂기와 빼기를 시작한다.</summary>
+    private void UpdateSealStaff()
+    {
+        if (_sealStaff == null) return;
+        int sealedSpell = -1;
+        if (_game.CurrentPhase == SpellGame.Phase.Combat)
         {
-            if (!_game.IsSealed(spell) || !_layout.IsPlaced(spell)) continue;
-            Vector2 center = Vector2.zero; int count = 0;
-            for (int y = 0; y < SpellPatternLayout.ROWS; y++) for (int x = 0; x < SpellPatternLayout.COLUMNS; x++)
-                if (_layout.PlacedMask(spell, x, y) != 0) { center += new Vector2(x + 0.5f, y + 0.5f); count++; }
-            Vector2 point = ToLayer(_table.GridToScreen(center / count));
-            float px = point.x - _root.rect.xMin, py = _root.rect.yMax - point.y;
-            RectTransform rod = Panel(panel, px - 3, py - 70, 6, 140, _dangerColor);
-            rod.GetComponent<UnityEngine.UI.Image>().raycastTarget = false;
-            Label(panel, "봉인", px - 35, py - 95, 70, 25, 17);
+            foreach (int spell in _game.Spells)
+                if (_game.IsSealed(spell) && _layout.IsPlaced(spell)) { sealedSpell = spell; break; }
         }
+        if (sealedSpell != _sealStaffSpell)
+        {
+            _sealStaffSpell = sealedSpell;
+            if (sealedSpell >= 0) { _sealStaff.MoveTo(SealStaffPoint(sealedSpell)); _sealStaff.Show(); }
+            else _sealStaff.Withdraw();
+        }
+        if (sealedSpell >= 0) _sealStaff.MoveTo(SealStaffPoint(sealedSpell));
+    }
+
+    /// <summary>봉인된 도안의 점유 구역 중심을 전투 루트의 왼쪽 위 기준 좌표로 반환한다.</summary>
+    private Vector2 SealStaffPoint(int spell)
+    {
+        Vector2 sum = Vector2.zero; int count = 0;
+        for (int y = 0; y < SpellPatternLayout.ROWS; y++) for (int x = 0; x < SpellPatternLayout.COLUMNS; x++)
+            if (_layout.PlacedMask(spell, x, y) != 0) { sum += new Vector2(x + 0.5f, y + 0.5f); count++; }
+        if (count == 0) return Vector2.zero;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(_root, _table.GridToScreen(sum / count), null, out Vector2 local);
+        return new Vector2(local.x - _root.rect.xMin, local.y - _root.rect.yMax);
     }
 
 
@@ -2587,6 +2609,12 @@ public sealed class SpellGameUI : MonoBehaviour
     private void SetupFeatureControls()
     {
         _sealLayer = Element("Sealed Patterns", _root, 0, 0, 1280, 720);
+        _sealStaffRect = Element("Seal Staff", _root, 0, 0, 160, 320);
+        _sealStaffRect.pivot = new Vector2(0.5f, 0f);
+        _sealStaffRect.gameObject.AddComponent<CanvasRenderer>();
+        _sealStaff = _sealStaffRect.gameObject.AddComponent<SpellSealStaffGraphic>();
+        _sealStaff.Setup(_dangerColor);
+        _sealStaff.HideNow();
         _testControls = Element("Enemy Encounters", _root, 0, 0, 1280, 720);
         Button(_testControls, "형상 봉인자", 120, 620, 260, 50, () => StartRun(true), null, 18);
         Button(_testControls, "도둑손", 510, 620, 260, 50, () => StartRun(false, true), null, 18);
