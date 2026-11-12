@@ -889,6 +889,7 @@ MonoBehaviour:
   - {r: 0.55, g: 0.85, b: 0.95, a: 1}
   - {r: 0.96, g: 0.6, b: 0.35, a: 1}
   - {r: 0.72, g: 0.62, b: 0.98, a: 1}
+  - {r: 0.9, g: 0.35, b: 0.35, a: 1}
   _flameColor: {r: 0.878, g: 0.478, b: 0.247, a: 1}
   _guardColor: {r: 0.31, g: 0.584, b: 0.839, a: 1}
   _resonanceColor: {r: 0.655, g: 0.467, b: 0.851, a: 1}
@@ -907,6 +908,11 @@ MonoBehaviour:
   _dimColor: {r: 0.224, g: 0.267, b: 0.416, a: 1}
   _dangerColor: {r: 0.878, g: 0.376, b: 0.353, a: 1}
   _warnColor: {r: 0.949, g: 0.722, b: 0.294, a: 1}
+  _hammerGaugeSeconds: 0.25
+  _hammerStrikeSeconds: 0.24
+  _hammerResultSeconds: 1.1
+  _theftIntervalSeconds: 15
+  _theftMoveSpeed: 90
 --- !u!4 &824533483
 Transform:
   m_ObjectHideFlags: 0
@@ -1755,4 +1761,3 @@ SceneRoots:
   - {fileID: 832575519}
   - {fileID: 824533483}
   - {fileID: 1380941234}
-
