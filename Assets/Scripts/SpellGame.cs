@@ -273,6 +273,8 @@ public sealed class SpellGame
     private static readonly int SEAL_KIND_COUNT = Enum.GetValues(typeof(Seal)).Length - 1;
     private static readonly int COATING_KIND_COUNT = Enum.GetValues(typeof(Coating)).Length - 1;
     private static readonly Card[] DEBUG_PIECES = CreateDebugPieces();
+    // 점토가 놓일 때 변할 수 있는 1/4 구역 4개(1칸 넓이) 모양의 모든 방향이다. 정사각형, 삼각형, 45도 직사각형, 평행사변형 순으로 우선한다.
+    private static readonly ShapeCell[][] CLAY_FORMS = CreateClayForms();
     // 아래 데이터 필드는 JSON을 읽는 static 생성자에서 순서대로 채운다.
     private static readonly SpellPatternData[] PATTERNS;
     private static readonly int[][] SPELL_MASKS;
@@ -407,6 +409,28 @@ public sealed class SpellGame
         pieces.Add(new Card { Shape = Shape.QuarterTriangle, Effect = Effect.Period });
         pieces.Add(new Card { Shape = Shape.Triangle, Effect = Effect.Resonance });
         return pieces.ToArray();
+    }
+
+    /// <summary>점토가 변할 수 있는 1칸 넓이 모양들의 회전·뒤집기 방향을 중복 없이 만든다.</summary>
+    private static ShapeCell[][] CreateClayForms()
+    {
+        ShapeCell[][] bases = {
+            new[] { new ShapeCell(0, 0, 15) },
+            new[] { new ShapeCell(0, 0, 12), new ShapeCell(0, 1, 9) },
+            new[] { new ShapeCell(0, 0, 2), new ShapeCell(1, 0, 10), new ShapeCell(2, 0, 8) },
+            new[] { new ShapeCell(0, 0, 6), new ShapeCell(1, 0, 9) },
+        };
+        List<ShapeCell[]> forms = new List<ShapeCell[]>(); HashSet<string> seen = new HashSet<string>();
+        foreach (ShapeCell[] form in bases)
+            for (int mirror = 0; mirror < 2; mirror++) for (int rotation = 0; rotation < 4; rotation++)
+            {
+                ShapeCell[] cells = Rotate(mirror == 0 ? form : Mirror(form), rotation);
+                List<string> keys = new List<string>();
+                foreach (ShapeCell cell in cells) keys.Add(cell.X + "," + cell.Y + "," + cell.Mask);
+                keys.Sort();
+                if (seen.Add(string.Join("|", keys))) forms.Add(cells);
+            }
+        return forms.ToArray();
     }
 
     /// <summary>모든 도형의 네 방향 칸 목록을 미리 계산한다. 뒤집기 회전 도형은 뒤집힌 두 방향을 회전 순서에 포함한다.</summary>
@@ -1195,14 +1219,7 @@ public sealed class SpellGame
     private int[] CandidateMask(Board board, Card card, int x, int y, int rotation, Placement ignored)
     {
         int[] mask = new int[CELL_COUNT];
-        if (card.Glued == null && card.Shape == Shape.Clay)
-        {
-            if (x < 0 || x >= LOCAL_SIZE || y < 0 || y >= LOCAL_SIZE) return null;
-            int[] coverage = Coverage(board, ignored); int index = y * LOCAL_SIZE + x, free = 0;
-            for (int s = 0; s < 4; s++) if ((SPELL_MASKS[board.Spell][index] & (1 << s)) != 0 && coverage[index * 4 + s] == 0) free |= 1 << s;
-            if (free == 0) return null;
-            mask[index] = free; return mask;
-        }
+        if (card.Glued == null && card.Shape == Shape.Clay) return ClayMask(board, x, y, ignored);
         foreach (ShapeCell cell in CardCells(card, rotation))
         {
             int cx = x + cell.X, cy = y + cell.Y;
@@ -1210,6 +1227,45 @@ public sealed class SpellGame
             mask[cy * LOCAL_SIZE + cx] = cell.Mask;
         }
         return mask;
+    }
+
+    /// <summary>점토를 도안 칸 (x, y)에 놓을 때 그 칸을 덮으면서 도안의 빈 구역에만 들어가는 1칸 넓이 모양의 마스크를 고른다. 도안을 완성하는 모양, 가리킨 칸을 많이 채우는 모양, CLAY_FORMS 순서 순으로 우선한다. 들어갈 모양이 없으면 null이다.</summary>
+    private int[] ClayMask(Board board, int x, int y, Placement ignored)
+    {
+        if (x < 0 || x >= LOCAL_SIZE || y < 0 || y >= LOCAL_SIZE) return null;
+        int[] allowed = SPELL_MASKS[board.Spell], coverage = Coverage(board, ignored), filled = new int[CELL_COUNT];
+        foreach (Placement piece in board.Pieces)
+        {
+            if (piece == ignored) continue;
+            for (int i = 0; i < CELL_COUNT; i++) filled[i] |= piece.Mask[i];
+        }
+        int[] best = null; int bestScore = -1;
+        foreach (ShapeCell[] form in CLAY_FORMS)
+            foreach (ShapeCell pivot in form)
+            {
+                int ox = x - pivot.X, oy = y - pivot.Y; int[] mask = new int[CELL_COUNT]; bool fits = true;
+                foreach (ShapeCell cell in form)
+                {
+                    int cx = ox + cell.X, cy = oy + cell.Y, index = cy * LOCAL_SIZE + cx;
+                    if (cx < 0 || cx >= LOCAL_SIZE || cy < 0 || cy >= LOCAL_SIZE || (cell.Mask & ~allowed[index]) != 0) { fits = false; break; }
+                    for (int s = 0; s < 4 && fits; s++) if ((cell.Mask & (1 << s)) != 0 && coverage[index * 4 + s] > 0) fits = false;
+                    if (!fits) break;
+                    mask[index] = cell.Mask;
+                }
+                if (!fits) continue;
+                bool completes = true;
+                for (int i = 0; i < CELL_COUNT; i++) if ((filled[i] | mask[i]) != allowed[i]) completes = false;
+                int score = (completes ? 100 : 0) + BitCount(pivot.Mask);
+                if (score > bestScore) { best = mask; bestScore = score; }
+            }
+        return best;
+    }
+
+    /// <summary>카드를 도안 기준 앵커와 방향으로 놓았을 때의 칸별 마스크 사본을 반환한다. 점토는 실제로 변할 모양이다. 놓을 수 없으면 null이다.</summary>
+    public int[] PreviewMask(int boardIndex, Card card, int x, int y, int rotation, Placement ignored = null)
+    {
+        if (!CanPlace(boardIndex, card, x, y, rotation, ignored)) return null;
+        return CandidateMask(Boards[boardIndex], card, x, y, rotation, ignored);
     }
 
     /// <summary>카드 전체를 회전한 뒤 점유하는 격자 너비를 반환한다.</summary>

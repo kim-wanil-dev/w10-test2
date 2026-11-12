@@ -7,8 +7,10 @@ public sealed class SpellPiece3D : MonoBehaviour
 {
     // 칸 한 변 대비 두께다. 칸이 화면 정사각형(이전 마름모 칸의 1/√2)이라 같은 실제 두께가 되도록 맞춘 값이다.
     private const float THICKNESS = 0.23f;
-    private const float CLAY_RADIUS = 0.42f;
-    private const int CLAY_SIDES = 8;
+    // 점토 원의 반지름이다. 화면 마름모(Square)에 내접하는 원 크기(칸 한 변의 √2/2)다.
+    private const float CLAY_RADIUS = 0.7071f;
+    private const int CLAY_SIDES = 32;
+    private const string LUMP_KEY = "lump";
     private const float SEAL_RADIUS = 0.1f;
     private const float SEAL_HEIGHT = 0.03f;
     private const int SEAL_SIDES = 16;
@@ -27,6 +29,7 @@ public sealed class SpellPiece3D : MonoBehaviour
     private Mesh _mesh;
     private Material _material;
     private Color _color;
+    private string _clayKey;
     private SpellGame.Card _card;
     private SpellGame.Placement _placement;
     private int _board = -1;
@@ -58,14 +61,25 @@ public sealed class SpellPiece3D : MonoBehaviour
         _body.constraints = RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionZ | RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
     }
 
-    /// <summary>손패에서 보일 기본 메시로 바꾼다. 점토는 둥근 덩어리로 표시한다.</summary>
+    /// <summary>손패에서 보일 기본 메시로 바꾼다. 점토는 원판으로 표시한다.</summary>
     private void SetHandMesh()
     {
-        if (_card.IsUnique) { ReplaceMesh(CreateLump()); ShowSeals(System.Array.Empty<SpellGame.ShapeCell>(), System.Array.Empty<SpellGame.SealSpot>()); }
+        if (_card.IsUnique) ShowClay(null);
         else SetCells(SpellGame.CardCells(_card, 0), SpellGame.SealSpots(_card, 0));
     }
 
-    /// <summary>점토 손패용 팔각 덩어리 메시를 만든다.</summary>
+    /// <summary>점토를 cells 모양으로 바꾸고, cells가 null이면 원판으로 되돌린다. 모양이 같으면 메시를 다시 만들지 않는다.</summary>
+    public void ShowClay(IReadOnlyList<SpellGame.ShapeCell> cells)
+    {
+        string key = LUMP_KEY;
+        if (cells != null) { System.Text.StringBuilder builder = new System.Text.StringBuilder(); foreach (SpellGame.ShapeCell cell in cells) builder.Append(cell.X).Append(',').Append(cell.Y).Append(',').Append(cell.Mask).Append('|'); key = builder.ToString(); }
+        if (key == _clayKey) return;
+        if (cells == null) { ReplaceMesh(CreateLump()); ShowSeals(System.Array.Empty<SpellGame.ShapeCell>(), System.Array.Empty<SpellGame.SealSpot>()); }
+        else SetCells(cells, System.Array.Empty<SpellGame.SealSpot>());
+        _clayKey = key;
+    }
+
+    /// <summary>점토 손패용 원판 메시를 만든다.</summary>
     private static Mesh CreateLump()
     {
         List<Vector3> vertices = new List<Vector3>(); List<int> triangles = new List<int>();
@@ -88,6 +102,7 @@ public sealed class SpellPiece3D : MonoBehaviour
     {
         ReplaceMesh(CreateSectorPrism(cells, THICKNESS));
         ShowSeals(cells, seals);
+        _clayKey = null;
     }
 
     /// <summary>씰링마다 해당 1/4 구역 무게중심 위에 색 동그라미를 둔다. 필요한 만큼만 자식을 만들고 남는 동그라미는 숨긴다.</summary>
@@ -174,7 +189,7 @@ public sealed class SpellPiece3D : MonoBehaviour
     public void Pick(float scale, IReadOnlyList<SpellGame.ShapeCell> cells, IReadOnlyList<SpellGame.SealSpot> seals, Quaternion rotation)
     {
         _body.isKinematic = true; _collider.enabled = false;
-        SetCells(cells, seals);
+        if (_card.IsUnique) ShowClay(null); else SetCells(cells, seals);
         transform.localScale = Vector3.one * scale;
         transform.rotation = rotation;
     }

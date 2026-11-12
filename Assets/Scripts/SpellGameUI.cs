@@ -1554,7 +1554,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>고유 조각의 설명을 반환한다.</summary>
     public static string UniqueDescription(SpellGame.Card card)
     {
-        return card.IsUnique ? "놓은 칸의 빈 구역 모양으로 변함 (1칸 이하) · 씰링·코팅·붙이기·쪼개기 불가" : "";
+        return card.IsUnique ? "놓은 자리 빈 곳에 맞춰 1칸 넓이의 정사각형·삼각형·직사각형·평행사변형으로 변함 · 씰링·코팅·붙이기·쪼개기 불가" : "";
     }
 
     /// <summary>카드의 고유·코팅·씰링·이전 효과를 한 줄로 요약한다. 씰링은 종류별 개수로 묶는다. 아무것도 없으면 빈 문자열이다.</summary>

@@ -708,9 +708,11 @@ public sealed class SpellTable3D : MonoBehaviour
                 _destination = spell; _local = local; _localRotation = localRotation; break;
             }
             _picked.transform.position = PiecePosition(_anchor, cells, 0.045f) + Vector3.up * 0.22f;
+            if (_picked.Card.IsUnique) PreviewClay();
         }
         else
         {
+            if (_picked.Card.IsUnique) _picked.ShowClay(null);
             // 판 밖에서는 피벗 점이 커서와 고정 차이를 유지하는 연속 위치에 둔다.
             Vector2 center = grid + _pivotOffset - _pivot + SpellPiece3D.CellBounds(cells) / 2;
             _picked.transform.position = _boardRoot.TransformPoint(GridLocal(center, 0.42f));
@@ -719,13 +721,24 @@ public sealed class SpellTable3D : MonoBehaviour
         _picked.SetTint(_destination >= 0 ? new Color(0.55f, 0.95f, 0.68f) : new Color(1f, 0.5f, 0.4f));
     }
 
+    /// <summary>집은 점토를 놓을 수 있는 도안이 있으면 실제로 변할 모양으로 그 자리에 보여 주고, 없으면 원판으로 둔다.</summary>
+    private void PreviewClay()
+    {
+        int[] mask = _destination < 0 ? null : _game.PreviewMask(_destination, _picked.Card, _local.x, _local.y, _localRotation, _picked.Board == _destination ? _picked.Placement : null);
+        if (mask == null) { _picked.ShowClay(null); return; }
+        List<SpellGame.ShapeCell> cells = _layout.MaskGridCells(_destination, mask, out Vector2Int anchor);
+        _picked.ShowClay(cells);
+        _picked.transform.position = PiecePosition(anchor, cells, 0.045f) + Vector3.up * 0.22f;
+    }
+
     /// <summary>집은 조각의 방향을 목표 방향으로 바꾸고, 피벗 점을 새 방향 좌표계로 옮긴 뒤 메시를 다시 만든다.</summary>
     private void SetPickRotation(int rotation)
     {
         int target = (rotation % 4 + 4) % 4;
         _pivot = RotatedPivot(target);
         _rotation = target;
-        _picked.SetCells(HeldCells(), HeldSeals());
+        // 점토는 회전이 없고 PreviewPick이 놓일 모양으로 메시를 바꾼다.
+        if (!_picked.Card.IsUnique) _picked.SetCells(HeldCells(), HeldSeals());
     }
 
     /// <summary>현재 방향의 피벗 점을 목표 방향 좌표계로 옮긴 값을 반환한다. 상태는 바꾸지 않는다.</summary>

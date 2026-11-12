@@ -255,10 +255,24 @@ public sealed class SpellPatternLayout
     /// <summary>배치된 조각이 격자에서 차지하는 칸과 구역 마스크를 격자 좌표로 반환한다.</summary>
     public List<SpellGame.ShapeCell> PlacementGridCells(int spell, SpellGame.Placement piece)
     {
+        return LocalMaskGridCells(spell, piece.Mask);
+    }
+
+    /// <summary>도안 기준 칸별 마스크를 격자 칸 목록으로 바꾸고, 범위 왼쪽 위가 (0, 0)이 되게 옮긴 뒤 원래 왼쪽 위 격자 좌표를 anchor로 반환한다.</summary>
+    public List<SpellGame.ShapeCell> MaskGridCells(int spell, int[] localMask, out Vector2Int anchor)
+    {
+        List<SpellGame.ShapeCell> cells = LocalMaskGridCells(spell, localMask);
+        anchor = Normalize(cells);
+        return cells;
+    }
+
+    /// <summary>도안 기준 칸별 마스크(LOCAL_SIZE×LOCAL_SIZE)를 격자 좌표 칸 목록으로 바꾼다.</summary>
+    private List<SpellGame.ShapeCell> LocalMaskGridCells(int spell, int[] localMask)
+    {
         List<SpellGame.ShapeCell> cells = new List<SpellGame.ShapeCell>();
         for (int y = 0; y < LOCAL_SIZE; y++) for (int x = 0; x < LOCAL_SIZE; x++)
         {
-            int mask = piece.CellMask(x, y);
+            int mask = localMask[y * LOCAL_SIZE + x];
             if (mask == 0) continue;
             Vector2Int grid = LocalToGrid(spell, new Vector2Int(x, y));
             cells.Add(new SpellGame.ShapeCell(grid.x, grid.y, RotateMask(mask, _rotations[spell])));
