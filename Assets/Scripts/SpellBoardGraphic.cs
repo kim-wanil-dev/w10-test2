@@ -24,11 +24,6 @@ public sealed class SpellBoardGraphic : UnityEngine.UI.MaskableGraphic, IPointer
 
     [Header("조각 색")]
     [SerializeField] private Color _normalPieceColor = new Color(0.725f, 0.769f, 0.808f);
-    [SerializeField] private Color _flameColor = new Color(0.878f, 0.478f, 0.247f);
-    [SerializeField] private Color _guardColor = new Color(0.31f, 0.584f, 0.839f);
-    [SerializeField] private Color _resonanceColor = new Color(0.655f, 0.467f, 0.851f);
-    [SerializeField] private Color _afterimageColor = new Color(0.333f, 0.78f, 0.702f);
-    [SerializeField] private Color _persistedAfterimageColor = new Color(0.18f, 0.435f, 0.4f);
 
     private bool[] _targets = new bool[0];
     private readonly Vector2[] _corners = new Vector2[4];
@@ -74,18 +69,10 @@ public sealed class SpellBoardGraphic : UnityEngine.UI.MaskableGraphic, IPointer
         return SpellGame.ShapeMaskAt(card.Shape, x, y, rotation, cellX, cellY);
     }
 
-    /// <summary>배치 조각의 효과에 맞는 표시 색을 반환한다.</summary>
+    /// <summary>배치 조각의 코팅·씰링·이전 효과에 맞는 표시 색을 반환한다. 아무것도 없으면 일반 조각 색이다.</summary>
     private Color PieceColor(SpellGame.Placement piece)
     {
-        switch (piece.Card.Effect)
-        {
-            case SpellGame.Effect.Flame: return _flameColor;
-            case SpellGame.Effect.Guard: return _guardColor;
-            case SpellGame.Effect.Resonance: return _resonanceColor;
-            case SpellGame.Effect.Afterimage: return piece.HasPersisted ? _persistedAfterimageColor : _afterimageColor;
-            case SpellGame.Effect.None: return _normalPieceColor;
-            default: return _ui.EffectColor(piece.Card.Effect);
-        }
+        return SpellGameUI.HasTraits(piece.Card) && !piece.Card.IsUnique ? _ui.AccentColor(piece.Card) : _normalPieceColor;
     }
 
     /// <summary>선분에 두께를 주어 격자 경계 또는 도형 경계를 그린다.</summary>
@@ -347,7 +334,7 @@ public sealed class SpellBoardGraphic : UnityEngine.UI.MaskableGraphic, IPointer
         {
             _ui.SetPreviewHint(spell, new Vector2Int(x, y));
             if (!_dragPiece && _ui.SelectedCard == null) tooltip = PieceAt(x, y, sector)?.Card;
-            if (tooltip != null && tooltip.Effect == SpellGame.Effect.None) tooltip = null;
+            if (tooltip != null && !SpellGameUI.HasTraits(tooltip)) tooltip = null;
         }
         else _ui.SetOutsidePreviewHint();
         if (_layout.TryFindTarget(x, y, sector, _game.Spells, out spell) && !_dragPiece && _ui.SelectedCard == null) _ui.ShowPatternTooltip(spell, data.position, tooltip);

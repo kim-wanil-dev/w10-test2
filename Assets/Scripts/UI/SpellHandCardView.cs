@@ -46,16 +46,16 @@ public sealed class SpellHandCardView : MonoBehaviour
         _button.onClick.AddListener(Click);
     }
 
-    /// <summary>카드를 표시하고 드래그·설명 입력을 화면에 연결한다. effectColor는 특수 조각일 때만 쓴다.</summary>
+    /// <summary>카드를 표시하고 드래그·설명 입력을 화면에 연결한다. effectColor는 코팅·씰링 등 성질이 있는 조각일 때만 쓴다.</summary>
     public void Bind(SpellGameUI ui, SpellGame.Card card, string displayName, string effectText, Color effectColor, bool dimmed, bool selected, Action<SpellGame.Card> onClick)
     {
         _card = card; _onClick = onClick;
         _drag.Setup(ui, card); _tooltip.Setup(ui, card);
-        bool special = card.Effect != SpellGame.Effect.None;
-        Vector2 bounds = SpellPiece3D.CellBounds(SpellGame.ShapeCells(card.Shape, 0));
+        bool special = SpellGameUI.HasTraits(card);
+        Vector2 bounds = SpellPiece3D.CellBounds(SpellGame.CardCells(card, 0));
         _shapeArea.sizeDelta = bounds * (Mathf.Max(bounds.x, bounds.y) > 1 ? RECT_CELL : CELL);
-        _shape.Shape = card.Shape;
-        _shape.color = special ? effectColor : Color.white;
+        _shape.SetCard(card, 0, false, ui.SealColor);
+        _shape.color = ui.ShapeTint(card);
         _name.text = displayName;
         _effectChip.SetActive(special);
         _effectIcon.gameObject.SetActive(special);
@@ -63,23 +63,19 @@ public sealed class SpellHandCardView : MonoBehaviour
         {
             _effectLabel.text = effectText; _effectLabel.color = effectColor;
             _effectChipFill.color = new Color(effectColor.r, effectColor.g, effectColor.b, 0.22f);
-            _effectIcon.sprite = EffectIcon(card.Effect); _effectIcon.color = effectColor;
+            _effectIcon.sprite = EffectIcon(card); _effectIcon.color = effectColor;
         }
         _border.sprite = special || selected ? _thickRing : _thinRing;
         _border.color = selected ? _selectedBorder : special ? effectColor : _normalBorder;
         _group.alpha = dimmed ? 0.42f : 1f;
     }
 
-    /// <summary>특수 효과에 맞는 표식 스프라이트를 반환한다.</summary>
-    private Sprite EffectIcon(SpellGame.Effect effect)
+    /// <summary>카드의 코팅이나 이전 효과에 맞는 표식 스프라이트를 반환한다. 씰링만 있으면 씰링 표식을 쓴다.</summary>
+    private Sprite EffectIcon(SpellGame.Card card)
     {
-        switch (effect)
-        {
-            case SpellGame.Effect.Flame: return _flameIcon;
-            case SpellGame.Effect.Guard: return _guardIcon;
-            case SpellGame.Effect.Resonance: return _resonanceIcon;
-            default: return _afterimageIcon;
-        }
+        if (card.Coating == SpellGame.Coating.Amplify) return _flameIcon;
+        if (card.Coating == SpellGame.Coating.Guard) return _guardIcon;
+        return SpellGame.EffectCount(card, SpellGame.Effect.Resonance) > 0 ? _resonanceIcon : _afterimageIcon;
     }
 
     /// <summary>카드 클릭을 화면에 전달한다.</summary>

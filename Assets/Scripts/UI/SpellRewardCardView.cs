@@ -26,13 +26,13 @@ public sealed class SpellRewardCardView : MonoBehaviour
         _button.onClick.AddListener(Choose);
     }
 
-    /// <summary>조각 보상을 표시한다. 모양 영역은 도형 범위에 맞춰 칸 크기를 유지한다.</summary>
-    public void BindPiece(int reward, string displayName, SpellGame.Shape shape, Color accent, Action<int> onChoose)
+    /// <summary>조각 보상을 표시한다. 모양 영역은 도형 범위에 맞춰 칸 크기를 유지하고, 도형은 shapeTint로 칠하며 씰링은 sealColor 동그라미로 그린다.</summary>
+    public void BindPiece(int reward, string displayName, SpellGame.Card card, Color accent, Color shapeTint, Func<SpellGame.Seal, Color> sealColor, Action<int> onChoose)
     {
         Bind(reward, "조각", displayName, accent, onChoose);
         _shapeArea.gameObject.SetActive(true);
-        _shapeArea.sizeDelta = SpellPiece3D.CellBounds(SpellGame.ShapeCells(shape, 0)) * SHAPE_CELL;
-        _shape.Shape = shape; _shape.color = accent;
+        _shapeArea.sizeDelta = SpellPiece3D.CellBounds(SpellGame.CardCells(card, 0)) * SHAPE_CELL;
+        _shape.SetCard(card, 0, false, sealColor); _shape.color = shapeTint;
         foreach (Image cell in _patternCells) cell.gameObject.SetActive(false);
     }
 

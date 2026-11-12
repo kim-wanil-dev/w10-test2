@@ -26,6 +26,12 @@ public sealed class SpellTable3D : MonoBehaviour
     [SerializeField] private Material _pieceMaterial;
     [SerializeField] private Material _lineMaterial;
 
+    [Header("코팅·씰링 표시")]
+    [SerializeField] private Material _guardMaterial;
+    [SerializeField] private Material _amplifyMaterial;
+    [SerializeField] private Material _cogMaterial;
+    [SerializeField] private Material _sealMaterial;
+
     private readonly Dictionary<int, SpellPiece3D> _pieces = new Dictionary<int, SpellPiece3D>();
     private readonly List<int> _removed = new List<int>();
     private readonly HashSet<int> _activeCards = new HashSet<int>();
@@ -271,17 +277,19 @@ public sealed class SpellTable3D : MonoBehaviour
     private void PlaceOnBoard(SpellPiece3D piece, int spell, SpellGame.Placement placement)
     {
         List<SpellGame.ShapeCell> cells = _layout.PlacementGridCells(spell, placement);
+        List<SpellGame.SealSpot> seals = _layout.PlacementGridSeals(spell, placement);
         Vector2Int anchor = new Vector2Int(int.MaxValue, int.MaxValue);
         foreach (SpellGame.ShapeCell cell in cells) anchor = Vector2Int.Min(anchor, new Vector2Int(cell.X, cell.Y));
         for (int i = 0; i < cells.Count; i++) cells[i] = new SpellGame.ShapeCell(cells[i].X - anchor.x, cells[i].Y - anchor.y, cells[i].Mask);
+        for (int i = 0; i < seals.Count; i++) seals[i] = new SpellGame.SealSpot(seals[i].X - anchor.x, seals[i].Y - anchor.y, seals[i].Sector, seals[i].Seal);
         float layer = IsLayered(spell, placement) ? SpellPiece3D.Thickness * _cellSize : 0;
-        piece.PlaceOnBoard(spell, placement, cells, PiecePosition(anchor, cells, 0.045f + layer), Quaternion.Euler(0, BOARD_YAW, 0), _cellSize);
+        piece.PlaceOnBoard(spell, placement, cells, seals, PiecePosition(anchor, cells, 0.045f + layer), Quaternion.Euler(0, BOARD_YAW, 0), _cellSize);
     }
 
-    /// <summary>덧칠 조각이 같은 판의 다른 조각과 구역을 공유하는지 반환한다.</summary>
+    /// <summary>덧칠 씰링이 있는 조각이 같은 판의 다른 조각과 구역을 공유하는지 반환한다.</summary>
     private bool IsLayered(int spell, SpellGame.Placement placement)
     {
-        if (placement.Card.Effect != SpellGame.Effect.Overpaint) return false;
+        if (SpellGame.SealCount(placement.Card, SpellGame.Seal.Overpaint) == 0) return false;
         foreach (SpellGame.Placement other in _game.Boards[spell].Pieces)
         {
             if (other == placement) continue;
@@ -296,13 +304,38 @@ public sealed class SpellTable3D : MonoBehaviour
         return SpellGame.CardCells(_picked.Card, _picked.Card.Shape == SpellGame.Shape.Clay ? 0 : _rotation);
     }
 
+    /// <summary>집은 조각의 씰링을 HeldCells와 같은 방향 좌표로 반환한다.</summary>
+    private IReadOnlyList<SpellGame.SealSpot> HeldSeals()
+    {
+        return SpellGame.SealSpots(_picked.Card, _picked.Card.Shape == SpellGame.Shape.Clay ? 0 : _rotation);
+    }
+
+    /// <summary>코팅에 맞는 3D 조각 Material을 반환한다. 코팅이 없으면 기본 조각 Material이다.</summary>
+    private Material CoatingMaterial(SpellGame.Coating coating)
+    {
+        switch (coating)
+        {
+            case SpellGame.Coating.Guard: return _guardMaterial;
+            case SpellGame.Coating.Amplify: return _amplifyMaterial;
+            case SpellGame.Coating.Cog: return _cogMaterial;
+            default: return _pieceMaterial;
+        }
+    }
+
     /// <summary>카드에 대응하는 3D 조각을 재사용하거나 카드 모양과 효과 색으로 생성한다.</summary>
     private SpellPiece3D GetPiece(SpellGame.Card card)
     {
         if (_pieces.TryGetValue(card.Id, out SpellPiece3D piece)) return piece;
         piece = CreateRoot("Piece " + card.Id + " " + card.Shape, _world).gameObject.AddComponent<SpellPiece3D>();
-        Color color = card.Effect == SpellGame.Effect.None ? card.Shape == SpellGame.Shape.Clay ? CLAY_COLOR : NORMAL_COLOR : _ui.EffectColor(card.Effect);
-        piece.Setup(card, _pieceMaterial, _physicsMaterial, color); _pieces.Add(card.Id, piece); return piece;
+        piece.Setup(card, CoatingMaterial(card.Coating), _physicsMaterial, PieceTint(card), _sealMaterial, _ui.SealColor); _pieces.Add(card.Id, piece); return piece;
+    }
+
+    /// <summary>3D 조각의 기본 색을 반환한다. 코팅 색, 이전 효과 색, 점토 색, 일반 색 순으로 고른다.</summary>
+    private Color PieceTint(SpellGame.Card card)
+    {
+        if (card.Coating != SpellGame.Coating.None) return _ui.CoatingColor(card.Coating);
+        if (card.Effect != SpellGame.Effect.None) return _ui.EffectColor(card.Effect);
+        return card.IsUnique ? CLAY_COLOR : NORMAL_COLOR;
     }
 
     /// <summary>최대 일곱 조각의 회전 외접원이 겹치지 않는 빈 손패 자리를 무작위로 고른다.</summary>
@@ -498,7 +531,7 @@ public sealed class SpellTable3D : MonoBehaviour
         else if (_picked != null && pressed && _isClickSelected) { FinishPick(_downPosition); return; }
         if (_picked != null)
         {
-            if (rotations > 0) { _rotation = (_rotation + rotations) % 4; _picked.SetCells(HeldCells()); }
+            if (rotations > 0) { _rotation = (_rotation + rotations) % 4; _picked.SetCells(HeldCells(), HeldSeals()); }
             PreviewPick(pointer);
             if (released && _isHolding)
             {
@@ -642,7 +675,7 @@ public sealed class SpellTable3D : MonoBehaviour
             float delta = Mathf.Abs(Mathf.DeltaAngle(yaw, BOARD_YAW + r * 90f));
             if (valid && delta < nearest) { _rotation = r; nearest = delta; }
         }
-        _picked.Pick(_cellSize, HeldCells(), Quaternion.Euler(0, BOARD_YAW, 0)); HideHover(pointer); PreviewPick(pointer);
+        _picked.Pick(_cellSize, HeldCells(), HeldSeals(), Quaternion.Euler(0, BOARD_YAW, 0)); HideHover(pointer); PreviewPick(pointer);
     }
 
     /// <summary>포인터에 가장 가까운 격자 앵커를 찾고 배치 가능 여부를 조각 색으로 표시한다.</summary>
@@ -747,9 +780,7 @@ public sealed class SpellTable3D : MonoBehaviour
         foreach (SpellPiece3D piece in _pieces.Values)
         {
             SpellGame.Card card = piece.Card;
-            Color tint = _game.IsCursed(card) ? new Color(1f, 0.15f, 0.15f)
-                : card.Effect == SpellGame.Effect.None ? card.Shape == SpellGame.Shape.Clay ? CLAY_COLOR : NORMAL_COLOR : _ui.EffectColor(card.Effect);
-            piece.SetTint(piece.Placement != null && piece.Placement.HasPersisted ? tint * 0.72f : tint);
+            piece.SetTint(_game.IsCursed(card) ? new Color(1f, 0.15f, 0.15f) : PieceTint(card));
         }
     }
 

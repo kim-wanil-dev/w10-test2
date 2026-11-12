@@ -2,13 +2,23 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
-/// <summary>조각 하나의 입체 메시, 물리 낙하와 집기·격자 고정 상태를 표시한다.</summary>
+/// <summary>조각 하나의 입체 메시, 씰링 동그라미, 물리 낙하와 집기·격자 고정 상태를 표시한다.</summary>
 public sealed class SpellPiece3D : MonoBehaviour
 {
     private const float THICKNESS = 0.16f;
     private const float CLAY_RADIUS = 0.42f;
     private const int CLAY_SIDES = 8;
+    private const float SEAL_RADIUS = 0.1f;
+    private const float SEAL_HEIGHT = 0.03f;
+    private const int SEAL_SIDES = 16;
+    private static readonly int BASE_COLOR_ID = Shader.PropertyToID("_BaseColor");
+    private static readonly int COLOR_ID = Shader.PropertyToID("_Color");
+    private static Mesh _sealMesh;
 
+    private readonly List<MeshRenderer> _sealDots = new List<MeshRenderer>();
+    private MaterialPropertyBlock _sealBlock;
+    private Material _sealMaterial;
+    private System.Func<SpellGame.Seal, Color> _sealColor;
     private Rigidbody _body;
     private MeshCollider _collider;
     private MeshRenderer _renderer;
@@ -30,10 +40,10 @@ public sealed class SpellPiece3D : MonoBehaviour
     public Rigidbody Body { get { return _body; } }
     public static float Thickness { get { return THICKNESS; } }
 
-    /// <summary>카드 모양으로 입체 메시와 볼록 충돌체, 강체 및 색을 초기화한다.</summary>
-    public void Setup(SpellGame.Card card, Material material, PhysicsMaterial physicsMaterial, Color color)
+    /// <summary>카드 모양으로 입체 메시와 볼록 충돌체, 강체 및 색을 초기화한다. material은 코팅별 Material이고, 씰링 동그라미는 sealMaterial에 sealColor 색을 입혀 그린다.</summary>
+    public void Setup(SpellGame.Card card, Material material, PhysicsMaterial physicsMaterial, Color color, Material sealMaterial, System.Func<SpellGame.Seal, Color> sealColor)
     {
-        _card = card; _color = color;
+        _card = card; _color = color; _sealMaterial = sealMaterial; _sealColor = sealColor; _sealBlock = new MaterialPropertyBlock();
         _filter = gameObject.AddComponent<MeshFilter>();
         _renderer = gameObject.AddComponent<MeshRenderer>();
         _material = new Material(material); _renderer.sharedMaterial = _material;
@@ -50,8 +60,8 @@ public sealed class SpellPiece3D : MonoBehaviour
     /// <summary>손패에서 보일 기본 메시로 바꾼다. 점토는 둥근 덩어리로 표시한다.</summary>
     private void SetHandMesh()
     {
-        if (_card.Shape == SpellGame.Shape.Clay) ReplaceMesh(CreateLump());
-        else SetCells(SpellGame.CardCells(_card, 0));
+        if (_card.IsUnique) { ReplaceMesh(CreateLump()); ShowSeals(System.Array.Empty<SpellGame.ShapeCell>(), System.Array.Empty<SpellGame.SealSpot>()); }
+        else SetCells(SpellGame.CardCells(_card, 0), SpellGame.SealSpots(_card, 0));
     }
 
     /// <summary>점토 손패용 팔각 덩어리 메시를 만든다.</summary>
@@ -72,10 +82,57 @@ public sealed class SpellPiece3D : MonoBehaviour
         return mesh;
     }
 
-    /// <summary>범위 왼쪽 위가 (0, 0)인 칸 목록으로 메시를 다시 만든다. 메시 중심은 범위 중심이다.</summary>
-    public void SetCells(IReadOnlyList<SpellGame.ShapeCell> cells)
+    /// <summary>범위 왼쪽 위가 (0, 0)인 칸 목록으로 메시를 다시 만들고 같은 좌표의 씰링 동그라미를 윗면에 올린다. 메시 중심은 범위 중심이다.</summary>
+    public void SetCells(IReadOnlyList<SpellGame.ShapeCell> cells, IReadOnlyList<SpellGame.SealSpot> seals)
     {
         ReplaceMesh(CreateSectorPrism(cells, THICKNESS));
+        ShowSeals(cells, seals);
+    }
+
+    /// <summary>씰링마다 해당 1/4 구역 무게중심 위에 색 동그라미를 둔다. 필요한 만큼만 자식을 만들고 남는 동그라미는 숨긴다.</summary>
+    private void ShowSeals(IReadOnlyList<SpellGame.ShapeCell> cells, IReadOnlyList<SpellGame.SealSpot> seals)
+    {
+        Vector2 half = CellBounds(cells) / 2;
+        while (_sealDots.Count < seals.Count)
+        {
+            GameObject dot = new GameObject("Seal " + _sealDots.Count) { layer = gameObject.layer };
+            dot.transform.SetParent(transform, false);
+            dot.AddComponent<MeshFilter>().sharedMesh = SealMesh();
+            MeshRenderer dotRenderer = dot.AddComponent<MeshRenderer>(); dotRenderer.sharedMaterial = _sealMaterial;
+            _sealDots.Add(dotRenderer);
+        }
+        for (int i = 0; i < _sealDots.Count; i++)
+        {
+            bool show = i < seals.Count;
+            _sealDots[i].gameObject.SetActive(show);
+            if (!show) continue;
+            SpellGame.SealSpot seal = seals[i];
+            Vector2 center = new Vector2(seal.X + 0.5f, seal.Y + 0.5f);
+            Vector2[] corners = { new Vector2(seal.X, seal.Y), new Vector2(seal.X + 1, seal.Y), new Vector2(seal.X + 1, seal.Y + 1), new Vector2(seal.X, seal.Y + 1) };
+            Vector2 centroid = (corners[seal.Sector] + corners[(seal.Sector + 1) % 4] + center) / 3;
+            _sealDots[i].transform.localPosition = Local(centroid, half, THICKNESS);
+            Color color = _sealColor(seal.Seal);
+            _sealBlock.SetColor(BASE_COLOR_ID, color); _sealBlock.SetColor(COLOR_ID, color);
+            _sealDots[i].SetPropertyBlock(_sealBlock);
+        }
+    }
+
+    /// <summary>모든 조각이 함께 쓰는 낮은 원기둥 모양 씰링 메시를 처음 한 번 만든다.</summary>
+    private static Mesh SealMesh()
+    {
+        if (_sealMesh != null) return _sealMesh;
+        List<Vector3> vertices = new List<Vector3>(); List<int> triangles = new List<int>();
+        for (int i = 0; i < SEAL_SIDES; i++)
+        {
+            float a0 = i * Mathf.PI * 2 / SEAL_SIDES, a1 = (i + 1) * Mathf.PI * 2 / SEAL_SIDES;
+            Vector3 p = new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0)) * SEAL_RADIUS, q = new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1)) * SEAL_RADIUS;
+            Vector3 up = Vector3.up * SEAL_HEIGHT;
+            AddTriangle(vertices, triangles, p + up, q + up, up, Vector3.up);
+            AddTriangle(vertices, triangles, p, q, p + up, (p + q).normalized); AddTriangle(vertices, triangles, q, q + up, p + up, (p + q).normalized);
+        }
+        _sealMesh = new Mesh { name = "Spell Seal Dot" };
+        _sealMesh.SetVertices(vertices); _sealMesh.SetTriangles(triangles, 0); _sealMesh.RecalculateNormals(); _sealMesh.RecalculateBounds();
+        return _sealMesh;
     }
 
     /// <summary>표시·충돌 메시를 교체하고 이전 메시를 정리한다.</summary>
@@ -101,22 +158,22 @@ public sealed class SpellPiece3D : MonoBehaviour
         SetTint(_color);
     }
 
-    /// <summary>논리 배치의 격자 칸 모양과 위치, 판 격자 방향(rotation)에 조각을 고정하고 물리 이동을 멈춘다.</summary>
-    public void PlaceOnBoard(int board, SpellGame.Placement placement, IReadOnlyList<SpellGame.ShapeCell> cells, Vector3 position, Quaternion rotation, float scale)
+    /// <summary>논리 배치의 격자 칸 모양·씰링과 위치, 판 격자 방향(rotation)에 조각을 고정하고 물리 이동을 멈춘다.</summary>
+    public void PlaceOnBoard(int board, SpellGame.Placement placement, IReadOnlyList<SpellGame.ShapeCell> cells, IReadOnlyList<SpellGame.SealSpot> seals, Vector3 position, Quaternion rotation, float scale)
     {
         _isHand = false; _slot = -1; _board = board; _placement = placement;
         gameObject.SetActive(true); _body.isKinematic = true; _collider.enabled = true;
-        SetCells(cells);
+        SetCells(cells, seals);
         transform.SetPositionAndRotation(position, rotation);
         transform.localScale = Vector3.one * scale;
-        SetTint(placement.HasPersisted ? _color * 0.72f : _color);
+        SetTint(_color);
     }
 
-    /// <summary>집은 조각을 격자 크기와 지정 칸 모양, 판 격자 방향(rotation)으로 바꾸고 충돌·중력을 잠시 중단한다.</summary>
-    public void Pick(float scale, IReadOnlyList<SpellGame.ShapeCell> cells, Quaternion rotation)
+    /// <summary>집은 조각을 격자 크기와 지정 칸 모양·씰링, 판 격자 방향(rotation)으로 바꾸고 충돌·중력을 잠시 중단한다.</summary>
+    public void Pick(float scale, IReadOnlyList<SpellGame.ShapeCell> cells, IReadOnlyList<SpellGame.SealSpot> seals, Quaternion rotation)
     {
         _body.isKinematic = true; _collider.enabled = false;
-        SetCells(cells);
+        SetCells(cells, seals);
         transform.localScale = Vector3.one * scale;
         transform.rotation = rotation;
     }
