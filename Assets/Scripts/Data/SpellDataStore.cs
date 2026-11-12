@@ -11,7 +11,7 @@ using Newtonsoft.Json.Converters;
 public static class SpellDataStore
 {
     public const int CURRENT_VERSION = 1;
-    public const int GRID_SIZE = 3;
+    public const int GRID_SIZE = SpellGame.LOCAL_SIZE;
     public const int FULL_MASK = 15;
     public const string PATTERNS_RESOURCE = "SpellData/patterns";
     public const string PIECES_RESOURCE = "SpellData/pieces";
@@ -152,7 +152,7 @@ public static class SpellDataStore
         foreach (SpellCellData cell in cells)
         {
             if (cell == null) { errors.Add($"{label}: 빈 칸 항목이 있습니다"); continue; }
-            if (cell.X < 0 || cell.X >= GRID_SIZE || cell.Y < 0 || cell.Y >= GRID_SIZE) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})이 3×3 범위를 벗어납니다");
+            if (cell.X < 0 || cell.X >= GRID_SIZE || cell.Y < 0 || cell.Y >= GRID_SIZE) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})이 {GRID_SIZE}×{GRID_SIZE} 범위를 벗어납니다");
             if (cell.Mask < 1 || cell.Mask > FULL_MASK) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})의 마스크는 1~15여야 합니다");
             if (!positions.Add(cell.Y * GRID_SIZE + cell.X)) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})이 중복됩니다");
             minX = Math.Min(minX, cell.X); minY = Math.Min(minY, cell.Y);

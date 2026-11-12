@@ -15,6 +15,7 @@ public sealed class SpellGame
     public enum Effect { None, Period, Resonance }
     public enum Seal { None, Recall, Shard, Refill, Overpaint }
     public enum Coating { None, Guard, Amplify, Cog }
+    public enum RewardKind { None, Piece, Pattern, Seal }
     public enum Phase { Title, Combat, Reward, Loadout, Victory, Defeat }
     public enum SpellKind { Single, Block, All, Scatter }
     public enum Keyword { None, OneStroke, Mosaic, Purity }
@@ -22,14 +23,17 @@ public sealed class SpellGame
     public const int MAX_HAND = 7;
     public const int MAX_HITS = 6;
     public const int SHARD_DAMAGE = 2;
-    private const int LOCAL_SIZE = 3;
+    // 도안 기준 좌표 범위의 한 변 칸 수다. 칸은 화면에 똑바로 놓인 정사각형이고 두 대각선이 1/4 구역을 나눈다.
+    public const int LOCAL_SIZE = 4;
     private const int CELL_COUNT = LOCAL_SIZE * LOCAL_SIZE;
     private const int FULL_MASK = 15;
     private const int AMPLIFY_BONUS = 2;
     private const int AMPLIFY_HIT_BONUS = 1;
     private const int GUARD_BONUS = 3;
     private const int REWARD_PIECE_COUNT = 3;
+    private const int REWARD_PATTERN_COUNT = 3;
     private const double REWARD_SEAL_CHANCE = 0.5;
+    private const double OPTIONAL_REWARD_CHANCE = 0.5;
     private const int PERIOD_BONUS = 3;
     private const int RESONANCE_BONUS = 3;
     private const int RESONANCE_COUNT = 3;
@@ -214,6 +218,19 @@ public sealed class SpellGame
         }
     }
 
+    // 도형별 한 단계 분해 결과(도형, 방향, 원본 기본 방향 기준 왼쪽 위 칸). 빈 배열은 더 나눌 수 없는 도형이다.
+    private static readonly Fragment[][] BASE_SPLITS = {
+        new[] { new Fragment(Shape.Triangle, 0, 1, 0), new Fragment(Shape.Triangle, 2, 0, 0) },
+        new[] { new Fragment(Shape.QuarterTriangle, 0, 0, 0), new Fragment(Shape.QuarterTriangle, 1, 0, 1) },
+        new[] { new Fragment(Shape.Square, 0, 0, 0), new Fragment(Shape.Square, 0, 1, 1) },
+        new Fragment[0],
+        new[] { new Fragment(Shape.QuarterTriangle, 1, 0, 0), new Fragment(Shape.QuarterTriangle, 3, 0, 0) },
+        new[] { new Fragment(Shape.Triangle, 1, 0, 0), new Fragment(Shape.Triangle, 3, 1, 0) },
+        new[] { new Fragment(Shape.Triangle, 1, 0, 0), new Fragment(Shape.Triangle, 2, 1, 0) },
+        new[] { new Fragment(Shape.QuarterTriangle, 2, 1, 0), new Fragment(Shape.Square, 0, 0, 0) },
+        new[] { new Fragment(Shape.Square, 0, 1, 0), new Fragment(Shape.Triangle, 3, 2, 1), new Fragment(Shape.Triangle, 3, 0, 1) },
+        new[] { new Fragment(Shape.Square, 0, 1, 0), new Fragment(Shape.Rectangle, 0, 0, 1) },
+        new Fragment[0] };
     private static readonly int SHAPE_KIND_COUNT = Enum.GetValues(typeof(Shape)).Length;
     private static readonly int SEAL_KIND_COUNT = Enum.GetValues(typeof(Seal)).Length - 1;
     private static readonly int COATING_KIND_COUNT = Enum.GetValues(typeof(Coating)).Length - 1;
@@ -237,6 +254,8 @@ public sealed class SpellGame
     private readonly List<int> _ownedSpells = new List<int>();
     private readonly List<int> _spells = new List<int>();
     private readonly List<Reward> _rewards = new List<Reward>();
+    private readonly List<Reward> _patternRewards = new List<Reward>();
+
     private readonly Board[] _boards = CreateBoards();
     private bool _hasSealerEncounter;
     private bool _hasThiefEncounter;
@@ -261,6 +280,13 @@ public sealed class SpellGame
     public ReadOnlyCollection<int> OwnedSpells { get; }
     public ReadOnlyCollection<Board> Boards { get; }
     public ReadOnlyCollection<Reward> Rewards { get; }
+    public bool HasPieceReward { get; private set; }
+    public bool HasPatternReward { get; private set; }
+    public bool HasSealReward { get; private set; }
+    public Seal RewardSeal { get; private set; }
+    public RewardKind ActiveReward { get; private set; }
+    public IReadOnlyList<Reward> ActiveRewardChoices { get { return ActiveReward == RewardKind.Pattern ? _patternRewards : _rewards; } }
+
     public Phase CurrentPhase { get; private set; } = Phase.Title;
     public int Health { get; private set; }
     public int MaxHealth { get; private set; } = START_HEALTH;
@@ -329,7 +355,7 @@ public sealed class SpellGame
         foreach (Shape shape in Enum.GetValues(typeof(Shape))) pieces.Add(new Card { Shape = shape });
         for (int seal = 1; seal <= SEAL_KIND_COUNT; seal++)
         {
-            Card card = new Card { Shape = Shape.Square }; card.SealList.Add(new SealSpot(0, 0, 0, (Seal)seal)); pieces.Add(card);
+            Card card = new Card { Shape = Shape.Square }; card.SealList.Add(new SealSpot(0, 0, 1, (Seal)seal)); pieces.Add(card);
         }
         for (int coating = 1; coating <= COATING_KIND_COUNT; coating++) pieces.Add(new Card { Shape = Shape.Square, Coating = (Coating)coating });
         pieces.Add(new Card { Shape = Shape.QuarterTriangle, Effect = Effect.Period });
@@ -605,6 +631,26 @@ public sealed class SpellGame
         return true;
     }
 
+    /// <summary>도형과 유효한 씰링·코팅을 복사해 보유 덱과 현재 손패에 추가한다.</summary>
+    public bool AddDebugCard(Card source)
+    {
+        if (CurrentPhase != Phase.Combat || source == null || source.Glued != null || !Enum.IsDefined(typeof(Shape), source.Shape)
+            || !Enum.IsDefined(typeof(Coating), source.Coating) || source.Effect != Effect.None) return false;
+        if (source.IsUnique && (source.Coating != Coating.None || source.Seals.Count > 0)) return false;
+        HashSet<int> used = new HashSet<int>();
+        foreach (SealSpot seal in source.Seals)
+        {
+            if (seal.Seal == Seal.None || !Enum.IsDefined(typeof(Seal), seal.Seal) || seal.Sector < 0 || seal.Sector >= 4) return false;
+            bool occupied = false;
+            foreach (ShapeCell cell in ShapeCells(source.Shape, 0))
+                if (cell.X == seal.X && cell.Y == seal.Y && (cell.Mask & (1 << seal.Sector)) != 0) { occupied = true; break; }
+            if (!occupied || !used.Add((seal.Y * LOCAL_SIZE + seal.X) * 4 + seal.Sector)) return false;
+        }
+        Card card = CopyCard(source, true);
+        _owned.Add(card); _hand.Add(card);
+        return true;
+    }
+
     /// <summary>지정 카드를 보유 덱과 현재 위치에서 제거한다.</summary>
     public bool RemoveDebugCard(Card card)
     {
@@ -728,24 +774,57 @@ public sealed class SpellGame
         if (HammerUsesLeft <= 0) return "이번 턴의 망치를 이미 사용했습니다";
         if (card == null || !Hand.Contains(card)) return "손패의 조각 하나를 선택하세요";
         if (card.IsUnique) return "고유 조각은 쪼갤 수 없습니다";
-        if (card.Glued == null && card.Shape > Shape.QuarterTriangle) return "이 도형은 망치 분해를 지원하지 않습니다";
-        if (card.Glued != null && (card.Glued.First.Shape > Shape.QuarterTriangle || card.Glued.Second.Shape > Shape.QuarterTriangle)) return "이 접착 도형은 망치 분해를 지원하지 않습니다";
         if (card.Glued == null && card.Shape == Shape.QuarterTriangle) return "1/4 삼각형은 가장 작은 조각이라 분해할 수 없습니다";
-        if (Hand.Count >= MAX_HAND) return "손패가 가득 찼습니다. 조각을 배치해 한 칸 이상 비워 주세요";
+        int firstSplit = card.Glued != null ? 2 : SplitOnce(new Fragment(card.Shape, 0, 0, 0)).Length;
+        if (firstSplit == 0) return "이 도형은 더 분해할 수 없습니다";
+        if (Hand.Count - 1 + firstSplit > MAX_HAND) return $"손패가 부족합니다. 이 조각은 처음에 {firstSplit}장으로 나뉘므로 조각을 배치해 자리를 비워 주세요";
         return null;
     }
 
-    /// <summary>조각을 한 단계 작은 두 조각으로 나눈다. 직사각형은 두 칸, 정사각형은 대각선 두 삼각형, 삼각형은 1/4 삼각형 둘이 된다.</summary>
+    /// <summary>조각을 BASE_SPLITS 규칙으로 한 단계 나누고, 원본 조각의 방향과 위치를 적용해 루트 기본 방향 기준 자식 목록을 반환한다.</summary>
     private static Fragment[] SplitOnce(Fragment fragment)
     {
-        if (fragment.Shape == Shape.Rectangle)
+        Fragment[] baseSplit = BASE_SPLITS[(int)fragment.Shape];
+        Fragment[] result = new Fragment[baseSplit.Length];
+        IReadOnlyList<ShapeCell> parentBase = ShapeCells(fragment.Shape, 0), parentCells = ShapeCells(fragment.Shape, fragment.Rotation);
+        for (int c = 0; c < baseSplit.Length; c++)
         {
-            IReadOnlyList<ShapeCell> cells = ShapeCells(Shape.Rectangle, fragment.Rotation);
-            return new[] { new Fragment(Shape.Square, 0, fragment.X + cells[0].X, fragment.Y + cells[0].Y), new Fragment(Shape.Square, 0, fragment.X + cells[1].X, fragment.Y + cells[1].Y) };
+            // 자식 칸을 원본 기본 방향에서 원본의 현재 방향으로 옮긴다.
+            IReadOnlyList<ShapeCell> childBase = ShapeCells(baseSplit[c].Shape, baseSplit[c].Rotation);
+            ShapeCell[] moved = new ShapeCell[childBase.Count];
+            int minX = int.MaxValue, minY = int.MaxValue;
+            for (int i = 0; i < childBase.Count; i++)
+            {
+                int index = 0;
+                while (parentBase[index].X != baseSplit[c].X + childBase[i].X || parentBase[index].Y != baseSplit[c].Y + childBase[i].Y) index++;
+                int mask = 0;
+                for (int sector = 0; sector < 4; sector++)
+                    if ((childBase[i].Mask & (1 << sector)) != 0) mask |= 1 << RotateSector(fragment.Shape, fragment.Rotation, sector);
+                moved[i] = new ShapeCell(parentCells[index].X, parentCells[index].Y, mask);
+                minX = Math.Min(minX, moved[i].X); minY = Math.Min(minY, moved[i].Y);
+            }
+            result[c] = new Fragment(baseSplit[c].Shape, MatchRotation(baseSplit[c].Shape, moved, minX, minY), fragment.X + minX, fragment.Y + minY);
         }
-        if (fragment.Shape == Shape.Square)
-            return new[] { new Fragment(Shape.Triangle, fragment.Rotation, fragment.X, fragment.Y), new Fragment(Shape.Triangle, fragment.Rotation + 2, fragment.X, fragment.Y) };
-        return new[] { new Fragment(Shape.QuarterTriangle, fragment.Rotation, fragment.X, fragment.Y), new Fragment(Shape.QuarterTriangle, fragment.Rotation + 1, fragment.X, fragment.Y) };
+        return result;
+    }
+
+    /// <summary>왼쪽 위가 (minX, minY)인 칸 목록과 같은 모양이 되는 도형 방향을 찾아 반환한다.</summary>
+    private static int MatchRotation(Shape shape, ShapeCell[] cells, int minX, int minY)
+    {
+        for (int rotation = 0; rotation < 4; rotation++)
+        {
+            IReadOnlyList<ShapeCell> candidate = ShapeCells(shape, rotation);
+            if (candidate.Count != cells.Length) continue;
+            bool same = true;
+            foreach (ShapeCell cell in cells)
+            {
+                bool found = false;
+                foreach (ShapeCell other in candidate) if (other.X == cell.X - minX && other.Y == cell.Y - minY && other.Mask == cell.Mask) found = true;
+                if (!found) { same = false; break; }
+            }
+            if (same) return rotation;
+        }
+        throw new InvalidOperationException($"{shape} 분해 결과의 방향을 찾지 못했습니다");
     }
 
     /// <summary>강도 0~1에서 첫 분해 이후 자식의 추가 분해 확률을 반환한다.</summary>
@@ -758,7 +837,6 @@ public sealed class SpellGame
     /// <summary>가능한 원본은 반드시 한 번 나누고 강도로 추가 분해를 추첨해 혼합 도형을 반환한다. 카드·전투·덱 상태는 변경하지 않는다.</summary>
     public static Shape[] DecomposeShape(Shape shape, float strength, int maxPieces, Random random)
     {
-        if (shape < Shape.Square || shape > Shape.QuarterTriangle) throw new ArgumentOutOfRangeException(nameof(shape));
         if (maxPieces < 1) throw new ArgumentOutOfRangeException(nameof(maxPieces));
         if (random == null) throw new ArgumentNullException(nameof(random));
         List<Fragment> fragments = Decompose(shape, DecompositionChance(strength), maxPieces, random);
@@ -767,26 +845,28 @@ public sealed class SpellGame
         return shapes;
     }
 
-    /// <summary>원본을 반드시 한 번 나누고 남은 분할 수 안에서 추가 분해를 추첨해 원본 기본 방향 기준 위치를 가진 조각 목록을 반환한다.</summary>
+    /// <summary>원본을 반드시 한 번 나누고 남은 결과 수 안에서 추가 분해를 추첨해 원본 기본 방향 기준 위치를 가진 조각 목록을 반환한다. 나눌 수 없거나 상한이 부족하면 원본만 반환한다.</summary>
     private static List<Fragment> Decompose(Shape shape, float chance, int maxPieces, Random random)
     {
         List<Fragment> pieces = new List<Fragment>();
         Fragment root = new Fragment(shape, 0, 0, 0);
-        if (shape == Shape.QuarterTriangle || maxPieces == 1) { pieces.Add(root); return pieces; }
-        int splitsLeft = maxPieces - 2;
-        foreach (Fragment child in SplitOnce(root)) SplitFragment(child, chance, random, pieces, ref splitsLeft);
+        Fragment[] children = SplitOnce(root);
+        if (children.Length == 0 || children.Length > maxPieces) { pieces.Add(root); return pieces; }
+        int extraLeft = maxPieces - children.Length;
+        foreach (Fragment child in children) SplitFragment(child, chance, random, pieces, ref extraLeft);
         return pieces;
     }
 
-    /// <summary>남은 분할 수 안에서 각 자식의 추가 분해를 추첨해 면적이 보존된 최종 조각을 누적한다.</summary>
-    private static void SplitFragment(Fragment fragment, float chance, Random random, List<Fragment> pieces, ref int splitsLeft)
+    /// <summary>남은 추가 결과 수 안에서 각 자식의 추가 분해를 추첨해 면적이 보존된 최종 조각을 누적한다. 한 번 나눌 때 늘어나는 장수만큼 extraLeft를 줄인다.</summary>
+    private static void SplitFragment(Fragment fragment, float chance, Random random, List<Fragment> pieces, ref int extraLeft)
     {
-        if (fragment.Shape == Shape.QuarterTriangle || splitsLeft == 0 || random.NextDouble() >= chance)
+        Fragment[] children = SplitOnce(fragment);
+        if (children.Length == 0 || children.Length - 1 > extraLeft || random.NextDouble() >= chance)
         {
             pieces.Add(fragment); return;
         }
-        splitsLeft--;
-        foreach (Fragment child in SplitOnce(fragment)) SplitFragment(child, chance, random, pieces, ref splitsLeft);
+        extraLeft -= children.Length - 1;
+        foreach (Fragment child in children) SplitFragment(child, chance, random, pieces, ref extraLeft);
     }
 
     /// <summary>원본 기본 방향 기준 씰링이 쪼갠 조각 안에 있으면 그 조각의 기본 방향 기준 씰링으로 바꿔 반환한다.</summary>
@@ -810,10 +890,10 @@ public sealed class SpellGame
         return Math.Min(smallestPieces, MAX_HAND - Hand.Count + 1);
     }
 
-    /// <summary>기본 도형을 모두 1/4까지 나눴을 때 면적에 해당하는 최소 조각 수를 반환한다.</summary>
+    /// <summary>기본 도형을 모두 1/4 삼각형까지 나눴을 때의 조각 수, 즉 도형 면적을 1/4 삼각형 면적으로 나눈 값을 반환한다.</summary>
     private static int SmallestPieceCount(Shape shape)
     {
-        return shape == Shape.Rectangle ? 8 : shape == Shape.Square ? 4 : shape == Shape.Triangle ? 2 : 1;
+        return ShapeArea(shape) / ShapeArea(Shape.QuarterTriangle);
     }
 
     /// <summary>강도에 따른 분해 결과로 손패를 교체하고 망치 횟수를 소비한다. 실제 교체된 대상의 저주만 해제한다.</summary>
@@ -828,9 +908,9 @@ public sealed class SpellGame
         else
         {
             List<Fragment> firstPieces = new List<Fragment>(), secondPieces = new List<Fragment>();
-            int splitsLeft = maxPieces - 2;
-            SplitFragment(new Fragment(card.Glued.First.Shape, 0, 0, 0), chance, _random, firstPieces, ref splitsLeft);
-            SplitFragment(new Fragment(card.Glued.Second.Shape, 0, 0, 0), chance, _random, secondPieces, ref splitsLeft);
+            int extraLeft = maxPieces - 2;
+            SplitFragment(new Fragment(card.Glued.First.Shape, 0, 0, 0), chance, _random, firstPieces, ref extraLeft);
+            SplitFragment(new Fragment(card.Glued.Second.Shape, 0, 0, 0), chance, _random, secondPieces, ref extraLeft);
             AddHammerCards(card.Glued.First, firstPieces, card.Coating, results);
             AddHammerCards(card.Glued.Second, secondPieces, card.Coating, results);
         }
@@ -891,7 +971,7 @@ public sealed class SpellGame
         string issue = GlueCardIssue(first) ?? GlueCardIssue(second);
         if (issue != null) return issue;
         if (first == second) return "서로 다른 조각 두 장을 선택하세요";
-        if (relativeX < -4 || relativeX > 4 || relativeY < -4 || relativeY > 4) return "조각 사이에 틈이 있습니다";
+        if (Math.Abs(relativeX) > 2 * LOCAL_SIZE || Math.Abs(relativeY) > 2 * LOCAL_SIZE) return "조각 사이에 틈이 있습니다";
         bool touching = false;
         for (int y = 0; y < ShapeHeight(first, firstRotation); y++) for (int x = 0; x < ShapeWidth(first, firstRotation); x++)
         {
@@ -1355,14 +1435,25 @@ public sealed class SpellGame
         // 회수 복사본은 이번 전투에만 쓰는 임시 카드라 보유 덱에 넣지 않고, 손패 한도도 무시한다.
         _hand.AddRange(recalled);
         if (e.Draws > 0 && alive) Draw(e.Draws);
-        if (!alive) { if (Battle == LAST_BATTLE) FinishCombat(Phase.Victory); else { Health = Math.Min(MaxHealth, Health + VICTORY_HEAL); FinishCombat(Phase.Reward); EnterReward(); } }
+        if (!alive)
+        {
+            if (Battle != LAST_BATTLE) Health = Math.Min(MaxHealth, Health + VICTORY_HEAL);
+            FinishCombat(Phase.Reward); EnterReward();
+        }
         return true;
     }
 
-    /// <summary>씰링 또는 코팅이 붙은 랜덤 조각 3개와 아직 없는 도안을 보상 후보로 만들고 보상 단계로 넘어간다. 점토는 한 번에 최대 1개다.</summary>
+    /// <summary>확정 조각 보상과 독립 확률의 도안·인장 보상을 생성하고 보상 단계로 전환한다.</summary>
     private void EnterReward()
     {
         _rewards.Clear();
+        _patternRewards.Clear();
+        LastAcquiredPattern = -1;
+        ActiveReward = RewardKind.None;
+        HasPieceReward = true;
+        HasPatternReward = _random.NextDouble() < OPTIONAL_REWARD_CHANCE;
+        HasSealReward = false;
+        RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
         bool hasClay = false;
         for (int i = 0; i < REWARD_PIECE_COUNT; i++)
         {
@@ -1370,7 +1461,17 @@ public sealed class SpellGame
             hasClay |= piece.IsUnique;
             _rewards.Add(new Reward { Pattern = -1, Piece = piece });
         }
-        for (int spell = 0; spell < PatternCount; spell++) if (!_ownedSpells.Contains(spell)) _rewards.Add(new Reward { Pattern = spell });
+        for (int spell = 0; spell < PatternCount; spell++) if (!_ownedSpells.Contains(spell)) _patternRewards.Add(new Reward { Pattern = spell });
+        int patternCount = Math.Min(REWARD_PATTERN_COUNT, _patternRewards.Count);
+        for (int i = 0; i < patternCount; i++)
+        {
+            int selected = _random.Next(i, _patternRewards.Count);
+            Reward candidate = _patternRewards[i];
+            _patternRewards[i] = _patternRewards[selected];
+            _patternRewards[selected] = candidate;
+        }
+        if (_patternRewards.Count > patternCount) _patternRewards.RemoveRange(patternCount, _patternRewards.Count - patternCount);
+        HasPatternReward &= _patternRewards.Count > 0;
         CurrentPhase = Phase.Reward;
     }
 
@@ -1396,18 +1497,87 @@ public sealed class SpellGame
         return card;
     }
 
-    /// <summary>보상 후보 하나를 얻고 도안 장착 단계로 넘어간다. -1은 건너뛰기다.</summary>
+    /// <summary>선택한 조각 또는 도안을 수령하고 목록으로 돌아간다. -1은 수령을 마친다.</summary>
     public bool ChooseReward(int index)
     {
-        if (CurrentPhase != Phase.Reward || index < -1 || index >= _rewards.Count) return false;
-        LastAcquiredPattern = -1;
-        if (index >= 0)
+        if (CurrentPhase != Phase.Reward) return false;
+        if (index == -1) { CurrentPhase = Battle == LAST_BATTLE ? Phase.Victory : Phase.Loadout; ActiveReward = RewardKind.None; return true; }
+        IReadOnlyList<Reward> choices = ActiveRewardChoices;
+        if (index < 0 || index >= choices.Count) return false;
+        Reward reward = choices[index];
+        if (ActiveReward == RewardKind.Pattern && HasPatternReward)
         {
-            Reward reward = _rewards[index];
-            if (reward.IsPattern) { _ownedSpells.Add(reward.Pattern); LastAcquiredPattern = reward.Pattern; }
-            else _owned.Add(CopyCard(reward.Piece, true));
+            if (_ownedSpells.Contains(reward.Pattern)) return false;
+            _ownedSpells.Add(reward.Pattern); LastAcquiredPattern = reward.Pattern; HasPatternReward = false;
         }
-        CurrentPhase = Phase.Loadout; return true;
+        else if (ActiveReward == RewardKind.Piece && HasPieceReward)
+        {
+            _owned.Add(CopyCard(reward.Piece, true)); HasPieceReward = false;
+        }
+        else return false;
+        ActiveReward = RewardKind.None;
+        return true;
+    }
+
+    /// <summary>미수령 보상 종류를 연다. 후보는 다시 추첨하지 않고 유지한다.</summary>
+    public bool OpenReward(RewardKind kind)
+    {
+        if (CurrentPhase != Phase.Reward) return false;
+        bool available = kind == RewardKind.None || kind == RewardKind.Piece && HasPieceReward
+            || kind == RewardKind.Pattern && HasPatternReward || kind == RewardKind.Seal && HasSealReward;
+        if (!available) return false;
+        ActiveReward = kind;
+        return true;
+    }
+
+    public readonly struct RewardSealTarget
+    {
+        public Card Piece { get; }
+        public SealSpot Spot { get; }
+
+        /// <summary>인장을 붙일 원본 조각과 빈 영역을 저장한다.</summary>
+        internal RewardSealTarget(Card piece, SealSpot spot) { Piece = piece; Spot = spot; }
+    }
+
+    /// <summary>소유 조각의 빈 인장 영역을 반환한다. 접착 조각은 구성 조각까지 조회한다.</summary>
+    public IReadOnlyList<RewardSealTarget> RewardSealTargets(Card card)
+    {
+        List<RewardSealTarget> targets = new List<RewardSealTarget>();
+        if (card != null && _owned.Contains(card)) CollectRewardSealTargets(card, targets);
+        return targets;
+    }
+
+    /// <summary>빈 1/4 영역을 목록에 추가한다. 찰흙은 기존 규칙에 따라 제외한다.</summary>
+    private static void CollectRewardSealTargets(Card card, List<RewardSealTarget> targets)
+    {
+        if (card.Glued != null)
+        {
+            CollectRewardSealTargets(card.Glued.First, targets);
+            CollectRewardSealTargets(card.Glued.Second, targets);
+            return;
+        }
+        if (card.IsUnique) return;
+        foreach (ShapeCell cell in CardCells(card, 0))
+            for (int sector = 0; sector < 4; sector++)
+            {
+                if ((cell.Mask & (1 << sector)) == 0) continue;
+                bool occupied = false;
+                foreach (SealSpot seal in card.Seals)
+                    if (seal.X == cell.X && seal.Y == cell.Y && seal.Sector == sector) { occupied = true; break; }
+                if (!occupied) targets.Add(new RewardSealTarget(card, new SealSpot(cell.X, cell.Y, sector, Seal.None)));
+            }
+    }
+
+    /// <summary>선택한 빈 영역에 보상 인장을 붙이고 보상 목록으로 돌아간다. 중복 수령은 거부한다.</summary>
+    public bool ClaimRewardSeal(Card card, int targetIndex)
+    {
+        if (CurrentPhase != Phase.Reward || ActiveReward != RewardKind.Seal || !HasSealReward) return false;
+        IReadOnlyList<RewardSealTarget> targets = RewardSealTargets(card);
+        if (targetIndex < 0 || targetIndex >= targets.Count) return false;
+        RewardSealTarget target = targets[targetIndex];
+        target.Piece.SealList.Add(new SealSpot(target.Spot.X, target.Spot.Y, target.Spot.Sector, RewardSeal));
+        HasSealReward = false; ActiveReward = RewardKind.None;
+        return true;
     }
 
     /// <summary>장착할 보유 도안을 정하고 다음 전투를 시작한다. 하나 이상 장착해야 한다.</summary>

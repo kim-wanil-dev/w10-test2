@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-/// <summary>도안·조각 에디터가 함께 쓰는 3×3 격자 그리기와 1/4 구역 클릭 편집이다. 칸은 위·오른쪽·아래·왼쪽 삼각 구역 4개로 나뉜다.</summary>
+/// <summary>도안·조각 에디터가 함께 쓰는 GRID_SIZE 격자 그리기와 1/4 구역 클릭 편집이다. 칸은 위·오른쪽·아래·왼쪽 삼각 구역 4개로 나뉜다.</summary>
 public static class SpellGridDrawer
 {
     public const float CELL_SIZE = 64f;
@@ -13,7 +13,7 @@ public static class SpellGridDrawer
     private static readonly Color LINE_COLOR = new Color(0.42f, 0.42f, 0.42f);
     private static readonly Color HOVER_COLOR = new Color(1f, 1f, 1f, 0.25f);
 
-    /// <summary>편집 가능한 3×3 격자를 area 왼쪽 위에 그리고 입력을 처리한다. 클릭은 구역 토글, Shift+클릭은 칸 전체 토글, 우클릭은 칸 비우기다. cells를 직접 바꾸며 바뀌면 true를 반환한다.</summary>
+    /// <summary>편집 가능한 GRID_SIZE 격자를 area 왼쪽 위에 그리고 입력을 처리한다. 클릭은 구역 토글, Shift+클릭은 칸 전체 토글, 우클릭은 칸 비우기다. cells를 직접 바꾸며 바뀌면 true를 반환한다.</summary>
     public static bool DrawEditable(Rect area, List<SpellCellData> cells, Color fill, bool isReadOnly)
     {
         Event current = Event.current;
@@ -117,7 +117,7 @@ public static class SpellGridDrawer
         if (mask != 0) cells.Add(new SpellCellData { X = x, Y = y, Mask = mask });
     }
 
-    /// <summary>마우스 위치가 3×3 격자의 어느 칸·구역인지 구한다. 칸 중심에서 세로 거리가 가로 거리 이상이면 위·아래, 아니면 오른쪽·왼쪽이다.</summary>
+    /// <summary>마우스 위치가 GRID_SIZE 격자의 어느 칸·구역인지 구한다. 칸 중심에서 세로 거리가 가로 거리 이상이면 위·아래, 아니면 오른쪽·왼쪽이다.</summary>
     private static bool TryHitSector(Rect area, Vector2 point, out int x, out int y, out int sector)
     {
         Vector2 local = point - area.position;

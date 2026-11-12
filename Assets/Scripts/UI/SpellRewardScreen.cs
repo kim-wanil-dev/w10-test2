@@ -16,15 +16,35 @@ public sealed class SpellRewardScreen : MonoBehaviour
     [SerializeField] private SpellButtonView _skip;
 
     private readonly List<SpellRewardCardView> _pool = new List<SpellRewardCardView>();
+    private Vector2 _cardSize;
 
     public SpellButtonView Skip { get { return _skip; } }
+
+    void Awake()
+    {
+        _cardSize = ((RectTransform)_cards[0].transform).sizeDelta;
+    }
+
+    /// <summary>보상 항목을 세로 목록으로 배치하고 표시할 뷰를 반환한다.</summary>
+    public SpellRewardCardView[] ShowEntries(int count)
+    {
+        SpellRewardCardView[] entries = ShowCards(count);
+        for (int i = 0; i < count; i++)
+        {
+            RectTransform rect = (RectTransform)entries[i].transform;
+            rect.localScale = Vector3.one;
+            rect.sizeDelta = new Vector2(1000, 150);
+            rect.anchoredPosition = new Vector2(0, 100 - i * 175);
+        }
+        return entries;
+    }
 
     /// <summary>후보 수만큼 카드를 준비해 보이게 하고 반환한다. 네 장 이하는 한 줄, 그보다 많으면 축소한 격자로 놓는다.</summary>
     public SpellRewardCardView[] ShowCards(int count)
     {
         if (_pool.Count == 0) _pool.AddRange(_cards);
         while (_pool.Count < count) _pool.Add(Instantiate(_cards[0], _cards[0].transform.parent));
-        Vector2 size = ((RectTransform)_cards[0].transform).sizeDelta;
+        Vector2 size = _cardSize;
         int columns = count <= _cards.Length ? Mathf.Max(1, count) : Mathf.CeilToInt(Mathf.Sqrt(count * AREA_WIDTH / AREA_HEIGHT * size.y / size.x));
         int rows = Mathf.CeilToInt(count / (float)columns);
         float gap = count <= _cards.Length ? CARD_GAP : GRID_GAP;
@@ -35,6 +55,7 @@ public sealed class SpellRewardScreen : MonoBehaviour
             RectTransform rect = (RectTransform)_pool[i].transform;
             rect.gameObject.SetActive(i < count);
             if (i >= count) continue;
+            rect.sizeDelta = size;
             int row = i / columns, column = i % columns, inRow = Mathf.Min(columns, count - row * columns);
             rect.localScale = Vector3.one * scale;
             rect.anchoredPosition = new Vector2((column - (inRow - 1) / 2f) * step.x, AREA_CENTER_Y - (row - (rows - 1) / 2f) * step.y);

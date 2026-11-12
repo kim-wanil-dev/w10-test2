@@ -182,7 +182,7 @@ public sealed class SpellPatternEditorWindow : EditorWindow
         EditorGUILayout.LabelField("공유 판 미리보기", EditorStyles.boldLabel);
         Rect board = GUILayoutUtility.GetRect(BOARD_CELL_SIZE * SpellPatternLayout.COLUMNS, BOARD_CELL_SIZE * SpellPatternLayout.ROWS, GUILayout.ExpandWidth(false));
         bool isInside = DrawBoardPreview(board, pattern);
-        EditorGUILayout.LabelField(isInside ? "격자 좌표 기준이며 게임 화면에서는 45도 돌아가 보입니다. 옅은 색은 시작 도안입니다." : "빨간 구역이 판 밖으로 나갑니다.", EditorStyles.wordWrappedMiniLabel);
+        EditorGUILayout.LabelField(isInside ? "게임 화면과 같은 격자 좌표입니다. 옅은 색은 시작 도안입니다." : "빨간 구역이 판 밖으로 나갑니다.", EditorStyles.wordWrappedMiniLabel);
         EditorGUILayout.EndVertical();
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.EndScrollView();

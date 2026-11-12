@@ -3,24 +3,17 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>공유 격자 위 도안의 위치·회전과 1/4 구역 점유를 관리하고, 격자 좌표와 도안 기준 좌표를 서로 변환한다.</summary>
-/// <remarks>격자는 화면에서 45도 돌아간 마름모 칸으로 표시된다. 격자 +x는 화면 오른쪽 아래, +y는 왼쪽 아래를 향하고, 판은 화면 기준 마름모 2×2 크기의 수평 정사각형이다.</remarks>
+/// <remarks>격자는 화면에 똑바로 놓인 정사각형 칸이고, 두 대각선이 칸을 위·오른쪽·아래·왼쪽 1/4 구역으로 나눈다. 격자 +x는 화면 오른쪽, +y는 아래를 향한다.</remarks>
 public sealed class SpellPatternLayout
 {
     public const int COLUMNS = 4;
     public const int ROWS = 4;
     // 화면 기준 판 한 변의 길이를 격자 칸 한 변 단위로 나타낸 값이다.
-    public const float BOARD_SIZE = 2 * SQRT2;
-    private const int LOCAL_SIZE = 3;
+    public const float BOARD_SIZE = COLUMNS;
+    private const int LOCAL_SIZE = SpellGame.LOCAL_SIZE;
     private const int FULL_MASK = 15;
-    private const float SQRT2 = 1.41421356f;
 
-    private static readonly Vector2 BOARD_CENTER = new Vector2(2, 2);
-    // 판 모서리가 마름모 꼭짓점에 오도록 자른 칸별 유효 구역이다. 경계 칸은 반쪽 마름모(2구역)다.
-    private static readonly int[] BOARD_MASK = {
-        0, 6, 12, 0,
-        6, 15, 15, 12,
-        3, 15, 15, 9,
-        0, 3, 9, 0 };
+    private static readonly Vector2 BOARD_CENTER = new Vector2(COLUMNS / 2f, ROWS / 2f);
     private static readonly Vector2Int[] SIDE_OFFSETS = { new Vector2Int(0, -1), new Vector2Int(1, 0), new Vector2Int(0, 1), new Vector2Int(-1, 0) };
 
     private readonly Vector2Int[] _origins;
@@ -49,7 +42,7 @@ public sealed class SpellPatternLayout
     /// <summary>격자 칸 (x, y)에서 판에 속한 구역 마스크를 반환한다. 판 범위 밖이면 0이다.</summary>
     public static int BoardMask(int x, int y)
     {
-        return x < 0 || x >= COLUMNS || y < 0 || y >= ROWS ? 0 : BOARD_MASK[y * COLUMNS + x];
+        return x < 0 || x >= COLUMNS || y < 0 || y >= ROWS ? 0 : FULL_MASK;
     }
 
     /// <summary>소수 격자 위치가 판에 속한 구역 위에 있는지 반환한다.</summary>
@@ -64,14 +57,13 @@ public sealed class SpellPatternLayout
     /// <summary>격자 좌표를 판 중심 기준 화면 방향 좌표(x 오른쪽, y 아래, 칸 한 변 단위)로 바꾼다.</summary>
     public static Vector2 GridToBoard(Vector2 grid)
     {
-        Vector2 d = grid - BOARD_CENTER;
-        return new Vector2(d.x - d.y, d.x + d.y) / SQRT2;
+        return grid - BOARD_CENTER;
     }
 
     /// <summary>판 중심 기준 화면 방향 좌표(x 오른쪽, y 아래, 칸 한 변 단위)를 격자 좌표로 바꾼다.</summary>
     public static Vector2 BoardToGrid(Vector2 board)
     {
-        return BOARD_CENTER + new Vector2(board.x + board.y, board.y - board.x) / SQRT2;
+        return BOARD_CENTER + board;
     }
 
     /// <summary>도안이 격자에 놓여 있는지 반환한다.</summary>

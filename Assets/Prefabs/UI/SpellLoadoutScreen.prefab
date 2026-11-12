@@ -299,7 +299,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  _cellSize: 120
+  _cellSize: 85
   _emptyColor: {r: 0.078, g: 0.102, b: 0.188, a: 1}
   _lineColor: {r: 0.29, g: 0.33, b: 0.47, a: 1}
   _validColor: {r: 0.482, g: 0.878, b: 0.627, a: 1}

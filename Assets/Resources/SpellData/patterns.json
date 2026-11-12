@@ -11,16 +11,16 @@
         {
           "x": 0,
           "y": 0,
-          "mask": 3
+          "mask": 12
         },
         {
-          "x": 1,
-          "y": 0,
-          "mask": 8
+          "x": 0,
+          "y": 1,
+          "mask": 15
         }
       ],
-      "layoutX": 1,
-      "layoutY": 1,
+      "layoutX": 2,
+      "layoutY": 0,
       "layoutRotation": 0,
       "color": "#F4C95D",
       "isStarter": true
@@ -35,16 +35,11 @@
         {
           "x": 0,
           "y": 0,
-          "mask": 2
-        },
-        {
-          "x": 1,
-          "y": 0,
-          "mask": 8
+          "mask": 15
         }
       ],
       "layoutX": 2,
-      "layoutY": 2,
+      "layoutY": 3,
       "layoutRotation": 0,
       "color": "#E6EBF0",
       "isStarter": true
@@ -57,23 +52,58 @@
       "keyword": "OneStroke",
       "cells": [
         {
-          "x": 0,
+          "x": 1,
           "y": 0,
           "mask": 6
         },
         {
+          "x": 2,
+          "y": 0,
+          "mask": 12
+        },
+        {
           "x": 0,
           "y": 1,
-          "mask": 15
+          "mask": 6
         },
         {
           "x": 1,
           "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "mask": 9
+        },
+        {
+          "x": 0,
+          "y": 2,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 2,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 2,
+          "mask": 12
+        },
+        {
+          "x": 1,
+          "y": 3,
+          "mask": 3
+        },
+        {
+          "x": 2,
+          "y": 3,
           "mask": 9
         }
       ],
-      "layoutX": 1,
-      "layoutY": 1,
+      "layoutX": 0,
+      "layoutY": 0,
       "layoutRotation": 0,
       "color": "#B9E36B",
       "isStarter": false
@@ -86,28 +116,68 @@
       "keyword": "None",
       "cells": [
         {
-          "x": 0,
+          "x": 1,
           "y": 0,
-          "mask": 15
+          "mask": 6
         },
         {
-          "x": 1,
+          "x": 2,
           "y": 0,
           "mask": 12
         },
         {
           "x": 0,
           "y": 1,
-          "mask": 3
+          "mask": 6
         },
         {
           "x": 1,
           "y": 1,
           "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 3,
+          "y": 1,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 2,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 2,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 2,
+          "mask": 15
+        },
+        {
+          "x": 3,
+          "y": 2,
+          "mask": 9
+        },
+        {
+          "x": 1,
+          "y": 3,
+          "mask": 3
+        },
+        {
+          "x": 2,
+          "y": 3,
+          "mask": 9
         }
       ],
-      "layoutX": 1,
-      "layoutY": 1,
+      "layoutX": 0,
+      "layoutY": 0,
       "layoutRotation": 0,
       "color": "#F28DB2",
       "isStarter": false
@@ -120,23 +190,38 @@
       "keyword": "OneStroke",
       "cells": [
         {
-          "x": 0,
-          "y": 0,
-          "mask": 15
-        },
-        {
           "x": 1,
           "y": 0,
-          "mask": 9
+          "mask": 6
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "mask": 12
         },
         {
           "x": 0,
           "y": 1,
-          "mask": 9
+          "mask": 6
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 3,
+          "y": 1,
+          "mask": 12
         }
       ],
-      "layoutX": 1,
-      "layoutY": 1,
+      "layoutX": 0,
+      "layoutY": 0,
       "layoutRotation": 0,
       "color": "#8CD9F2",
       "isStarter": false
@@ -151,7 +236,7 @@
         {
           "x": 0,
           "y": 0,
-          "mask": 6
+          "mask": 3
         },
         {
           "x": 1,
@@ -162,10 +247,25 @@
           "x": 2,
           "y": 0,
           "mask": 12
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 3
+        },
+        {
+          "x": 2,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 2,
+          "mask": 3
         }
       ],
       "layoutX": 0,
-      "layoutY": 1,
+      "layoutY": 0,
       "layoutRotation": 0,
       "color": "#F59959",
       "isStarter": false
@@ -180,22 +280,22 @@
         {
           "x": 0,
           "y": 0,
-          "mask": 6
+          "mask": 15
         },
         {
           "x": 1,
           "y": 0,
-          "mask": 12
+          "mask": 15
         },
         {
           "x": 0,
           "y": 1,
-          "mask": 3
+          "mask": 15
         },
         {
           "x": 1,
           "y": 1,
-          "mask": 9
+          "mask": 15
         }
       ],
       "layoutX": 1,
@@ -214,11 +314,26 @@
         {
           "x": 0,
           "y": 0,
-          "mask": 15
+          "mask": 6
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 9
         }
       ],
-      "layoutX": 1,
-      "layoutY": 2,
+      "layoutX": 0,
+      "layoutY": 1,
       "layoutRotation": 0,
       "color": "#E65959",
       "isStarter": true
