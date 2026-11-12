@@ -22,7 +22,8 @@ public sealed class SpellGame
     public const int MAX_HAND = 7;
     public const int MAX_HITS = 6;
     public const int SHARD_DAMAGE = 2;
-    private const int LOCAL_SIZE = 3;
+    // 도안 기준 좌표 범위의 한 변 칸 수다. 칸은 화면에 똑바로 놓인 정사각형이고 두 대각선이 1/4 구역을 나눈다.
+    public const int LOCAL_SIZE = 4;
     private const int CELL_COUNT = LOCAL_SIZE * LOCAL_SIZE;
     private const int FULL_MASK = 15;
     private const int AMPLIFY_BONUS = 2;
@@ -221,39 +222,41 @@ public sealed class SpellGame
     private static readonly SpellKind[] PATTERN_KINDS = { SpellKind.Single, SpellKind.Block, SpellKind.Single, SpellKind.All, SpellKind.Single, SpellKind.Scatter, SpellKind.All, SpellKind.Single };
     private static readonly int[] PATTERN_BASE = { 6, 7, 12, 10, 8, 2, 6, 9 };
     private static readonly Keyword[] PATTERN_KEYWORDS = { Keyword.None, Keyword.None, Keyword.OneStroke, Keyword.None, Keyword.OneStroke, Keyword.Mosaic, Keyword.Purity, Keyword.None };
+    // 도안별 4×4 칸의 필요 구역 마스크다(행 우선).
     private static readonly int[][] SPELL_MASKS = {
-        new[] { 3, 8, 0, 0, 0, 0, 0, 0, 0 },
-        new[] { 2, 8, 0, 0, 0, 0, 0, 0, 0 },
-        new[] { 15, 0, 0, 15, 15, 0, 0, 0, 0 },
-        new[] { 15, 15, 0, 15, 15, 0, 0, 0, 0 },
-        new[] { 15, 9, 0, 9, 0, 0, 0, 0, 0 },
-        new[] { 6, 15, 12, 0, 0, 0, 0, 0, 0 },
-        new[] { 6, 12, 0, 3, 9, 0, 0, 0, 0 },
-        new[] { 15, 0, 0, 0, 0, 0, 0, 0, 0 } };
+        new[] { 12, 0, 0, 0, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        new[] { 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        new[] { 0, 6, 12, 0, 6, 15, 9, 0, 3, 15, 12, 0, 0, 3, 9, 0 },
+        new[] { 0, 6, 12, 0, 6, 15, 15, 12, 3, 15, 15, 9, 0, 3, 9, 0 },
+        new[] { 0, 6, 12, 0, 6, 15, 15, 12, 0, 0, 0, 0, 0, 0, 0, 0 },
+        new[] { 3, 15, 12, 0, 0, 3, 15, 0, 0, 0, 3, 0, 0, 0, 0, 0 },
+        new[] { 15, 15, 0, 0, 15, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        new[] { 6, 12, 0, 0, 3, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
+    // 도형별 기본 방향 칸 목록이다. Square(화면에서 마름모)처럼 45도 기울어 보이는 도형은 여러 칸의 반쪽 구역으로 이루어진다.
     private static readonly ShapeCell[][] BASE_SHAPES = {
+        new[] { new ShapeCell(0, 0, 6), new ShapeCell(1, 0, 12), new ShapeCell(0, 1, 3), new ShapeCell(1, 1, 9) },
+        new[] { new ShapeCell(0, 0, 12), new ShapeCell(0, 1, 9) },
+        new[] { new ShapeCell(0, 0, 6), new ShapeCell(1, 0, 12), new ShapeCell(0, 1, 3), new ShapeCell(1, 1, 15), new ShapeCell(2, 1, 12), new ShapeCell(1, 2, 3), new ShapeCell(2, 2, 9) },
+        new[] { new ShapeCell(0, 0, 12) },
         new[] { new ShapeCell(0, 0, 15) },
-        new[] { new ShapeCell(0, 0, 3) },
-        new[] { new ShapeCell(0, 0, 15), new ShapeCell(1, 0, 15) },
-        new[] { new ShapeCell(0, 0, 1) },
-        new[] { new ShapeCell(0, 0, 2), new ShapeCell(1, 0, 8) },
-        new[] { new ShapeCell(0, 0, 6), new ShapeCell(1, 0, 9) },
-        new[] { new ShapeCell(0, 0, 6), new ShapeCell(1, 0, 12) },
-        new[] { new ShapeCell(0, 0, 4), new ShapeCell(0, 1, 15) },
-        new[] { new ShapeCell(0, 0, 15), new ShapeCell(1, 0, 9), new ShapeCell(0, 1, 9) },
-        new[] { new ShapeCell(0, 0, 15), new ShapeCell(0, 1, 15), new ShapeCell(1, 1, 15) },
+        new[] { new ShapeCell(0, 0, 3), new ShapeCell(1, 0, 15), new ShapeCell(2, 0, 12) },
+        new[] { new ShapeCell(0, 0, 3), new ShapeCell(1, 0, 15), new ShapeCell(1, 1, 3) },
+        new[] { new ShapeCell(0, 0, 6), new ShapeCell(1, 0, 15), new ShapeCell(0, 1, 3), new ShapeCell(1, 1, 9) },
+        new[] { new ShapeCell(1, 0, 6), new ShapeCell(2, 0, 12), new ShapeCell(0, 1, 6), new ShapeCell(1, 1, 15), new ShapeCell(2, 1, 15), new ShapeCell(3, 1, 12) },
+        new[] { new ShapeCell(1, 0, 6), new ShapeCell(2, 0, 12), new ShapeCell(0, 1, 6), new ShapeCell(1, 1, 15), new ShapeCell(2, 1, 9), new ShapeCell(0, 2, 3), new ShapeCell(1, 2, 15), new ShapeCell(2, 2, 12), new ShapeCell(1, 3, 3), new ShapeCell(2, 3, 9) },
         new[] { new ShapeCell(0, 0, 15) } };
     // 도형별 한 단계 분해 결과(도형, 방향, 원본 기본 방향 기준 왼쪽 위 칸). 빈 배열은 더 나눌 수 없는 도형이다.
     private static readonly Fragment[][] BASE_SPLITS = {
-        new[] { new Fragment(Shape.Triangle, 0, 0, 0), new Fragment(Shape.Triangle, 2, 0, 0) },
-        new[] { new Fragment(Shape.QuarterTriangle, 0, 0, 0), new Fragment(Shape.QuarterTriangle, 1, 0, 0) },
-        new[] { new Fragment(Shape.Square, 0, 0, 0), new Fragment(Shape.Square, 0, 1, 0) },
+        new[] { new Fragment(Shape.Triangle, 0, 1, 0), new Fragment(Shape.Triangle, 2, 0, 0) },
+        new[] { new Fragment(Shape.QuarterTriangle, 0, 0, 0), new Fragment(Shape.QuarterTriangle, 1, 0, 1) },
+        new[] { new Fragment(Shape.Square, 0, 0, 0), new Fragment(Shape.Square, 0, 1, 1) },
         new Fragment[0],
-        new[] { new Fragment(Shape.QuarterTriangle, 1, 0, 0), new Fragment(Shape.QuarterTriangle, 3, 1, 0) },
+        new[] { new Fragment(Shape.QuarterTriangle, 1, 0, 0), new Fragment(Shape.QuarterTriangle, 3, 0, 0) },
         new[] { new Fragment(Shape.Triangle, 1, 0, 0), new Fragment(Shape.Triangle, 3, 1, 0) },
         new[] { new Fragment(Shape.Triangle, 1, 0, 0), new Fragment(Shape.Triangle, 2, 1, 0) },
-        new[] { new Fragment(Shape.QuarterTriangle, 2, 0, 0), new Fragment(Shape.Square, 0, 0, 1) },
-        new[] { new Fragment(Shape.Square, 0, 0, 0), new Fragment(Shape.Triangle, 3, 1, 0), new Fragment(Shape.Triangle, 3, 0, 1) },
-        new[] { new Fragment(Shape.Square, 0, 0, 0), new Fragment(Shape.Rectangle, 0, 0, 1) },
+        new[] { new Fragment(Shape.QuarterTriangle, 2, 1, 0), new Fragment(Shape.Square, 0, 0, 0) },
+        new[] { new Fragment(Shape.Square, 0, 1, 0), new Fragment(Shape.Triangle, 3, 2, 1), new Fragment(Shape.Triangle, 3, 0, 1) },
+        new[] { new Fragment(Shape.Square, 0, 1, 0), new Fragment(Shape.Rectangle, 0, 0, 1) },
         new Fragment[0] };
     private static readonly int SHAPE_KIND_COUNT = Enum.GetValues(typeof(Shape)).Length;
     private static readonly int SEAL_KIND_COUNT = Enum.GetValues(typeof(Seal)).Length - 1;
@@ -345,7 +348,7 @@ public sealed class SpellGame
         foreach (Shape shape in Enum.GetValues(typeof(Shape))) pieces.Add(new Card { Shape = shape });
         for (int seal = 1; seal <= SEAL_KIND_COUNT; seal++)
         {
-            Card card = new Card { Shape = Shape.Square }; card.SealList.Add(new SealSpot(0, 0, 0, (Seal)seal)); pieces.Add(card);
+            Card card = new Card { Shape = Shape.Square }; card.SealList.Add(new SealSpot(0, 0, 1, (Seal)seal)); pieces.Add(card);
         }
         for (int coating = 1; coating <= COATING_KIND_COUNT; coating++) pieces.Add(new Card { Shape = Shape.Square, Coating = (Coating)coating });
         pieces.Add(new Card { Shape = Shape.QuarterTriangle, Effect = Effect.Period });
@@ -854,12 +857,10 @@ public sealed class SpellGame
         return smallestPieces;
     }
 
-    /// <summary>기본 도형을 모두 1/4까지 나눴을 때 면적에 해당하는 최소 조각 수, 즉 1/4 구역 수를 반환한다.</summary>
+    /// <summary>기본 도형을 모두 1/4 삼각형까지 나눴을 때의 조각 수, 즉 도형 면적을 1/4 삼각형 면적으로 나눈 값을 반환한다.</summary>
     private static int SmallestPieceCount(Shape shape)
     {
-        int count = 0;
-        foreach (ShapeCell cell in ShapeCells(shape, 0)) for (int sector = 0; sector < 4; sector++) if ((cell.Mask & (1 << sector)) != 0) count++;
-        return count;
+        return ShapeArea(shape) / ShapeArea(Shape.QuarterTriangle);
     }
 
     /// <summary>강도에 따른 분해 결과로 덱 원본을 영구 교체하고 이벤트 작업 기회를 소모한다.</summary>
@@ -936,7 +937,7 @@ public sealed class SpellGame
         string issue = GlueCardIssue(first) ?? GlueCardIssue(second);
         if (issue != null) return issue;
         if (first == second) return "서로 다른 조각 두 장을 선택하세요";
-        if (relativeX < -4 || relativeX > 4 || relativeY < -4 || relativeY > 4) return "조각 사이에 틈이 있습니다";
+        if (Math.Abs(relativeX) > 2 * LOCAL_SIZE || Math.Abs(relativeY) > 2 * LOCAL_SIZE) return "조각 사이에 틈이 있습니다";
         bool touching = false;
         for (int y = 0; y < ShapeHeight(first, firstRotation); y++) for (int x = 0; x < ShapeWidth(first, firstRotation); x++)
         {

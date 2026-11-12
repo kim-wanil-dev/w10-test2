@@ -4,21 +4,15 @@ using UnityEngine.EventSystems;
 
 /// <summary>
 /// 접착 작업 격자와 두 원본의 실제 점유 영역을 그리고 스냅 드래그를 전달한다.
-/// 격자는 도안 판과 같이 내부 칸 좌표를 화면에서 45도 돌려 그리며, 화면 직사각형 안에 온전히 들어가는 1/4 구역만 작업 공간으로 쓴다.
+/// 격자는 도안 판과 같이 화면에 똑바로 놓인 정사각형 칸을 두 대각선으로 나눈 1/4 구역 단위다.
 /// </summary>
 public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
-    public const int GRID_SIZE = 10;
-    public const float CELL_SIZE = 72;
-    // 작업 공간 화면 직사각형의 가로·세로 절반 길이(칸 한 변 단위)다.
-    public const float HALF_WIDTH = 4f;
-    public const float HALF_HEIGHT = 2f;
+    public const int GRID_WIDTH = 12;
+    public const int GRID_HEIGHT = 6;
+    public const float CELL_SIZE = 48;
     private const float GRID_LINE_WIDTH = 1.2f;
     private const float EDGE_WIDTH = 3f;
-    private const float SQRT2 = 1.41421356f;
-    private const float EPSILON = 0.001f;
-
-    private static readonly Vector2 GRID_CENTER = new Vector2(GRID_SIZE / 2f, GRID_SIZE / 2f);
 
     private readonly Vector2[] _points = new Vector2[3];
     private SpellGameUI _ui;
@@ -47,19 +41,6 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
         _ui = ui; _emptyColor = emptyColor; _lineColor = lineColor; _cellGap = cellGap; SetVerticesDirty();
     }
 
-    /// <summary>작업 공간 격자 좌표를 중심 기준 화면 방향 좌표(x 오른쪽, y 아래, 칸 한 변 단위)로 바꾼다. 도안 판과 같은 45도 회전이다.</summary>
-    private static Vector2 GridToBoard(Vector2 grid)
-    {
-        Vector2 d = grid - GRID_CENTER;
-        return new Vector2(d.x - d.y, d.x + d.y) / SQRT2;
-    }
-
-    /// <summary>중심 기준 화면 방향 좌표를 작업 공간 격자 좌표로 바꾼다.</summary>
-    private static Vector2 BoardToGrid(Vector2 board)
-    {
-        return GRID_CENTER + new Vector2(board.x + board.y, board.y - board.x) / SQRT2;
-    }
-
     /// <summary>칸 (x, y)의 지정 구역 삼각형 꼭짓점 두 개와 칸 중심을 격자 좌표로 _points에 채운다.</summary>
     private void FillSectorPoints(int x, int y, int sector)
     {
@@ -72,55 +53,36 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
         return new Vector2(x + (corner == 1 || corner == 2 ? 1 : 0), y + (corner >= 2 ? 1 : 0));
     }
 
-    /// <summary>지정 1/4 구역 삼각형이 작업 공간 화면 직사각형 안에 온전히 들어가는지 반환한다.</summary>
-    public static bool ContainsSector(int x, int y, int sector)
-    {
-        if (x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE) return false;
-        Vector2[] points = { SectorCorner(x, y, sector), SectorCorner(x, y, (sector + 1) % 4), new Vector2(x + 0.5f, y + 0.5f) };
-        foreach (Vector2 point in points)
-        {
-            Vector2 board = GridToBoard(point);
-            if (Mathf.Abs(board.x) > HALF_WIDTH + EPSILON || Mathf.Abs(board.y) > HALF_HEIGHT + EPSILON) return false;
-        }
-        return true;
-    }
-
-    /// <summary>카드를 지정 방향과 왼쪽 위 좌표로 놓았을 때 모든 점유 구역이 작업 공간 안에 있는지 반환한다.</summary>
+    /// <summary>카드를 지정 방향과 왼쪽 위 좌표로 놓았을 때 점유 칸이 모두 작업 공간 안에 있는지 반환한다.</summary>
     public static bool Contains(SpellGame.Card card, int rotation, Vector2Int position)
     {
-        for (int y = 0; y < SpellGame.ShapeHeight(card, rotation); y++) for (int x = 0; x < SpellGame.ShapeWidth(card, rotation); x++)
-        {
-            int mask = SpellGame.CellMask(card, rotation, x, y);
-            for (int sector = 0; sector < 4; sector++)
-                if ((mask & (1 << sector)) != 0 && !ContainsSector(position.x + x, position.y + y, sector)) return false;
-        }
-        return true;
+        return position.x >= 0 && position.y >= 0
+            && position.x + SpellGame.ShapeWidth(card, rotation) <= GRID_WIDTH && position.y + SpellGame.ShapeHeight(card, rotation) <= GRID_HEIGHT;
     }
 
-    /// <summary>격자 좌표를 이 그래픽의 로컬 픽셀 좌표로 바꾼다.</summary>
+    /// <summary>격자 좌표(y 아래)를 이 그래픽의 로컬 픽셀 좌표로 바꾼다. 작업 공간은 영역 가운데에 놓인다.</summary>
     private Vector2 ToLocal(Vector2 grid)
     {
-        Vector2 board = GridToBoard(grid);
+        Vector2 board = grid - new Vector2(GRID_WIDTH / 2f, GRID_HEIGHT / 2f);
         return rectTransform.rect.center + new Vector2(board.x, -board.y) * CELL_SIZE;
     }
 
-    /// <summary>작업 공간 구역, 45도 격자선, 두 원본의 점유 삼각형과 선택 조각의 접착 상태 테두리를 그린다.</summary>
+    /// <summary>작업 공간 구역과 칸 경계·대각선 격자선, 두 원본의 점유 삼각형과 선택 조각의 접착 상태 테두리를 그린다.</summary>
     protected override void OnPopulateMesh(UnityEngine.UI.VertexHelper vh)
     {
         vh.Clear();
         if (_ui == null) return;
-        for (int y = 0; y < GRID_SIZE; y++) for (int x = 0; x < GRID_SIZE; x++) for (int sector = 0; sector < 4; sector++)
+        for (int y = 0; y < GRID_HEIGHT; y++) for (int x = 0; x < GRID_WIDTH; x++) for (int sector = 0; sector < 4; sector++)
         {
-            if (!ContainsSector(x, y, sector)) continue;
-            FillSectorPoints(x, y, sector);
-            Triangle(vh, ToLocal(_points[0]), ToLocal(_points[1]), ToLocal(_points[2]), _emptyColor);
-        }
-        for (int y = 0; y < GRID_SIZE; y++) for (int x = 0; x < GRID_SIZE; x++) for (int sector = 0; sector < 4; sector++)
-        {
-            if (!ContainsSector(x, y, sector)) continue;
             FillSectorPoints(x, y, sector);
             Vector2 a = ToLocal(_points[0]), b = ToLocal(_points[1]), center = ToLocal(_points[2]);
-            Line(vh, a, b, _lineColor, GRID_LINE_WIDTH); Line(vh, center, a, _lineColor, GRID_LINE_WIDTH); Line(vh, center, b, _lineColor, GRID_LINE_WIDTH);
+            Triangle(vh, a, b, center, _emptyColor);
+        }
+        for (int y = 0; y < GRID_HEIGHT; y++) for (int x = 0; x < GRID_WIDTH; x++) for (int sector = 0; sector < 4; sector++)
+        {
+            FillSectorPoints(x, y, sector);
+            Vector2 a = ToLocal(_points[0]), b = ToLocal(_points[1]), center = ToLocal(_points[2]);
+            Line(vh, a, b, _lineColor, GRID_LINE_WIDTH); Line(vh, center, a, _lineColor, GRID_LINE_WIDTH);
         }
         bool valid = _ui.GluePlacementIssue() == null;
         // 도안 판과 같이 조각 삼각형을 칸 중심 쪽으로 칸 간격만큼 당겨 격자선이 보이게 한다.
@@ -151,14 +113,13 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
         }
     }
 
-    /// <summary>화면 좌표가 작업 공간 직사각형 안인지와 그 위치의 실수 격자 좌표를 반환한다.</summary>
+    /// <summary>화면 좌표가 작업 공간 안인지와 그 위치의 실수 격자 좌표를 반환한다.</summary>
     private bool TryGridPoint(Vector2 screen, Camera eventCamera, out Vector2 grid)
     {
         RectTransformUtility.ScreenPointToLocalPointInRectangle(rectTransform, screen, eventCamera, out Vector2 local);
-        Vector2 board = (local - rectTransform.rect.center) / CELL_SIZE;
-        board.y = -board.y;
-        grid = BoardToGrid(board);
-        return Mathf.Abs(board.x) <= HALF_WIDTH && Mathf.Abs(board.y) <= HALF_HEIGHT;
+        Vector2 offset = (local - rectTransform.rect.center) / CELL_SIZE;
+        grid = new Vector2(offset.x, -offset.y) + new Vector2(GRID_WIDTH / 2f, GRID_HEIGHT / 2f);
+        return grid.x >= 0 && grid.y >= 0 && grid.x <= GRID_WIDTH && grid.y <= GRID_HEIGHT;
     }
 
     /// <summary>현재 또는 누르기 시작한 화면 좌표를 작업 공간의 실수 격자 좌표로 변환한다.</summary>
@@ -244,4 +205,3 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
         Triangle(vh, a + normal, b - normal, a - normal, color);
     }
 }
-
