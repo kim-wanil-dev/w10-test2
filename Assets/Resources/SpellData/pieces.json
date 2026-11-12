@@ -188,7 +188,7 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": false
     },
     {
       "shape": "LargeTriangle",
@@ -226,7 +226,7 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": false
     },
     {
       "shape": "LShape",
@@ -284,7 +284,7 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": false
     },
     {
       "shape": "Clay",
