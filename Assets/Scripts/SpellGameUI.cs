@@ -2150,9 +2150,8 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_hammerDragCard != null && _dragGhost != null) { _dragGhost.gameObject.SetActive(false); Destroy(_dragGhost.gameObject); _dragGhost = null; }
         _hammerDragCard = null;
         if (_hammerOverlay != null) { _hammerOverlay.gameObject.SetActive(false); Destroy(_hammerOverlay.gameObject); }
-        _hammerOverlay = Panel(_root, 0, 0, 1280, 720, new Color(0.015f, 0.02f, 0.03f, 0.94f));
+        _hammerOverlay = Panel(_root, 0, 0, 1280, 720, Color.black);
         Label(_hammerOverlay, "망치 작업대", 350, 35, 420, 42, 30);
-        Label(_hammerOverlay, "덱의 조각을 영구 분해 · 효과는 원본별 가장 큰 조각에 유지 · 이벤트 작업 1회", 140, 85, 1000, 32, 16);
         RectTransform board = Element("Hammer Workbench", _hammerOverlay, 350, 130, 420, 420);
         board.gameObject.AddComponent<CanvasRenderer>();
         board.gameObject.AddComponent<SpellHammerGraphic>().raycastTarget = false;
@@ -2511,7 +2510,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private void RenderGlue()
     {
         if (_glueOverlay != null) { _glueOverlay.gameObject.SetActive(false); Destroy(_glueOverlay.gameObject); }
-        _glueOverlay = Panel(_root, 0, 0, 1280, 720, new Color(0.025f, 0.035f, 0.04f, 0.96f));
+        _glueOverlay = Panel(_root, 0, 0, 1280, 720, Color.black);
         Label(_glueOverlay, "접착 작업대", 350, 25, 580, 45, 30);
         Label(_glueOverlay, "일반·특수 조각 2장 선택 → 드래그·R로 변 맞추기 → 접착 확인", 140, 85, 1000, 35, 19);
         RectTransform board = Element("Glue Workbench", _glueOverlay, 200, 170, 576, 288);
@@ -2547,7 +2546,6 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>전체 덱의 조각을 가로 스크롤로 선택하는 작업대 목록을 만들고 카드 배치용 영역을 반환한다.</summary>
     private RectTransform CreateWorkshopDeck(RectTransform overlay)
     {
-        Label(overlay, "전체 덱 · 마우스 휠로 좌우 이동", 80, 562, 1120, 24, 15);
         RectTransform viewport = Panel(overlay, 65, 590, 1150, 125, new Color(0.06f, 0.08f, 0.12f));
         viewport.gameObject.AddComponent<UnityEngine.UI.RectMask2D>();
         RectTransform cards = Element("Owned Pieces", viewport, 0, 0, Mathf.Max(1150, _game.OwnedCards.Count * 165), 120);
