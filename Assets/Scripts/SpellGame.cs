@@ -31,7 +31,6 @@ public sealed class SpellGame
     private const int REWARD_PIECE_COUNT = 3;
     private const int REWARD_PATTERN_COUNT = 3;
     private const double REWARD_SEAL_CHANCE = 0.5;
-    private const double OPTIONAL_REWARD_CHANCE = 0.5;
     private const int PERIOD_BONUS = 3;
     private const int RESONANCE_BONUS = 3;
     private const int RESONANCE_COUNT = 3;
@@ -294,7 +293,7 @@ public sealed class SpellGame
     public int Block { get; private set; }
     public int Battle { get; private set; }
     public int Turn { get; private set; }
-    public bool IsWorkshopEvent { get { return CurrentPhase == Phase.Event && Battle == 2; } }
+    public bool IsWorkshopEvent { get { return (CurrentPhase == Phase.Event && Battle == 2) || CurrentPhase == Phase.Rest; } }
     public bool CanUseWorkshop { get { return IsWorkshopEvent && !_hasUsedWorkshop; } }
     public int HammerUsesLeft { get { return CanUseWorkshop ? 1 : 0; } }
     public int GlueUsesLeft { get { return CanUseWorkshop ? 1 : 0; } }
@@ -773,7 +772,7 @@ public sealed class SpellGame
     /// <summary>첫 이벤트의 작업 가능 여부와 소유 조각의 분해 조건을 확인해 거부 사유를 반환한다.</summary>
     public string HammerIssue(Card card)
     {
-        if (!IsWorkshopEvent) return "첫 번째 이벤트에서만 분해할 수 있습니다";
+        if (!IsWorkshopEvent) return "첫 번째 이벤트 또는 휴식에서만 분해할 수 있습니다";
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 분해할 조각 하나를 선택하세요";
         if (card.IsUnique) return "고유 조각은 쪼갤 수 없습니다";
@@ -958,7 +957,7 @@ public sealed class SpellGame
     /// <summary>첫 이벤트에서 접착할 수 있는 소유 기본 조각인지 확인해 거부 사유를 반환한다. 특수 효과는 허용한다.</summary>
     public string GlueCardIssue(Card card)
     {
-        if (!IsWorkshopEvent) return "첫 번째 이벤트에서만 접착할 수 있습니다";
+        if (!IsWorkshopEvent) return "첫 번째 이벤트 또는 휴식에서만 접착할 수 있습니다";
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 조각을 선택하세요";
         if (card.IsUnique) return "고유 조각은 접착할 수 없습니다";
@@ -1444,7 +1443,7 @@ public sealed class SpellGame
         return true;
     }
 
-    /// <summary>확정 조각 보상과 독립 확률의 도안·인장 보상을 생성하고 보상 단계로 전환한다.</summary>
+    /// <summary>조각 보상과 전투 2회마다 제공할 도안 후보를 생성하고 보상 단계로 전환한다. 인장 보상은 비활성 상태를 유지한다.</summary>
     private void EnterReward()
     {
         _rewards.Clear();
@@ -1452,7 +1451,7 @@ public sealed class SpellGame
         LastAcquiredPattern = -1;
         ActiveReward = RewardKind.None;
         HasPieceReward = true;
-        HasPatternReward = _random.NextDouble() < OPTIONAL_REWARD_CHANCE;
+        HasPatternReward = Battle % 2 == 0;
         HasSealReward = false;
         RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
         bool hasClay = false;
@@ -1507,6 +1506,7 @@ public sealed class SpellGame
             CurrentPhase = Battle == LAST_BATTLE ? Phase.Victory
                 : Battle == 2 || Battle == 4 ? Phase.Event
                 : Battle == 5 ? Phase.Rest : Phase.Loadout;
+            if (IsWorkshopEvent) _hasUsedWorkshop = false;
             ActiveReward = RewardKind.None;
             return true;
         }

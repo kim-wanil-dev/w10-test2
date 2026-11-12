@@ -426,7 +426,8 @@ public sealed class SpellGameUI : MonoBehaviour
             bool rest = phase == SpellGame.Phase.Rest;
             _encounterTitle.text = rest ? "휴식" : _game.IsWorkshopEvent ? "조각 장인의 작업실" : "이벤트";
             _encounterDescription.text = rest
-                ? $"체력 {_game.Health}/{_game.MaxHealth}\n최대 체력의 30% 회복 (+{Math.Min(_game.RestHealAmount, _game.MaxHealth - _game.Health)})"
+                ? $"체력 {_game.Health}/{_game.MaxHealth}\n계속 진행 시 최대 체력의 30% 회복 (+{Math.Min(_game.RestHealAmount, _game.MaxHealth - _game.Health)})"
+                    + (_game.CanUseWorkshop ? "\n\n분해 또는 접착 중 하나를 1회 사용할 수 있습니다." : "\n\n작업을 마쳤습니다. 변경된 조각이 덱에 저장되었습니다.")
                 : _game.IsWorkshopEvent
                     ? _game.CanUseWorkshop
                         ? "낡은 작업대 위에 망치와 접착제가 놓여 있습니다.\n장인은 당신의 조각을 새롭게 다듬어 주겠다고 합니다.\n\n분해 또는 접착 중 하나를 1회 선택하세요.\n변경한 조각은 이번 런의 덱에 영구히 남습니다."
