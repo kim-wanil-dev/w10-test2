@@ -17,6 +17,8 @@ public sealed class SpellPatternEditorWindow : EditorWindow
     private const float OTHER_PATTERN_ALPHA = 0.3f;
 
     private static readonly string[] ROTATION_LABELS = { "0°", "90°", "180°", "270°" };
+    // SpellGame.CastEffect 순서와 같다.
+    private static readonly string[] CAST_EFFECT_LABELS = { "자동 (효과 종류로)", "없음", "불씨 (불덩이)", "번개", "유성", "참격 (베기)", "강타 (충격파)", "산탄 (탄환)", "방패 (밀치기·강타)", "방벽 (보호막)", "철벽 (벽돌)" };
     // SpellGame.KeywordBonus 순서와 같다.
     private static readonly string[] KEYWORD_BONUS_LABELS = { "추가 피해", "무작위 적 피해", "방어도" };
     private static readonly Color BOARD_COLOR = new Color(0.3f, 0.3f, 0.3f);
@@ -165,6 +167,7 @@ public sealed class SpellPatternEditorWindow : EditorWindow
         DrawKeywordBonus(pattern);
         Color picked = EditorGUILayout.ColorField(new GUIContent("색"), color, true, false, false);
         if (picked != color) pattern.Color = SpellDataStore.ToColorCode(picked);
+        pattern.CastEffect = (SpellGame.CastEffect)EditorGUILayout.Popup(new GUIContent("이펙트", "시전할 때 재생할 연출입니다. 자동은 효과 종류(단일 강타, 전체 유성, 방어 방벽, 산탄 탄환)로 고릅니다."), (int)pattern.CastEffect, CAST_EFFECT_LABELS);
         pattern.IsStarter = EditorGUILayout.Toggle("시작 도안", pattern.IsStarter);
         pattern.IsInRewardPool = EditorGUILayout.Toggle(new GUIContent("보상 후보", "끄면 전투 보상의 도안 후보로 나오지 않습니다. 시작 도안은 이미 보유하므로 보상에 나오지 않습니다."), pattern.IsInRewardPool);
         DrawDescriptionPreview(pattern);

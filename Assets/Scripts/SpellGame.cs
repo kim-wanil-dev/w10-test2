@@ -22,6 +22,8 @@ public sealed class SpellGame
     public enum Keyword { None, OneStroke, Mosaic, Purity }
     // 키워드 조건을 만족했을 때 받는 보상 종류다. 추가 피해는 주문 수치에 더하고, 무작위 적 피해는 별도 1타, 방어도는 시전자 방어에 더한다.
     public enum KeywordBonus { Damage, RandomDamage, Block }
+    // 도안 시전 연출 프리셋이다. Auto는 효과 종류로 고르고, None은 연출이 없다. JSON은 이름으로 저장한다.
+    public enum CastEffect { Auto, None, Ember, Lightning, Meteor, Slash, Strike, Buckshot, ShieldBash, Barrier, IronWall }
     public enum EnemyAction { Attack, Defend, Curse, Charge }
 
     public const int MAX_HAND = 7;
@@ -609,6 +611,21 @@ public sealed class SpellGame
 
     /// <summary>도안의 기본 효과와 키워드를 한 줄 설명으로 반환한다.</summary>
     public static string PatternDescription(int spell) { return SpellDataStore.PatternDescription(PATTERNS[spell]); }
+
+    /// <summary>도안의 시전 연출을 반환한다. Auto면 효과 종류(단일 타격, 전체 유성, 방어 방벽, 산탄 산탄, 없음 연출 없음)로 고른다.</summary>
+    public static CastEffect PatternCastEffect(int spell)
+    {
+        CastEffect effect = PATTERNS[spell].CastEffect;
+        if (effect != CastEffect.Auto) return effect;
+        switch (PATTERNS[spell].Kind)
+        {
+            case SpellKind.Single: return CastEffect.Strike;
+            case SpellKind.All: return CastEffect.Meteor;
+            case SpellKind.Block: return CastEffect.Barrier;
+            case SpellKind.Scatter: return CastEffect.Buckshot;
+            default: return CastEffect.None;
+        }
+    }
 
     /// <summary>도안의 1/4 구역 총수를 반환한다.</summary>
     public static int PatternArea(int spell)

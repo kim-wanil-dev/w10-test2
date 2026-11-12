@@ -21,6 +21,8 @@ public sealed class SpellPatternData
     [JsonProperty("layoutY", Required = Required.Always)] public int LayoutY { get; set; }
     [JsonProperty("layoutRotation", Required = Required.Always)] public int LayoutRotation { get; set; }
     [JsonProperty("color", Required = Required.Always)] public string Color { get; set; }
+    // 시전 연출 프리셋이다. 이전 JSON에 없으면 효과 종류로 고르는 Auto다.
+    [JsonProperty("effect")] public SpellGame.CastEffect CastEffect { get; set; } = SpellGame.CastEffect.Auto;
     [JsonProperty("isStarter", Required = Required.Always)] public bool IsStarter { get; set; }
     // 전투 보상의 도안 후보에 넣을지 여부다. 이전 JSON에 없으면 후보에 넣는다.
     [JsonProperty("isInRewardPool")] public bool IsInRewardPool { get; set; } = true;

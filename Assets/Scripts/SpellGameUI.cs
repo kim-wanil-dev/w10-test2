@@ -122,6 +122,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private int _feedbackShownVersion;
     // 마지막 시전에서 실제로 맞은 적 표시다. 죽은 적·빗나간 적은 강조하지 않는다.
     private bool[] _impactHits = Array.Empty<bool>();
+    private SpellCastEffectGraphic _castEffects;
 
     private bool _showHelp;
     private int _openPile = -1;
@@ -231,6 +232,7 @@ public sealed class SpellGameUI : MonoBehaviour
         SetupOtherScreens();
         SetupOverlays();
         SetupDebugRemote();
+        SetupCastEffects();
         SetupFeatureControls();
         Render();
     }
@@ -585,6 +587,29 @@ public sealed class SpellGameUI : MonoBehaviour
         _debugRemote.SetAsLastSibling();
         _debugContents = Panel(_debugRemote, 220, 120, 1480, 850, new Color(0.05f, 0.07f, 0.12f, 0.97f));
         _debugRemote.gameObject.SetActive(false);
+    }
+
+    /// <summary>전투 화면 전체를 덮는 시전 연출 그래픽을 코드로 만든다. 입력을 막지 않고 툴팁·드래그 층 아래에 둔다.</summary>
+    private void SetupCastEffects()
+    {
+        RectTransform combat = (RectTransform)_combatScreen.transform;
+        RectTransform layer = new GameObject("Cast Effects", typeof(RectTransform), typeof(CanvasRenderer)).GetComponent<RectTransform>();
+        layer.SetParent(combat, false);
+        layer.anchorMin = Vector2.zero; layer.anchorMax = Vector2.one; layer.offsetMin = layer.offsetMax = Vector2.zero;
+        // 툴팁·드래그 층보다 아래에 두어 시전 중에도 조작 안내가 가려지지 않게 한다.
+        layer.SetSiblingIndex(_combatScreen.DragLayer.parent == combat ? _combatScreen.DragLayer.GetSiblingIndex() : combat.childCount - 1);
+        _castEffects = layer.gameObject.AddComponent<SpellCastEffectGraphic>();
+        _castEffects.raycastTarget = false;
+    }
+
+    /// <summary>방금 시전한 도안의 연출을 실제로 맞은 적과 시전자 위치에 재생한다.</summary>
+    private void PlayCastEffect(int board, bool gainedBlock)
+    {
+        if (_castEffects == null) return;
+        List<RectTransform> hits = new List<RectTransform>();
+        foreach (int hit in _game.LastCastHits)
+            if (hit >= 0 && hit < _combatScreen.Enemies.Length) hits.Add(_combatScreen.Enemies[hit].EffectAnchor);
+        _castEffects.Play(SpellGame.PatternCastEffect(board), (RectTransform)_combatScreen.PlayerStatus.transform, hits, gainedBlock, PatternColor(board));
     }
 
     /// <summary>리모콘을 전환하고 진행 중인 선택과 조준을 취소한다.</summary>
@@ -1182,7 +1207,9 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         if (_game.IsSealed(board)) { _pendingCast = -1; _message = "봉인된 주문 도안은 시전할 수 없습니다"; Render(); return; }
         string result = $"{SpellGame.PatternName(board)} 시전  ·  {FormulaText(board)}";
+        bool gainsBlock = _game.Evaluate(board).Block > 0;
         if (!_game.Cast(board, target)) { _message = "살아 있는 대상을 선택하세요"; Render(); return; }
+        PlayCastEffect(board, gainsBlock);
         _onboardingComplete = true;
         _pendingCast = -1; ClearSelection();
         _impactHits = new bool[_game.Enemies.Count];

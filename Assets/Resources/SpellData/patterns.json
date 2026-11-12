@@ -26,6 +26,7 @@
       "layoutY": 1,
       "layoutRotation": 0,
       "color": "#CD6625",
+      "effect": "Ember",
       "isStarter": true,
       "isInRewardPool": true
     },
@@ -49,6 +50,7 @@
       "layoutY": 1,
       "layoutRotation": 0,
       "color": "#97B7D7",
+      "effect": "Barrier",
       "isStarter": true,
       "isInRewardPool": true
     },
@@ -87,6 +89,7 @@
       "layoutY": 0,
       "layoutRotation": 0,
       "color": "#FFFF00",
+      "effect": "Lightning",
       "isStarter": false,
       "isInRewardPool": true
     },
@@ -120,6 +123,7 @@
       "layoutY": 0,
       "layoutRotation": 0,
       "color": "#46AF3D",
+      "effect": "ShieldBash",
       "isStarter": false,
       "isInRewardPool": true
     },
@@ -163,6 +167,7 @@
       "layoutY": 0,
       "layoutRotation": 0,
       "color": "#749588",
+      "effect": "ShieldBash",
       "isStarter": false,
       "isInRewardPool": true
     },
@@ -211,6 +216,7 @@
       "layoutY": 0,
       "layoutRotation": 0,
       "color": "#B50400",
+      "effect": "Meteor",
       "isStarter": false,
       "isInRewardPool": true
     },
@@ -249,6 +255,7 @@
       "layoutY": 1,
       "layoutRotation": 0,
       "color": "#ABEAFF",
+      "effect": "Slash",
       "isStarter": false,
       "isInRewardPool": true
     },
@@ -297,6 +304,7 @@
       "layoutY": 0,
       "layoutRotation": 0,
       "color": "#F59959",
+      "effect": "Buckshot",
       "isStarter": false,
       "isInRewardPool": true
     },
@@ -335,6 +343,7 @@
       "layoutY": 1,
       "layoutRotation": 0,
       "color": "#B89EFA",
+      "effect": "IronWall",
       "isStarter": false,
       "isInRewardPool": true
     },
@@ -373,6 +382,7 @@
       "layoutY": 1,
       "layoutRotation": 0,
       "color": "#E97171",
+      "effect": "Strike",
       "isStarter": false,
       "isInRewardPool": true
     }
