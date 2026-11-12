@@ -5,7 +5,8 @@ using UnityEngine;
 /// <summary>조각 하나의 입체 메시, 씰링 동그라미, 물리 낙하와 집기·격자 고정 상태를 표시한다.</summary>
 public sealed class SpellPiece3D : MonoBehaviour
 {
-    private const float THICKNESS = 0.16f;
+    // 칸 한 변 대비 두께다. 칸이 화면 정사각형(이전 마름모 칸의 1/√2)이라 같은 실제 두께가 되도록 맞춘 값이다.
+    private const float THICKNESS = 0.23f;
     private const float CLAY_RADIUS = 0.42f;
     private const int CLAY_SIDES = 8;
     private const float SEAL_RADIUS = 0.1f;

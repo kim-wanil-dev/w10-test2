@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-/// <summary>장착 화면의 마름모 칸 판에 놓인 도안과 들고 있는 도안의 놓기 미리 보기를 1/4 구역 단위로 그리고 클릭을 전달한다.</summary>
+/// <summary>장착 화면의 정사각형 칸 판에 놓인 도안과 들고 있는 도안의 놓기 미리 보기를 1/4 구역 단위로 그리고 클릭을 전달한다.</summary>
 public sealed class SpellLoadoutGrid : UnityEngine.UI.MaskableGraphic, IPointerClickHandler, IPointerMoveHandler, IPointerExitHandler
 {
     private const float CELL_GAP = 3f;
@@ -103,7 +103,7 @@ public sealed class SpellLoadoutGrid : UnityEngine.UI.MaskableGraphic, IPointerC
         }
     }
 
-    /// <summary>칸 (x, y)의 네 모서리를 45도 돌린 마름모 위치로 _corners에 채우고 중심을 반환한다. 모서리는 칸 간격만큼 중심 쪽으로 당긴다.</summary>
+    /// <summary>칸 (x, y)의 네 모서리를 판 위치로 _corners에 채우고 중심을 반환한다. 모서리는 칸 간격만큼 중심 쪽으로 당긴다.</summary>
     private Vector2 CellGeometry(int x, int y)
     {
         Vector2 center = GridPoint(new Vector2(x + 0.5f, y + 0.5f));
@@ -116,7 +116,7 @@ public sealed class SpellLoadoutGrid : UnityEngine.UI.MaskableGraphic, IPointerC
         return center;
     }
 
-    /// <summary>격자 좌표를 영역 중심에 놓인 마름모 판의 로컬 UI 좌표로 바꾼다.</summary>
+    /// <summary>격자 좌표를 영역 중심에 놓인 판의 로컬 UI 좌표로 바꾼다.</summary>
     private Vector2 GridPoint(Vector2 grid)
     {
         Vector2 board = SpellPatternLayout.GridToBoard(grid) * _cellSize;
