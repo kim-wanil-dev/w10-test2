@@ -68,7 +68,6 @@ public sealed class SpellGameUI : MonoBehaviour
     [SerializeField] private Color _warnColor = new Color(0.949f, 0.722f, 0.294f);
 
     private readonly System.Random _random = new System.Random();
-    private RectTransform _featureControls;
     private RectTransform _testControls;
     private RectTransform _sealLayer;
 
@@ -2020,7 +2019,8 @@ public sealed class SpellGameUI : MonoBehaviour
             CloseHammer(); Render(); return;
         }
         bool beforeStrike = _hammerPhase == HammerPhase.Selecting || _hammerPhase == HammerPhase.Timing;
-        if (beforeStrike && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+        if (beforeStrike && Keyboard.current != null
+            && (Keyboard.current.escapeKey.wasPressedThisFrame || Keyboard.current.eKey.wasPressedThisFrame))
         {
             CloseHammer(); Render(); return;
         }
@@ -2228,7 +2228,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         bool invalid = _game.CurrentPhase != SpellGame.Phase.Combat || _game.Turn != _glueTurn || _game.Battle != _glueBattle;
         foreach (SpellGame.Card card in _glueCards) if (card != null && _game.GlueCardIssue(card) != null) invalid = true;
-        bool escape = Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
+        bool escape = Keyboard.current != null && (Keyboard.current.escapeKey.wasPressedThisFrame || Keyboard.current.qKey.wasPressedThisFrame);
         if (!invalid && _glueCoatingChoice != null) { if (escape) HideGlueCoatingChoice(); return; }
         if (invalid || escape) { CloseGlue(); Render(); return; }
         bool rotate = (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
@@ -2320,12 +2320,9 @@ public sealed class SpellGameUI : MonoBehaviour
         return selected ? new Color(0.65f, 0.57f, 0.3f) : HasTraits(card) ? AccentColor(card) * 0.65f : _dimColor;
     }
 
-    /// <summary>기존 UI 위에 망치·접착 버튼과 TestScene 전용 적 진입 버튼을 연결한다.</summary>
+    /// <summary>기존 UI 위에 봉인 안내 레이어와 TestScene 전용 적 진입 버튼을 연결한다.</summary>
     private void SetupFeatureControls()
     {
-        _featureControls = Element("Piece Tools", _root, 0, 0, 1280, 720);
-        Button(_featureControls, "E 망치", 1020, 645, 105, 40, BeginHammer, null, 16);
-        Button(_featureControls, "Q 접착", 1140, 645, 105, 40, BeginGlue, null, 16);
         _sealLayer = Element("Sealed Patterns", _root, 0, 0, 1280, 720);
         _testControls = Element("Enemy Encounters", _root, 0, 0, 1280, 720);
         Button(_testControls, "형상 봉인자", 120, 620, 260, 50, () => StartRun(true), null, 18);
@@ -2337,7 +2334,6 @@ public sealed class SpellGameUI : MonoBehaviour
     private void RefreshFeatureControls()
     {
         bool combat = _game.CurrentPhase == SpellGame.Phase.Combat;
-        _featureControls.gameObject.SetActive(combat && !_showPauseMenu && !_showHelp && _openPile < 0 && !_showDebugRemote);
         _sealLayer.gameObject.SetActive(combat);
         _testControls.gameObject.SetActive(_game.CurrentPhase == SpellGame.Phase.Title && SceneManager.GetActiveScene().path == "Assets/Scenes/TestScene.unity");
         if (!combat) { ClearTheftApproach(); return; }

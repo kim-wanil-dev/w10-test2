@@ -62,6 +62,8 @@ public sealed class SpellTable3D : MonoBehaviour
     private bool _hasRelease;
     private SpellPiece3D _picked;
     private Vector2Int _anchor;
+    private Vector2 _pivot;
+    private Vector2 _pivotOffset;
     private Vector2Int _local;
     private int _rotation;
     private int _localRotation;
@@ -79,6 +81,10 @@ public sealed class SpellTable3D : MonoBehaviour
     private int _dragTemplate = -1;
     private bool _isCastDragging;
     private bool _isTemplateDragging;
+    private readonly int[] _overlapCounts = new int[SpellPatternLayout.COLUMNS * SpellPatternLayout.ROWS * 4];
+    private Vector2Int _autoCell;
+    private bool _hasAutoCell;
+    private bool _isAutoRotateLocked;
 
     public bool IsDragging { get { return _picked != null || _castSource >= 0 || _dragTemplate >= 0; } }
 
@@ -531,7 +537,8 @@ public sealed class SpellTable3D : MonoBehaviour
         else if (_picked != null && pressed && _isClickSelected) { FinishPick(_downPosition); return; }
         if (_picked != null)
         {
-            if (rotations > 0) { _rotation = (_rotation + rotations) % 4; _picked.SetCells(HeldCells(), HeldSeals()); }
+            if (rotations > 0) { SetPickRotation((_rotation + rotations) % 4); _isAutoRotateLocked = true; }
+            UpdateAutoRotation(pointer);
             PreviewPick(pointer);
             if (released && _isHolding)
             {
@@ -675,17 +682,21 @@ public sealed class SpellTable3D : MonoBehaviour
             float delta = Mathf.Abs(Mathf.DeltaAngle(yaw, BOARD_YAW + r * 90f));
             if (valid && delta < nearest) { _rotation = r; nearest = delta; }
         }
-        _picked.Pick(_cellSize, HeldCells(), HeldSeals(), Quaternion.Euler(0, BOARD_YAW, 0)); HideHover(pointer); PreviewPick(pointer);
+        BeginPivot(piece, pointer);
+        _picked.Pick(_cellSize, HeldCells(), HeldSeals(), Quaternion.Euler(0, BOARD_YAW, 0)); HideHover(pointer);
+        _hasAutoCell = false; _isAutoRotateLocked = false;
+        UpdateAutoRotation(pointer);
+        PreviewPick(pointer);
     }
 
-    /// <summary>포인터에 가장 가까운 격자 앵커를 찾고 배치 가능 여부를 조각 색으로 표시한다.</summary>
+    /// <summary>피벗 점이 커서를 따라가는 격자 앵커를 찾고 배치 가능 여부를 조각 색과 위치로 표시한다.</summary>
     private void PreviewPick(Vector2 pointer)
     {
         _destination = -1;
         if (!ScreenToGrid(pointer, out Vector2 grid)) return;
         IReadOnlyList<SpellGame.ShapeCell> cells = HeldCells();
-        Vector2 offset = SpellPiece3D.CellBounds(cells) / 2;
-        _anchor = new Vector2Int(Mathf.RoundToInt(grid.x - offset.x), Mathf.RoundToInt(grid.y - offset.y));
+        // 회전해도 피벗 점의 격자 위치가 유지되도록 피벗 기준으로 앵커를 계산한다.
+        _anchor = PivotAnchor(grid, _pivot);
         if (OnGrid(grid))
         {
             foreach (int spell in _game.Spells)
@@ -697,9 +708,153 @@ public sealed class SpellTable3D : MonoBehaviour
             }
             _picked.transform.position = PiecePosition(_anchor, cells, 0.045f) + Vector3.up * 0.22f;
         }
-        else _picked.transform.position = _boardRoot.TransformPoint(GridLocal(grid, 0.42f));
+        else
+        {
+            // 판 밖에서는 피벗 점이 커서와 고정 차이를 유지하는 연속 위치에 둔다.
+            Vector2 center = grid + _pivotOffset - _pivot + SpellPiece3D.CellBounds(cells) / 2;
+            _picked.transform.position = _boardRoot.TransformPoint(GridLocal(center, 0.42f));
+        }
         _picked.transform.rotation = Quaternion.Euler(0, BOARD_YAW, 0);
         _picked.SetTint(_destination >= 0 ? new Color(0.55f, 0.95f, 0.68f) : new Color(1f, 0.5f, 0.4f));
+    }
+
+    /// <summary>집은 조각의 방향을 목표 방향으로 바꾸고, 피벗 점을 새 방향 좌표계로 옮긴 뒤 메시를 다시 만든다.</summary>
+    private void SetPickRotation(int rotation)
+    {
+        int target = (rotation % 4 + 4) % 4;
+        _pivot = RotatedPivot(target);
+        _rotation = target;
+        _picked.SetCells(HeldCells(), HeldSeals());
+    }
+
+    /// <summary>현재 방향의 피벗 점을 목표 방향 좌표계로 옮긴 값을 반환한다. 상태는 바꾸지 않는다.</summary>
+    private Vector2 RotatedPivot(int targetRotation)
+    {
+        int step = (targetRotation - _rotation + 4) % 4;
+        Vector2 pivot = _pivot;
+        for (int i = 0; i < step; i++)
+        {
+            // 시계 방향 한 단계는 회전 전 범위 높이 H에서 점 (x, y)를 (H - y, x)로 옮긴다.
+            float height = SpellPiece3D.CellBounds(CellsAt((_rotation + i) % 4)).y;
+            pivot = new Vector2(height - pivot.y, pivot.x);
+        }
+        return pivot;
+    }
+
+    /// <summary>점토는 방향 0으로 고정한 HeldCells와 같은 기준으로 지정 방향의 칸 목록을 반환한다.</summary>
+    private IReadOnlyList<SpellGame.ShapeCell> CellsAt(int rotation)
+    {
+        return SpellGame.CardCells(_picked.Card, _picked.Card.Glued == null && _picked.Card.Shape == SpellGame.Shape.Clay ? 0 : rotation);
+    }
+
+    /// <summary>범위 중심에 가장 가까운 칸 중심 또는 꼭짓점을 피벗 점으로 정한다. 가로·세로 홀짝이 다르면 칸 중심 쪽으로 반 칸 옮긴다.</summary>
+    private static Vector2 PivotPoint(IReadOnlyList<SpellGame.ShapeCell> cells)
+    {
+        Vector2 center = SpellPiece3D.CellBounds(cells) / 2;
+        bool isHalfX = !Mathf.Approximately(center.x, Mathf.Round(center.x)), isHalfY = !Mathf.Approximately(center.y, Mathf.Round(center.y));
+        if (isHalfX == isHalfY) return center;
+        return isHalfX ? new Vector2(center.x, center.y - 0.5f) : new Vector2(center.x - 0.5f, center.y);
+    }
+
+    /// <summary>피벗 점이 커서 위치와 고정 차이만큼 떨어진 격자 지점에 오도록 지정 피벗의 정수 앵커를 반환한다.</summary>
+    private Vector2Int PivotAnchor(Vector2 grid, Vector2 pivot)
+    {
+        Vector2 anchor = grid + _pivotOffset - pivot;
+        return new Vector2Int(Mathf.RoundToInt(anchor.x), Mathf.RoundToInt(anchor.y));
+    }
+
+    /// <summary>집기 시작 방향이 정해진 뒤 피벗 점과 커서·피벗 차이를 정한다. 판 위 조각은 집는 순간 위치가 바뀌지 않게 차이를 보존하고, 손패 조각은 피벗이 커서에 오게 한다.</summary>
+    private void BeginPivot(SpellPiece3D piece, Vector2 pointer)
+    {
+        _pivot = PivotPoint(HeldCells()); _pivotOffset = Vector2.zero;
+        if (piece.IsHand || !ScreenToGrid(pointer, out Vector2 grid)) return;
+        _layout.PieceToGrid(piece.Board, piece.Placement, out Vector2Int anchor, out _);
+        _pivotOffset = anchor + _pivot - grid;
+    }
+
+    /// <summary>포인터가 판 위에 있으면 집고 있는 조각의 자동 회전을 판정하고, 판을 벗어나면 잠금을 해제한다.</summary>
+    private void UpdateAutoRotation(Vector2 pointer)
+    {
+        if (!ScreenToGrid(pointer, out Vector2 grid) || !OnGrid(grid)) { _isAutoRotateLocked = _hasAutoCell = false; return; }
+        if (!_isAutoRotateLocked) AutoRotatePick(grid);
+    }
+
+    /// <summary>커서가 가리키는 격자 칸이 직전 판정 칸과 달라진 경우에만 조각 방향을 다시 판정해 돌린다.</summary>
+    private void AutoRotatePick(Vector2 grid)
+    {
+        if (_picked.Card.Glued == null && _picked.Card.Shape == SpellGame.Shape.Clay) return;
+        Vector2Int cell = new Vector2Int(Mathf.FloorToInt(grid.x), Mathf.FloorToInt(grid.y));
+        if (_hasAutoCell && _autoCell == cell) return;
+        _autoCell = cell; _hasAutoCell = true;
+        int rotation = AutoRotationTarget(grid);
+        if (rotation == _rotation) return;
+        SetPickRotation(rotation);
+    }
+
+    /// <summary>현재 방향부터 시계 방향으로 처음 초록인 방향을 찾고, 없으면 처음으로 판 밖·겹침이 아닌 방향을 반환한다.</summary>
+    private int AutoRotationTarget(Vector2 grid)
+    {
+        int possible = -1;
+        FillOverlapCounts();
+        for (int i = 0; i < 4; i++)
+        {
+            int rotation = (_rotation + i) % 4;
+            IReadOnlyList<SpellGame.ShapeCell> cells = SpellGame.CardCells(_picked.Card, rotation);
+            Vector2Int anchor = PivotAnchor(grid, RotatedPivot(rotation));
+            if (IsGreenPlacement(anchor, rotation)) return rotation;
+            if (possible < 0 && IsFreePlacement(cells, anchor)) possible = rotation;
+        }
+        return possible < 0 ? _rotation : possible;
+    }
+
+    /// <summary>기존 PreviewPick과 같은 기준으로 장착 도안 하나에서 배치가 확정되는 초록 방향인지 반환한다.</summary>
+    private bool IsGreenPlacement(Vector2Int anchor, int rotation)
+    {
+        foreach (int spell in _game.Spells)
+        {
+            if (!_layout.IsPlaced(spell)) continue;
+            _layout.GridToLocalPlacement(spell, _picked.Card, anchor, rotation, out Vector2Int local, out int localRotation);
+            if (_game.CanPlace(spell, _picked.Card, local.x, local.y, localRotation, _picked.Board == spell ? _picked.Placement : null)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>조각의 모든 구역이 판 안에 있고 미리 집계한 점유 수 기준으로 겹치지 않는지 반환한다. 덧칠은 한 겹 겹침을 허용한다.</summary>
+    private bool IsFreePlacement(IReadOnlyList<SpellGame.ShapeCell> cells, Vector2Int anchor)
+    {
+        bool isOverpaint = SpellGame.SealCount(_picked.Card, SpellGame.Seal.Overpaint) > 0;
+        foreach (SpellGame.ShapeCell cell in cells)
+        {
+            int gx = anchor.x + cell.X, gy = anchor.y + cell.Y;
+            if ((cell.Mask & ~SpellPatternLayout.BoardMask(gx, gy)) != 0) return false;
+            int index = (gy * SpellPatternLayout.COLUMNS + gx) * 4;
+            for (int s = 0; s < 4; s++)
+            {
+                if ((cell.Mask & (1 << s)) == 0) continue;
+                if (_overlapCounts[index + s] >= (isOverpaint ? 2 : 1)) return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>장착 도안의 배치 조각별 격자 구역 점유 수를 재사용 배열에 다시 집계한다. 옮기는 중인 조각 자신은 제외한다.</summary>
+    private void FillOverlapCounts()
+    {
+        System.Array.Clear(_overlapCounts, 0, _overlapCounts.Length);
+        foreach (int spell in _game.Spells)
+        {
+            if (!_layout.IsPlaced(spell)) continue;
+            foreach (SpellGame.Placement piece in _game.Boards[spell].Pieces)
+            {
+                if (!_picked.IsHand && piece == _picked.Placement) continue;
+                List<SpellGame.ShapeCell> cells = _layout.PlacementGridCells(spell, piece);
+                foreach (SpellGame.ShapeCell cell in cells)
+                {
+                    int index = (cell.Y * SpellPatternLayout.COLUMNS + cell.X) * 4;
+                    for (int s = 0; s < 4; s++) if ((cell.Mask & (1 << s)) != 0) _overlapCounts[index + s]++;
+                }
+            }
+        }
     }
 
     /// <summary>유효한 도안에는 배치·이동하고 손패 영역에는 회수한다. 실패하면 원위치로 복구한다.</summary>
