@@ -337,7 +337,8 @@ public sealed class SpellGame
     public int Block { get; private set; }
     public int Battle { get; private set; }
     public int Turn { get; private set; }
-    public bool IsWorkshopEvent { get { return CurrentPhase == Phase.Event || CurrentPhase == Phase.Rest; } }
+    public bool IsWorkshopEvent { get { return (CurrentPhase == Phase.Event && Battle == 2) || CurrentPhase == Phase.Rest; } }
+    public bool IsSealEvent { get { return CurrentPhase == Phase.Event && Battle == 4; } }
     public bool CanUseWorkshop { get { return IsWorkshopEvent && !_hasUsedWorkshop; } }
     public bool CanRest { get { return CurrentPhase == Phase.Rest && !_hasRested; } }
     public int HammerUsesLeft { get { return CanUseWorkshop ? 1 : 0; } }
@@ -1589,6 +1590,8 @@ public sealed class SpellGame
                 : Battle == 5 ? Phase.Rest : Phase.Loadout;
             if (IsWorkshopEvent) _hasUsedWorkshop = false;
             if (CurrentPhase == Phase.Rest) _hasRested = false;
+            HasSealReward = IsSealEvent;
+            RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
             ActiveReward = RewardKind.None;
             return true;
         }
@@ -1612,6 +1615,12 @@ public sealed class SpellGame
     /// <summary>미수령 보상 종류를 연다. 후보는 다시 추첨하지 않고 유지한다.</summary>
     public bool OpenReward(RewardKind kind)
     {
+        if (IsSealEvent)
+        {
+            if (kind != RewardKind.None && (kind != RewardKind.Seal || !HasSealReward)) return false;
+            ActiveReward = kind;
+            return true;
+        }
         if (CurrentPhase != Phase.Reward) return false;
         bool available = kind == RewardKind.None || kind == RewardKind.Piece && HasPieceReward
             || kind == RewardKind.Pattern && HasPatternReward || kind == RewardKind.Seal && HasSealReward;
@@ -1624,26 +1633,37 @@ public sealed class SpellGame
     {
         public Card Piece { get; }
         public SealSpot Spot { get; }
+        public SealSpot DisplaySpot { get; }
 
         /// <summary>인장을 붙일 원본 조각과 빈 영역을 저장한다.</summary>
-        internal RewardSealTarget(Card piece, SealSpot spot) { Piece = piece; Spot = spot; }
+        internal RewardSealTarget(Card piece, SealSpot spot, SealSpot displaySpot) { Piece = piece; Spot = spot; DisplaySpot = displaySpot; }
     }
 
     /// <summary>소유 조각의 빈 인장 영역을 반환한다. 접착 조각은 구성 조각까지 조회한다.</summary>
     public IReadOnlyList<RewardSealTarget> RewardSealTargets(Card card)
     {
         List<RewardSealTarget> targets = new List<RewardSealTarget>();
-        if (card != null && _owned.Contains(card)) CollectRewardSealTargets(card, targets);
+        if (card != null && _owned.Contains(card)) CollectRewardSealTargets(card, targets, spot => spot);
         return targets;
     }
 
     /// <summary>빈 1/4 영역을 목록에 추가한다. 찰흙은 기존 규칙에 따라 제외한다.</summary>
-    private static void CollectRewardSealTargets(Card card, List<RewardSealTarget> targets)
+    private static void CollectRewardSealTargets(Card card, List<RewardSealTarget> targets, Func<SealSpot, SealSpot> project)
     {
         if (card.Glued != null)
         {
-            CollectRewardSealTargets(card.Glued.First, targets);
-            CollectRewardSealTargets(card.Glued.Second, targets);
+            GluedShape glued = card.Glued;
+            int left = Math.Min(0, glued.RelativeX), top = Math.Min(0, glued.RelativeY);
+            CollectRewardSealTargets(glued.First, targets, spot =>
+            {
+                SealSpot rotated = RotateSealSpot(glued.First, glued.FirstRotation, spot);
+                return project(new SealSpot(rotated.X - left, rotated.Y - top, rotated.Sector, rotated.Seal));
+            });
+            CollectRewardSealTargets(glued.Second, targets, spot =>
+            {
+                SealSpot rotated = RotateSealSpot(glued.Second, glued.SecondRotation, spot);
+                return project(new SealSpot(rotated.X + glued.RelativeX - left, rotated.Y + glued.RelativeY - top, rotated.Sector, rotated.Seal));
+            });
             return;
         }
         if (card.IsUnique) return;
@@ -1654,14 +1674,33 @@ public sealed class SpellGame
                 bool occupied = false;
                 foreach (SealSpot seal in card.Seals)
                     if (seal.X == cell.X && seal.Y == cell.Y && seal.Sector == sector) { occupied = true; break; }
-                if (!occupied) targets.Add(new RewardSealTarget(card, new SealSpot(cell.X, cell.Y, sector, Seal.None)));
+                if (!occupied)
+                {
+                    SealSpot spot = new SealSpot(cell.X, cell.Y, sector, Seal.None);
+                    targets.Add(new RewardSealTarget(card, spot, project(spot)));
+                }
             }
+    }
+
+    /// <summary>원본 조각 영역을 카드 회전에 맞춰 변환해 접착 카드 표시 좌표 계산에 사용한다.</summary>
+    private static SealSpot RotateSealSpot(Card card, int rotation, SealSpot spot)
+    {
+        if (card.Glued == null)
+        {
+            IReadOnlyList<ShapeCell> original = ShapeCells(card.Shape, 0), rotated = ShapeCells(card.Shape, rotation);
+            for (int i = 0; i < original.Count; i++)
+                if (original[i].X == spot.X && original[i].Y == spot.Y)
+                    return new SealSpot(rotated[i].X, rotated[i].Y, RotateSector(card.Shape, rotation, spot.Sector), spot.Seal);
+        }
+        int x = spot.X, y = spot.Y, width = ShapeWidth(card, 0), height = ShapeHeight(card, 0);
+        for (int r = 0; r < rotation; r++) { int nx = height - 1 - y; y = x; x = nx; int w = width; width = height; height = w; }
+        return new SealSpot(x, y, (spot.Sector + rotation) % 4, spot.Seal);
     }
 
     /// <summary>선택한 빈 영역에 보상 인장을 붙이고 보상 목록으로 돌아간다. 중복 수령은 거부한다.</summary>
     public bool ClaimRewardSeal(Card card, int targetIndex)
     {
-        if (CurrentPhase != Phase.Reward || ActiveReward != RewardKind.Seal || !HasSealReward) return false;
+        if ((CurrentPhase != Phase.Reward && !IsSealEvent) || ActiveReward != RewardKind.Seal || !HasSealReward) return false;
         IReadOnlyList<RewardSealTarget> targets = RewardSealTargets(card);
         if (targetIndex < 0 || targetIndex >= targets.Count) return false;
         RewardSealTarget target = targets[targetIndex];
@@ -1695,6 +1734,8 @@ public sealed class SpellGame
     public bool ContinueEncounter()
     {
         if (CurrentPhase != Phase.Event && CurrentPhase != Phase.Rest) return false;
+        HasSealReward = false;
+        ActiveReward = RewardKind.None;
         CurrentPhase = Phase.Loadout;
         return true;
     }
