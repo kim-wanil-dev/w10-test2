@@ -78,6 +78,9 @@ public sealed class SpellGameUI : MonoBehaviour
     private UnityEngine.UI.Button _workshopHammer;
     private UnityEngine.UI.Button _workshopGlue;
     private UnityEngine.UI.Button _restChoice;
+    private RectTransform _sealStaffRect;
+    private SpellSealStaffGraphic _sealStaff;
+    private int _sealStaffSpell = -1;
 
     // SpellGame은 처음 쓰일 때 Resources에서 JSON을 읽으므로 필드 초기화식이 아닌 Awake에서 만든다.
     private SpellGame _game;
@@ -181,6 +184,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private bool _isSealerRun;
     private bool _isThiefRun;
     private bool _isCurserRun;
+    private bool _isContaminatorRun;
 
     [Header("도둑손 프로토타입")]
     [SerializeField, Min(0.1f)] private float _theftIntervalSeconds = 15;
@@ -256,6 +260,7 @@ public sealed class SpellGameUI : MonoBehaviour
             return;
         }
         UpdateTheft();
+        UpdateSealStaff();
         if (_glueOverlay != null) { UpdateGlue(); return; }
         if (_hammerPhase != HammerPhase.None) { UpdateHammer(); return; }
         UpdateFeedback();
@@ -490,7 +495,7 @@ public sealed class SpellGameUI : MonoBehaviour
         DisableNavigation((RectTransform)_workshopGlue.transform);
         Button(_encounterScreen, "계속", 490, 600, 300, 64, ContinueEncounter, fontSize: 26);
         _titleScreen.StartButton.SetAction(StartNewGame);
-        _resultScreen.Restart.SetAction(() => StartRun(_isSealerRun, _isThiefRun, _isCurserRun));
+        _resultScreen.Restart.SetAction(() => StartRun(_isSealerRun, _isThiefRun, _isCurserRun, _isContaminatorRun));
         _rewardScreen.Skip.SetAction(LeaveRewardSelection);
         _loadoutScreen.Setup(_layout, _game.OwnedSpells, PatternColor, StartLoadoutBattle);
     }
@@ -534,14 +539,14 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>새 게임을 시작하고 도안 배치와 선택을 초기화한다.</summary>
     private void StartNewGame()
     {
-        ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = false;
+        ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = _isContaminatorRun = false;
         _game.StartGame(); ResetPatterns(); ClearSelection(); Render();
     }
 
     /// <summary>개발자 전투를 시작하고 판에 들어가는 만큼 모든 도안을 배치한다.</summary>
     private void StartDeveloperGame()
     {
-        ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = false;
+        ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = _isContaminatorRun = false;
         _game.StartGame(true); ResetPatterns();
         _layout.EnsurePlaced(_game.Spells); ClearSelection(); Render();
     }
@@ -874,7 +879,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         SpellGame.SpellEvaluation e = _game.Evaluate(spell);
         string terms = "";
-        foreach (string term in e.Terms) terms += " + " + term.Replace(" +", " ");
+        foreach (string term in e.Terms) terms += term.StartsWith("오염 -", StringComparison.Ordinal) ? " − " + term.Substring(4) : " + " + term.Replace(" +", " ");
         string main;
         if (e.Kind == SpellGame.SpellKind.Scatter) main = e.Terms.Count > 0 ? $"{e.Hits}타 × ({e.Base}{terms}) = 무작위 {e.Total}" : $"{e.Hits}타 × {e.Base} = 무작위 {e.Total}";
         else
@@ -898,7 +903,7 @@ public sealed class SpellGameUI : MonoBehaviour
         return SpellGame.PatternDescription(spell) + "\n예상 " + FormulaText(spell);
     }
 
-    /// <summary>적 슬롯을 적 수에 맞춰 배치하고 상태·대상·조준 미리보기를 갱신한다.</summary>
+    /// <summary>적 슬롯을 배치하고 모델의 다음 행동·방어·충전·패시브와 조준 피해 미리보기를 표시한다.</summary>
     private void RefreshEnemies()
     {
         SpellEnemyView[] views = _combatScreen.Enemies;
@@ -918,7 +923,9 @@ public sealed class SpellGameUI : MonoBehaviour
             Color color = _enemyColors[boss ? 2 : large ? 1 : 0];
             string pattern = enemy.Pattern.Count > 1 ? "패턴 " + string.Join(" · ", enemy.Pattern) + " 반복" : "";
             int preview = aiming && i == _hoverEnemy && enemy.Health > 0 ? _game.GetSpellDamage(castBoard) : 0;
-            views[i].Bind(enemy.Name, enemy.Health, enemy.MaxHealth, enemy.Intent, pattern, color, size, boss, i == _game.Target, aiming, preview);
+            views[i].Bind(enemy.Name, enemy.Health, enemy.MaxHealth, enemy.Intent, pattern, color, size, boss, i == _game.Target, aiming, preview,
+                enemy.IsSealer || enemy.IsThief || enemy.IsCurser || enemy.IsContaminator ? enemy.DescribeIntent() : null,
+                enemy.Block, enemy.NextAction, enemy.ActionAmount);
         }
     }
 
@@ -1125,6 +1132,8 @@ public sealed class SpellGameUI : MonoBehaviour
         int damage = healthBefore - _game.Health;
         _impactTarget = -1; _impactAll = false;
         ShowFeedback($"턴 종료 · 저주 HP -{_game.LastCurseDamage} · 방어 {(_game.LastCurseDamage >= healthBefore ? 0 : absorbed)} · 총 HP -{damage}", _dangerColor);
+        if (_game.LastContaminationAdded > 0)
+            ShowFeedback($"총 HP -{damage} · 오염술사가 드로우 더미에 오염 조각 {_game.LastContaminationAdded}장을 섞었습니다!", AccentColorForContamination());
         Render();
     }
 
@@ -1208,6 +1217,7 @@ public sealed class SpellGameUI : MonoBehaviour
         string left = "", right = "";
         Color leftColor = _textColor, rightColor = _textColor;
         if (card.IsUnique) { left = $"<b>고유</b>\n{UniqueDescription(card)}"; leftColor = _subColor; }
+        else if (card.IsContaminated) { left = "<b>오염 · 공격·방어 -2</b>\n시전에 사용한 오염 조각마다 감소 · 최소 0\n이번 전투 한정 · 접착 불가"; leftColor = AccentColorForContamination(); }
         else if (card.Coating != SpellGame.Coating.None) { left = $"<b><color=#{ColorUtility.ToHtmlStringRGB(CoatingColor(card.Coating))}>코팅 · {CoatingName(card.Coating)}</color></b>\n{CoatingDescription(card.Coating)}"; leftColor = CoatingColor(card.Coating); }
         List<string> lines = new List<string>();
         foreach (SpellGame.Seal seal in Enum.GetValues(typeof(SpellGame.Seal)))
@@ -1445,6 +1455,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>카드를 대표할 강조색을 코팅, 첫 씰링, 이전 효과 순으로 고른다. 아무것도 없으면 글자색이다.</summary>
     public Color AccentColor(SpellGame.Card card)
     {
+        if (card.IsContaminated) return AccentColorForContamination();
         if (card.Coating != SpellGame.Coating.None) return CoatingColor(card.Coating);
         List<SpellGame.SealSpot> seals = SpellGame.SealSpots(card, 0);
         if (seals.Count > 0) return SealColor(seals[0].Seal);
@@ -1455,6 +1466,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>2D 도형을 칠할 색을 반환한다. 코팅이 있으면 코팅 색, 이전 효과가 있으면 효과 색, 없으면 흰색이다. 씰링은 색 대신 동그라미로 표시한다.</summary>
     public Color ShapeTint(SpellGame.Card card)
     {
+        if (card.IsContaminated) return AccentColorForContamination();
         if (card.Coating != SpellGame.Coating.None) return CoatingColor(card.Coating);
         if (card.Effect != SpellGame.Effect.None) return EffectColor(card.Effect);
         return Color.white;
@@ -1463,7 +1475,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>카드에 코팅, 씰링, 이전 효과, 고유 성질 중 하나라도 있는지 반환한다.</summary>
     public static bool HasTraits(SpellGame.Card card)
     {
-        return card.IsUnique || card.Coating != SpellGame.Coating.None || SpellGame.SealSpots(card, 0).Count > 0
+        return card.IsContaminated || card.IsUnique || card.Coating != SpellGame.Coating.None || SpellGame.SealSpots(card, 0).Count > 0
             || SpellGame.EffectCount(card, SpellGame.Effect.Period) > 0 || SpellGame.EffectCount(card, SpellGame.Effect.Resonance) > 0;
     }
 
@@ -1549,6 +1561,7 @@ public sealed class SpellGameUI : MonoBehaviour
     public static string TraitText(SpellGame.Card card)
     {
         List<string> parts = new List<string>();
+        if (card.IsContaminated) parts.Add("오염 · 공격·방어 -2");
         if (card.IsUnique) parts.Add("고유");
         if (card.Coating != SpellGame.Coating.None) parts.Add("코팅 " + CoatingName(card.Coating));
         List<string> seals = new List<string>();
@@ -1567,6 +1580,7 @@ public sealed class SpellGameUI : MonoBehaviour
     public static string TraitDescriptionText(SpellGame.Card card)
     {
         List<string> lines = new List<string>();
+        if (card.IsContaminated) lines.Add("오염 · 실제 시전마다 공격·방어 -2 (중첩, 최소 0) · 이번 전투 한정 · 접착 불가");
         if (card.IsUnique) lines.Add("고유 · " + UniqueDescription(card));
         if (card.Coating != SpellGame.Coating.None) lines.Add($"코팅 {CoatingName(card.Coating)} · {CoatingDescription(card.Coating)}");
         foreach (SpellGame.Seal seal in Enum.GetValues(typeof(SpellGame.Seal)))
@@ -1587,6 +1601,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>목록에 쓸 도형 이름을 반환한다. 접착 카드는 두 원본 도형을 함께 적는다.</summary>
     private static string DisplayName(SpellGame.Card card)
     {
+        if (card.IsContaminated) return "오염된 " + SpellGame.ShapeName(card.Shape);
         if (card.Glued != null) return "접착 " + SpellGame.ShapeName(card.Glued.First.Shape) + " + " + SpellGame.ShapeName(card.Glued.Second.Shape);
         return SpellGame.ShapeName(card.Shape);
     }
@@ -1930,11 +1945,12 @@ public sealed class SpellGameUI : MonoBehaviour
         else _boardGraphic.CancelDrag();
     }
     /// <summary>선택한 전투 진입 방식으로 새 게임을 시작하고 도안과 안내 상태를 준비한다.</summary>
-    private void StartRun(bool withSealer, bool withThief = false, bool withCurser = false)
+    private void StartRun(bool withSealer, bool withThief = false, bool withCurser = false, bool withContaminator = false)
     {
         ResetTheft(); _isSealerRun = withSealer; _isThiefRun = withThief; _isCurserRun = withCurser;
-        _game.StartGame(false, withSealer, withThief, withCurser); ResetPatterns(); ClearSelection();
-        if (withSealer || withThief || withCurser) _onboardingComplete = true;
+        _isContaminatorRun = withContaminator;
+        _game.StartGame(false, withSealer, withThief, withCurser, withContaminator); ResetPatterns(); ClearSelection();
+        if (withSealer || withThief || withCurser || withContaminator) _onboardingComplete = true;
         _message = _game.SealNotice; _feedbackUntil = 0; Render();
     }
 
@@ -2041,22 +2057,40 @@ public sealed class SpellGameUI : MonoBehaviour
         _message = "도둑손 저지!"; ShowFeedback(_message, new Color(0.4f, 0.9f, 0.8f)); Render();
     }
 
-    /// <summary>봉인된 도안의 현재 격자 위치에 수직 막대기와 잠금 표시를 그린다. 포인터 입력은 통과시킨다.</summary>
+    /// <summary>봉인 안내 레이어의 이전 자식을 정리한다. 막대기는 도안을 따라 매 프레임 갱신한다.</summary>
     private void RenderSeals(RectTransform panel)
     {
         foreach (Transform child in panel) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-        foreach (int spell in _game.Spells)
+    }
+
+    /// <summary>봉인된 도안의 점유 구역 중심에 막대기를 붙이고, 봉인 생성·해제에 맞춰 내려꽂기와 빼기를 시작한다.</summary>
+    private void UpdateSealStaff()
+    {
+        if (_sealStaff == null) return;
+        int sealedSpell = -1;
+        if (_game.CurrentPhase == SpellGame.Phase.Combat)
         {
-            if (!_game.IsSealed(spell) || !_layout.IsPlaced(spell)) continue;
-            Vector2 center = Vector2.zero; int count = 0;
-            for (int y = 0; y < SpellPatternLayout.ROWS; y++) for (int x = 0; x < SpellPatternLayout.COLUMNS; x++)
-                if (_layout.PlacedMask(spell, x, y) != 0) { center += new Vector2(x + 0.5f, y + 0.5f); count++; }
-            Vector2 point = ToLayer(_table.GridToScreen(center / count));
-            float px = point.x - _root.rect.xMin, py = _root.rect.yMax - point.y;
-            RectTransform rod = Panel(panel, px - 3, py - 70, 6, 140, _dangerColor);
-            rod.GetComponent<UnityEngine.UI.Image>().raycastTarget = false;
-            Label(panel, "봉인", px - 35, py - 95, 70, 25, 17);
+            foreach (int spell in _game.Spells)
+                if (_game.IsSealed(spell) && _layout.IsPlaced(spell)) { sealedSpell = spell; break; }
         }
+        if (sealedSpell != _sealStaffSpell)
+        {
+            _sealStaffSpell = sealedSpell;
+            if (sealedSpell >= 0) { _sealStaff.MoveTo(SealStaffPoint(sealedSpell)); _sealStaff.Show(); }
+            else _sealStaff.Withdraw();
+        }
+        if (sealedSpell >= 0) _sealStaff.MoveTo(SealStaffPoint(sealedSpell));
+    }
+
+    /// <summary>봉인된 도안의 점유 구역 중심을 전투 루트의 왼쪽 위 기준 좌표로 반환한다.</summary>
+    private Vector2 SealStaffPoint(int spell)
+    {
+        Vector2 sum = Vector2.zero; int count = 0;
+        for (int y = 0; y < SpellPatternLayout.ROWS; y++) for (int x = 0; x < SpellPatternLayout.COLUMNS; x++)
+            if (_layout.PlacedMask(spell, x, y) != 0) { sum += new Vector2(x + 0.5f, y + 0.5f); count++; }
+        if (count == 0) return Vector2.zero;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(_root, _table.GridToScreen(sum / count), null, out Vector2 local);
+        return new Vector2(local.x - _root.rect.xMin, local.y - _root.rect.yMax);
     }
 
 
@@ -2587,11 +2621,21 @@ public sealed class SpellGameUI : MonoBehaviour
     private void SetupFeatureControls()
     {
         _sealLayer = Element("Sealed Patterns", _root, 0, 0, 1280, 720);
+        _sealStaffRect = Element("Seal Staff", _root, 0, 0, 160, 320);
+        _sealStaffRect.pivot = new Vector2(0.5f, 0f);
+        _sealStaffRect.gameObject.AddComponent<CanvasRenderer>();
+        _sealStaff = _sealStaffRect.gameObject.AddComponent<SpellSealStaffGraphic>();
+        _sealStaff.Setup(_dangerColor);
+        _sealStaff.HideNow();
         _testControls = Element("Enemy Encounters", _root, 0, 0, 1280, 720);
         Button(_testControls, "형상 봉인자", 120, 620, 260, 50, () => StartRun(true), null, 18);
         Button(_testControls, "도둑손", 510, 620, 260, 50, () => StartRun(false, true), null, 18);
         Button(_testControls, "조각 저주술사", 900, 620, 260, 50, () => StartRun(false, false, true), null, 18);
+        Button(_testControls, "오염술사", 510, 680, 260, 38, () => StartRun(false, false, false, true), null, 18);
     }
+
+    /// <summary>오염 카드와 안내에 공통으로 사용하는 보라색을 반환한다.</summary>
+    private static Color AccentColorForContamination() { return new Color(0.65f, 0.3f, 0.85f); }
 
     /// <summary>단계에 따라 기능 버튼·봉인·저주 안내와 적 진입 버튼을 갱신한다.</summary>
     private void RefreshFeatureControls()
@@ -2602,7 +2646,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (!combat) { ClearTheftApproach(); return; }
         RenderSeals(_sealLayer); RenderTheftHand();
         if (_game.Curse != null && !_game.Curse.IsResolved)
-            Label(_sealLayer, $"[저주] 카드 #{_game.Curse.Target.Id} · 시전으로 해제 · 미해결 HP -{_game.Curse.Amount}", 180, 20, 920, 35, 18);
+            Label(_sealLayer, $"[저주] 카드 #{_game.Curse.Target.Id} · 시전으로 해제 · 미해결 HP -{_game.Curse.Amount}", 60, 300, 860, 35, 16);
     }
 
     /// <summary>현재 저주 대상의 실제 3D 조각 색상을 갱신한다.</summary>

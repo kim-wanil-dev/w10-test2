@@ -6,8 +6,10 @@ using System.Collections.ObjectModel;
 public sealed class SpellGame
 {
     private const float MAX_DECOMPOSITION_CHANCE = 0.9f;
-    private const int CURSE_INTERVAL_TURNS = 1;
     private const int CURSE_FAILURE_AMOUNT = 10;
+    private const int WEAK_CONTAMINATION_COUNT = 3;
+    private const int STRONG_CONTAMINATION_COUNT = 5;
+    public const int CONTAMINATION_PENALTY = 2;
 
     public enum Shape { Square, Triangle, Rectangle, QuarterTriangle, Diamond, Parallelogram, MediumTriangle, House, LargeTriangle, LShape, Clay }
     public enum Effect { None, Period, Resonance }
@@ -17,6 +19,7 @@ public sealed class SpellGame
     public enum Phase { Title, Combat, Reward, Loadout, Victory, Defeat, Event, Rest }
     public enum SpellKind { Single, Block, All, Scatter }
     public enum Keyword { None, OneStroke, Mosaic, Purity }
+    public enum EnemyAction { Attack, Defend, Curse, Charge }
 
     public const int MAX_HAND = 7;
     public const int MAX_HITS = 6;
@@ -118,6 +121,7 @@ public sealed class SpellGame
         public Coating Coating { get; internal set; }
         public IReadOnlyList<SealSpot> Seals { get { return SealList; } }
         public GluedShape Glued { get; internal set; }
+        public bool IsContaminated { get; internal set; }
         public bool IsUnique { get { return Glued == null && Shape == Shape.Clay; } }
     }
 
@@ -202,17 +206,53 @@ public sealed class SpellGame
         public bool IsSealer { get; }
         public bool IsThief { get; }
         public bool IsCurser { get; }
+        public bool IsContaminator { get; }
+        public int Block { get; internal set; }
+        public int Charge { get; internal set; }
         public int SealedSpell { get; internal set; } = -1;
         internal int PreviousSealedSpell { get; set; } = -1;
 
-        public int Intent { get { return _pattern[ActionCount % _pattern.Length]; } }
+        public int ActionAmount { get { return _pattern[ActionCount % _pattern.Length]; } }
+        public EnemyAction NextAction
+        {
+            get
+            {
+                int step = ActionCount % _pattern.Length;
+                if (IsCurser) return step == 0 ? EnemyAction.Curse : step == 1 ? EnemyAction.Charge : EnemyAction.Attack;
+                return (IsThief || IsContaminator) && step == 1 ? EnemyAction.Defend : EnemyAction.Attack;
+            }
+        }
+        public int Intent { get { return NextAction == EnemyAction.Attack ? ActionAmount + Charge : 0; } }
+        public int ContaminationCount { get { return IsContaminator && NextAction == EnemyAction.Attack ? (ActionCount % _pattern.Length == 0 ? WEAK_CONTAMINATION_COUNT : STRONG_CONTAMINATION_COUNT) : 0; } }
         public ReadOnlyCollection<int> Pattern { get { return _patternView; } }
         internal int ActionCount;
 
         /// <summary>이름, 체력, 공격 패턴과 신규 적 능력 여부로 적의 전투 상태를 초기화한다.</summary>
-        internal Enemy(string name, int health, int[] pattern, bool isSealer = false, bool isThief = false, bool isCurser = false)
+        internal Enemy(string name, int health, int[] pattern, bool isSealer = false, bool isThief = false, bool isCurser = false, bool isContaminator = false)
         {
             Name = name; Health = health; MaxHealth = health; _pattern = pattern; _patternView = Array.AsReadOnly(pattern); IsSealer = isSealer; IsThief = isThief; IsCurser = isCurser;
+            IsContaminator = isContaminator;
+        }
+
+        /// <summary>다음 행동 수치와 현재 방어·충전·패시브 상태를 행동 예고 설명으로 반환한다.</summary>
+        public string DescribeIntent()
+        {
+            string text;
+            switch (NextAction)
+            {
+                case EnemyAction.Defend: text = $"방어 쌓기 · 방어 {ActionAmount} 획득"; break;
+                case EnemyAction.Curse: text = $"조각 저주 · 다음 손패 1장 / 미해결 HP -{CURSE_FAILURE_AMOUNT}"; break;
+                case EnemyAction.Charge: text = $"힘 모으기 · 다음 공격 +{ActionAmount}"; break;
+                default:
+                    string strength = IsThief || IsContaminator ? (ActionCount % _pattern.Length == 0 ? "약한 " : "강한 ") : IsCurser ? "강한 " : "";
+                    text = $"{strength}{(IsContaminator ? "오염 공격" : "공격")} · 피해 {Intent}";
+                    if (ContaminationCount > 0) text += $" / 오염 {ContaminationCount}장";
+                    break;
+            }
+            if (Block > 0) text += $"\n현재 방어 {Block}";
+            if (Charge > 0) text += $"\n충전 +{Charge}";
+            if (IsThief) text += "\n패시브 · 약 15초마다 조각 절도";
+            return text;
         }
     }
 
@@ -260,9 +300,12 @@ public sealed class SpellGame
     private bool _hasCurserEncounter;
     private bool _hasUsedWorkshop;
     private bool _hasRested;
+    private bool _hasContaminatorEncounter;
+    private bool _hasPendingCurse;
     private readonly List<Card> _stolen = new List<Card>();
     private Enemy _theftOwner;
 
+    public int LastContaminationAdded { get; private set; }
     public Card TheftTarget { get; private set; }
     public CardCurse Curse { get; private set; }
     public int LastCurseDamage { get; private set; }
@@ -573,7 +616,7 @@ public sealed class SpellGame
         List<string> seals = new List<string>();
         foreach (SealSpot seal in card.Seals) seals.Add($"{seal.X},{seal.Y},{seal.Sector},{seal.Seal}");
         seals.Sort(StringComparer.Ordinal);
-        return $"{card.Shape}:{card.Effect}:{card.Coating}:{string.Join(";", seals)}";
+        return $"{card.Shape}:{card.Effect}:{card.Coating}:{card.IsContaminated}:{string.Join(";", seals)}";
     }
 
     /// <summary>지정한 도안을 지금 시전했을 때의 공격 피해 합을 반환한다. 방어 도안은 0이다.</summary>
@@ -583,12 +626,13 @@ public sealed class SpellGame
         return Evaluate(boardIndex).Total;
     }
 
-    /// <summary>새 게임의 체력, 카드 및 도안을 초기화하고 첫 전투를 시작한다.</summary>
-    public void StartGame(bool isDeveloperMode = false, bool withSealer = false, bool withThief = false, bool withCurser = false)
+    /// <summary>개발자 모드와 테스트 적 선택으로 새 게임의 체력·덱·도안을 초기화하고 첫 전투를 시작한다.</summary>
+    public void StartGame(bool isDeveloperMode = false, bool withSealer = false, bool withThief = false, bool withCurser = false, bool withContaminator = false)
     {
         _hasSealerEncounter = withSealer;
         _hasThiefEncounter = withThief;
         _hasCurserEncounter = withCurser;
+        _hasContaminatorEncounter = withContaminator;
         IsDeveloperMode = isDeveloperMode; MaxHealth = isDeveloperMode ? DEVELOPER_HEALTH : START_HEALTH;
         _owned.Clear(); _spells.Clear(); _ownedSpells.Clear(); _nextId = 0; Health = MaxHealth; Battle = 0; LastAcquiredPattern = -1;
         _hasUsedWorkshop = false;
@@ -614,10 +658,10 @@ public sealed class SpellGame
         _owned.Add(new Card { Id = ++_nextId, Shape = shape, Effect = effect });
     }
 
-    /// <summary>원본 카드의 도형·효과·코팅·씰링과 접착 구성을 새 ID로 복사한다. keepRecall이 false면 회수 씰링만 뺀다.</summary>
+    /// <summary>원본 도형·효과·오염·코팅·씰링과 접착 구성을 새 ID로 복사한다. keepRecall이 false면 회수 씰링만 뺀다.</summary>
     private Card CopyCard(Card source, bool keepRecall)
     {
-        Card copy = new Card { Id = ++_nextId, Shape = source.Shape, Effect = source.Effect, Coating = source.Coating };
+        Card copy = new Card { Id = ++_nextId, Shape = source.Shape, Effect = source.Effect, Coating = source.Coating, IsContaminated = source.IsContaminated };
         foreach (SealSpot seal in source.Seals) if (keepRecall || seal.Seal != Seal.Recall) copy.SealList.Add(seal);
         if (source.Glued != null)
         {
@@ -636,7 +680,7 @@ public sealed class SpellGame
         return true;
     }
 
-    /// <summary>도형과 유효한 씰링·코팅을 복사해 보유 덱과 현재 손패에 추가한다.</summary>
+    /// <summary>전투 임시 카드를 제외한 도형과 유효한 씰링·코팅을 복사해 보유 덱과 손패에 추가한다.</summary>
     public bool AddDebugCard(Card source)
     {
         if (CurrentPhase != Phase.Combat || source == null || source.Glued != null || !Enum.IsDefined(typeof(Shape), source.Shape)
@@ -651,6 +695,7 @@ public sealed class SpellGame
                 if (cell.X == seal.X && cell.Y == seal.Y && (cell.Mask & (1 << seal.Sector)) != 0) { occupied = true; break; }
             if (!occupied || !used.Add((seal.Y * LOCAL_SIZE + seal.X) * 4 + seal.Sector)) return false;
         }
+        if (source.IsContaminated) return false;
         Card card = CopyCard(source, true);
         _owned.Add(card); _hand.Add(card);
         return true;
@@ -683,6 +728,8 @@ public sealed class SpellGame
     private void StartBattle()
     {
         Curse = null; LastCurseDamage = 0;
+        _hasPendingCurse = false;
+        LastContaminationAdded = 0;
         CancelTheft(); _stolen.Clear();
         Battle++; Turn = 0; Block = 0; Target = 0; _enemies.Clear(); _hand.Clear(); _discard.Clear(); _draw.Clear();
         foreach (Board board in Boards) { board.MutablePieces.Clear(); board.Completer = null; }
@@ -699,8 +746,9 @@ public sealed class SpellGame
         else if (Battle == 5) { AddEnemy(1); AddEnemy(1); }
         else if (Battle == 6) AddEnemy(2);
         if (_hasSealerEncounter && Battle == 1) _enemies.Add(new Enemy("형상 봉인자", 12, new[] { 4 }, true));
-        if (_hasThiefEncounter && Battle == 1) _enemies.Add(new Enemy("도둑손", 12, new[] { 4 }, false, true));
-        if (_hasCurserEncounter && Battle == 1) _enemies.Add(new Enemy("조각 저주술사", 12, new[] { 4 }, false, false, true));
+        if (_hasThiefEncounter && Battle == 1) _enemies.Add(new Enemy("도둑손", 12, new[] { 4, 5, 10 }, false, true));
+        if (_hasCurserEncounter && Battle == 1) _enemies.Add(new Enemy("조각 저주술사", 12, new[] { 0, 5, 4 }, false, false, true));
+        if (_hasContaminatorEncounter && Battle == 1) _enemies.Add(new Enemy("오염술사", 12, new[] { 5, 5, 10 }, isContaminator: true));
         CurrentPhase = Phase.Combat; StartTurn();
         RefreshSeals();
     }
@@ -727,25 +775,21 @@ public sealed class SpellGame
         }
     }
 
-    /// <summary>턴을 증가시키고 손패를 준비한 뒤 생존 저주술사의 대상 한 장을 지정한다.</summary>
+    /// <summary>턴을 증가시키고 손패를 준비한 뒤 직전 저주 행동이 예약한 카드 한 장만 지정한다.</summary>
     private void StartTurn()
     {
         Turn++; Draw(5);
         ApplyCardCurse();
     }
 
-    /// <summary>설정된 턴 간격에 생존 저주술사가 있으면 실제 손패에서 균등 무작위로 한 장만 저주한다.</summary>
+    /// <summary>실행된 저주 행동의 예약을 한 번 소비하여 새 손패 한 장을 저주한다. 손패가 비어 있으면 생략한다.</summary>
     private void ApplyCardCurse()
     {
-        if (Curse != null && Curse.AppliedTurn == Turn) return;
+        if (!_hasPendingCurse) return;
+        _hasPendingCurse = false;
         Curse = null;
-        if (Hand.Count == 0 || (Turn - 1) % CURSE_INTERVAL_TURNS != 0) return;
-        foreach (Enemy enemy in Enemies)
-        {
-            if (!enemy.IsCurser || enemy.Health <= 0) continue;
-            Curse = new CardCurse(Hand[_random.Next(Hand.Count)], Turn, CurseFailureEffect.HPDamage, CURSE_FAILURE_AMOUNT);
-            return;
-        }
+        if (Hand.Count == 0) return;
+        Curse = new CardCurse(Hand[_random.Next(Hand.Count)], Turn, CurseFailureEffect.HPDamage, CURSE_FAILURE_AMOUNT);
     }
 
     /// <summary>지정 카드 인스턴스가 이번 턴의 미해결 저주 대상인지 반환한다.</summary>
@@ -957,12 +1001,13 @@ public sealed class SpellGame
             : EffectCount(card.Glued.First, effect) + EffectCount(card.Glued.Second, effect);
     }
 
-    /// <summary>첫 이벤트에서 접착할 수 있는 소유 기본 조각인지 확인해 거부 사유를 반환한다. 특수 효과는 허용한다.</summary>
+    /// <summary>이벤트·휴식에서 접착할 소유 조각의 거부 사유를 반환한다. 오염·고유·이미 접착된 카드는 제외한다.</summary>
     public string GlueCardIssue(Card card)
     {
         if (!IsWorkshopEvent) return "이벤트 또는 휴식에서만 접착할 수 있습니다";
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 조각을 선택하세요";
+        if (card.IsContaminated) return "오염 조각은 이번 프로토타입에서 접착할 수 없습니다";
         if (card.IsUnique) return "고유 조각은 접착할 수 없습니다";
         if (card.Glued != null) return "접착된 카드는 다시 접착할 수 없습니다";
         return null;
@@ -1021,9 +1066,9 @@ public sealed class SpellGame
     /// <summary>전투 임시 카드와 배치를 정리하고 보상 카드를 포함한 소유 덱을 복구해 지정 화면으로 전환한다.</summary>
     private void FinishCombat(Phase phase)
     {
-        Curse = null;
+        Curse = null; _hasPendingCurse = false;
         CancelTheft(); _stolen.Clear();
-        foreach (Enemy enemy in Enemies) { enemy.SealedSpell = -1; enemy.PreviousSealedSpell = -1; }
+        foreach (Enemy enemy in Enemies) { enemy.SealedSpell = -1; enemy.PreviousSealedSpell = -1; enemy.Block = 0; enemy.Charge = 0; enemy.ActionCount = 0; }
         SealNotice = "";
         _hand.Clear(); _draw.Clear(); _discard.Clear();
         foreach (Board board in Boards) { board.MutablePieces.Clear(); board.Completer = null; }
@@ -1049,11 +1094,12 @@ public sealed class SpellGame
         _discard.Add(card);
     }
 
-    /// <summary>현재 턴 저주를 판정·정리하고 생존 시 손패 버림과 기존 적 공격을 순서대로 처리한다.</summary>
+    /// <summary>미해결 저주를 판정한 뒤 생존 적의 공격·방어·저주 예약·충전을 하나씩 처리하고 각 행동 인덱스를 진행한다.</summary>
     public void EndTurn()
     {
         if (CurrentPhase != Phase.Combat) return;
         LastCurseDamage = 0;
+        LastContaminationAdded = 0;
         CardCurse endingCurse = Curse;
         Curse = null;
         if (endingCurse != null && endingCurse.AppliedTurn == Turn && !endingCurse.IsResolved) ApplyCurseFailure(endingCurse);
@@ -1064,10 +1110,32 @@ public sealed class SpellGame
         foreach (Enemy enemy in Enemies)
         {
             if (enemy.Health <= 0) continue;
-            int damage = enemy.Intent; enemy.ActionCount++; int absorbed = Math.Min(Block, damage); Block -= absorbed; Health -= damage - absorbed;
+            switch (enemy.NextAction)
+            {
+                case EnemyAction.Defend: enemy.Block += enemy.ActionAmount; break;
+                case EnemyAction.Curse: _hasPendingCurse = true; break;
+                case EnemyAction.Charge: enemy.Charge = enemy.ActionAmount; break;
+                case EnemyAction.Attack:
+                    int damage = enemy.Intent;
+                    int absorbed = Math.Min(Block, damage);
+                    Block -= absorbed; Health -= damage - absorbed;
+                    if (enemy.ContaminationCount > 0) AddContamination(enemy.ContaminationCount);
+                    enemy.Charge = 0;
+                    break;
+            }
+            enemy.ActionCount++;
             if (Health <= 0) { Health = 0; FinishCombat(Phase.Defeat); return; }
         }
         Block = 0; RefreshSeals(); StartTurn();
+    }
+
+    /// <summary>지정 수량의 고유 ID를 가진 전투 한정 오염 1/4 삼각형을 드로우에 추가하고 전체를 섞어 생성 수를 기록한다.</summary>
+    private void AddContamination(int count)
+    {
+        for (int i = 0; i < count; i++)
+            _draw.Add(new Card { Id = ++_nextId, Shape = Shape.QuarterTriangle, IsContaminated = true });
+        Shuffle(_draw);
+        LastContaminationAdded += count;
     }
 
     /// <summary>생존 봉인자가 지정한 고유 주문 ID를 봉인 중인지 반환한다.</summary>
@@ -1094,12 +1162,15 @@ public sealed class SpellGame
         }
     }
 
-    /// <summary>실제 HP 피해를 적용하고 피해 받은 봉인자의 현재 봉인만 해제한다. 피해 0과 다른 적의 피격은 영향을 주지 않는다.</summary>
+    /// <summary>적 방어부터 소모하고 남은 HP 피해를 적용한다. 사망 시 충전을 정리하고 실제 HP 피해를 받은 봉인자의 봉인만 해제한다.</summary>
     private void DamageEnemy(Enemy enemy, int damage)
     {
         if (enemy.Health <= 0 || damage <= 0) return;
+        int absorbed = Math.Min(enemy.Block, damage);
+        enemy.Block -= absorbed; damage -= absorbed;
         int before = enemy.Health;
         enemy.Health -= damage;
+        if (enemy.Health <= 0) { enemy.Block = 0; enemy.Charge = 0; }
         if (enemy == _theftOwner && enemy.Health <= 0) CancelTheft();
         if (enemy.IsSealer && enemy.Health < before && enemy.SealedSpell >= 0)
         {
@@ -1358,15 +1429,16 @@ public sealed class SpellGame
         return false;
     }
 
-    /// <summary>도안을 지금 시전했을 때의 결과를 시전 순간의 판 상태로 계산한다. 코팅은 조각당 하나, 씰링은 붙은 개수만큼 적용한다.</summary>
+    /// <summary>지정 도안의 코팅·씰링·키워드 계산 후 참여 오염 카드마다 공격·방어를 2 낮춰 최소 0인 결과를 반환한다. 산탄은 타격별로 낮추고 파편·드로우·회수는 유지한다.</summary>
     public SpellEvaluation Evaluate(int boardIndex)
     {
         Board board = Boards[boardIndex]; int spell = board.Spell;
         SpellEvaluation e = new SpellEvaluation { Kind = PATTERNS[spell].Kind, Base = PATTERNS[spell].BaseValue };
-        int counted = board.Pieces.Count, amplify = 0, guard = 0, resonance = 0, overpaint = 0, cog = 0;
+        int counted = board.Pieces.Count, amplify = 0, guard = 0, resonance = 0, overpaint = 0, cog = 0, contamination = 0;
         bool pure = board.Pieces.Count > 0; Shape first = board.Pieces.Count > 0 ? board.Pieces[0].Card.Shape : Shape.Square;
         foreach (Placement p in board.Pieces)
         {
+            if (p.Card.IsContaminated) contamination += CONTAMINATION_PENALTY;
             if (p.Card.Glued != null || p.Card.Shape != first) pure = false;
             if (p.Card.Coating == Coating.Amplify) amplify++;
             else if (p.Card.Coating == Coating.Guard) guard++;
@@ -1394,6 +1466,12 @@ public sealed class SpellGame
         if (e.Kind == SpellKind.Scatter) e.Hits = Math.Max(1, Math.Min(MAX_HITS, counted));
         e.Value = value;
         e.Block = (e.Kind == SpellKind.Block ? value : 0) + guard * GUARD_BONUS;
+        if (contamination > 0)
+        {
+            e.Value = Math.Max(0, e.Value - contamination);
+            e.Block = Math.Max(0, e.Block - contamination);
+            e.Terms.Add($"오염 -{contamination} (하한 0)");
+        }
         return e;
     }
 

@@ -947,10 +947,10 @@ MonoBehaviour:
   _dropHeight: 1.6
   _pieceMaterial: {fileID: 2100000, guid: dc9de70129098bd42a73685db1b95e32, type: 2}
   _lineMaterial: {fileID: 2100000, guid: 035a3e286f0be03479c08af9c7bb1e32, type: 2}
-  _guardMaterial: {fileID: 2100000, guid: 1d1a95ee2e30b56459eb68c810372114, type: 2}
-  _amplifyMaterial: {fileID: 2100000, guid: 6c735a1e9f806224297013399edddc2f, type: 2}
-  _cogMaterial: {fileID: 2100000, guid: 4f96d96e5eaeff84ca3c7a0989e1c1d6, type: 2}
-  _sealMaterial: {fileID: 2100000, guid: b3d9f1fc468bce94abe01f6b6c6a9b69, type: 2}
+  _guardMaterial: {fileID: 0}
+  _amplifyMaterial: {fileID: 0}
+  _cogMaterial: {fileID: 0}
+  _sealMaterial: {fileID: 0}
 --- !u!1001 &831914423
 PrefabInstance:
   m_ObjectHideFlags: 0
