@@ -120,8 +120,8 @@ public sealed class SpellGameUI : MonoBehaviour
     private float _feedbackUntil;
     private int _feedbackVersion;
     private int _feedbackShownVersion;
-    private int _impactTarget = -1;
-    private bool _impactAll;
+    // 마지막 시전에서 실제로 맞은 적 표시다. 죽은 적·빗나간 적은 강조하지 않는다.
+    private bool[] _impactHits = Array.Empty<bool>();
 
     private bool _showHelp;
     private int _openPile = -1;
@@ -359,7 +359,7 @@ public sealed class SpellGameUI : MonoBehaviour
         float remaining = _feedbackUntil - Time.unscaledTime;
         SpellEnemyView[] enemies = _combatScreen.Enemies;
         float alpha = remaining > 0 ? 0.32f * Mathf.Clamp01((remaining - 1.05f) / 0.45f) : 0;
-        for (int i = 0; i < enemies.Length; i++) enemies[i].SetImpact(_feedbackColor, (_impactAll || i == _impactTarget) ? alpha : 0);
+        for (int i = 0; i < enemies.Length; i++) enemies[i].SetImpact(_feedbackColor, i < _impactHits.Length && _impactHits[i] ? alpha : 0);
     }
 
     /// <summary>선택·조준·도안 이동 중에만 조작 안내를 커서 옆에 표시한다.</summary>
@@ -1154,7 +1154,7 @@ public sealed class SpellGameUI : MonoBehaviour
         int absorbed = Math.Min(_game.Block, incoming);
         _pendingCast = -1; ClearSelection(); _game.EndTurn(); _message = "";
         int damage = healthBefore - _game.Health;
-        _impactTarget = -1; _impactAll = false;
+        _impactHits = Array.Empty<bool>();
         ShowFeedback($"턴 종료 · 저주 HP -{_game.LastCurseDamage} · 방어 {(_game.LastCurseDamage >= healthBefore ? 0 : absorbed)} · 총 HP -{damage}", _dangerColor);
         if (_game.LastContaminationAdded > 0)
             ShowFeedback($"총 HP -{damage} · 오염술사가 드로우 더미에 오염 조각 {_game.LastContaminationAdded}장을 섞었습니다!", AccentColorForContamination());
@@ -1184,7 +1184,9 @@ public sealed class SpellGameUI : MonoBehaviour
         string result = $"{SpellGame.PatternName(board)} 시전  ·  {FormulaText(board)}";
         if (!_game.Cast(board, target)) { _message = "살아 있는 대상을 선택하세요"; Render(); return; }
         _onboardingComplete = true;
-        _pendingCast = -1; ClearSelection(); SpellGame.SpellKind kind = SpellGame.PatternKind(board); _impactAll = kind == SpellGame.SpellKind.All || kind == SpellGame.SpellKind.Scatter; _impactTarget = kind == SpellGame.SpellKind.Single ? target : -1;
+        _pendingCast = -1; ClearSelection();
+        _impactHits = new bool[_game.Enemies.Count];
+        foreach (int hit in _game.LastCastHits) if (hit >= 0 && hit < _impactHits.Length) _impactHits[hit] = true;
         _message = ""; ShowFeedback(result, PatternColor(board)); Render();
     }
 

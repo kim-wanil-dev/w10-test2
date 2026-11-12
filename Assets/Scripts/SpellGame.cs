@@ -289,6 +289,9 @@ public sealed class SpellGame
 
     private readonly Random _random = new Random();
     private readonly List<Card> _owned = new List<Card>();
+    // 마지막 시전에서 실제로 피해를 준 적 번호를 타격 순서대로 기록한다. 연출이 죽은 적을 치지 않도록 쓴다.
+    private readonly List<int> _lastCastHits = new List<int>();
+    private bool _isRecordingHits;
     private readonly List<Card> _draw = new List<Card>();
     private readonly List<Card> _discard = new List<Card>();
     private int _nextId;
@@ -322,6 +325,7 @@ public sealed class SpellGame
 
     public ReadOnlyCollection<Card> Hand { get; }
     public IReadOnlyList<Card> OwnedCards { get { return _owned; } }
+    public IReadOnlyList<int> LastCastHits { get { return _lastCastHits; } }
     public static IReadOnlyList<Card> DebugPieces { get { return Array.AsReadOnly(DEBUG_PIECES); } }
     public ReadOnlyCollection<Enemy> Enemies { get; }
     public ReadOnlyCollection<int> Spells { get; }
@@ -1183,6 +1187,7 @@ public sealed class SpellGame
     private void DamageEnemy(Enemy enemy, int damage)
     {
         if (enemy.Health <= 0 || damage <= 0) return;
+        if (_isRecordingHits) _lastCastHits.Add(_enemies.IndexOf(enemy));
         int absorbed = Math.Min(enemy.Block, damage);
         enemy.Block -= absorbed; damage -= absorbed;
         int before = enemy.Health;
@@ -1561,11 +1566,14 @@ public sealed class SpellGame
         Board board = Boards[boardIndex];
         SpellEvaluation e = Evaluate(boardIndex);
         Block += e.Block;
+        _lastCastHits.Clear(); _isRecordingHits = true;
         if (e.Kind == SpellKind.Single) DamageEnemy(Enemies[Target], e.Value);
         else if (e.Kind == SpellKind.All) { foreach (Enemy enemy in Enemies) if (enemy.Health > 0) DamageEnemy(enemy, e.Value); }
+        // 산탄 타격은 매번 그 순간 살아 있는 적 중에서 고르므로, 앞 타격으로 쓰러진 적은 다음 타격 대상이 아니다.
         else if (e.Kind == SpellKind.Scatter) for (int i = 0; i < e.Hits; i++) HitRandom(e.Value);
         for (int i = 0; i < e.ShardHits; i++) HitRandom(SHARD_DAMAGE);
         for (int i = 0; i < e.KeywordRandomHits && e.KeywordRandomDamage > 0; i++) HitRandom(e.KeywordRandomDamage);
+        _isRecordingHits = false;
         bool alive = false; for (int i = 0; i < Enemies.Count; i++) if (Enemies[i].Health > 0) { if (!alive && Enemies[Target].Health <= 0) Target = i; alive = true; }
         List<Card> recalled = new List<Card>();
         for (int i = board.Pieces.Count - 1; i >= 0; i--)
