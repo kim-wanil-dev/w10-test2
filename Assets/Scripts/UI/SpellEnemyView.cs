@@ -55,8 +55,8 @@ public sealed class SpellEnemyView : MonoBehaviour
         _index = index; _onClick = onClick; _hover.Setup(ui);
     }
 
-    /// <summary>적 상태로 표시를 갱신한다. 실루엣 크기에 맞춰 의도 배지·이름·체력 바를 아래 기준선에서 쌓는다.</summary>
-    public void Bind(string displayName, int health, int maxHealth, int intent, string patternText, Color color, Vector2 size, bool boss, bool target, bool aiming, int previewDamage)
+    /// <summary>적 상태와 다음 행동·방어를 표시한다. 조준 피해는 적 방어를 먼저 차감하며 행동 설명을 의도 배지 위에 배치한다.</summary>
+    public void Bind(string displayName, int health, int maxHealth, int intent, string patternText, Color color, Vector2 size, bool boss, bool target, bool aiming, int previewDamage, string ability = null, int block = 0, SpellGame.EnemyAction action = SpellGame.EnemyAction.Attack, int actionAmount = 0)
     {
         bool dead = health <= 0;
         float healthTop = _healthRect.anchoredPosition.y + _healthRect.sizeDelta.y;
@@ -70,14 +70,24 @@ public sealed class SpellEnemyView : MonoBehaviour
         _crown.SetActive(boss);
         _intent.gameObject.SetActive(!dead);
         _intent.anchoredPosition = new Vector2(0, silhouetteBottom + size.y + (boss ? BOSS_INTENT_GAP : INTENT_GAP));
-        _intentValue.text = intent.ToString();
-        _pattern.gameObject.SetActive(false);
-        _pattern.text = patternText;
+        _intentValue.text = action == SpellGame.EnemyAction.Defend ? $"+{actionAmount}" : action == SpellGame.EnemyAction.Charge ? "충전" : action == SpellGame.EnemyAction.Curse ? "저주" : intent.ToString();
+        _pattern.gameObject.SetActive(!dead && ability != null);
+        _pattern.text = ability ?? patternText;
+        if (ability != null)
+        {
+            RectTransform description = _pattern.rectTransform;
+            description.anchorMin = description.anchorMax = new Vector2(0.5f, 1f);
+            description.pivot = new Vector2(0.5f, 0f);
+            description.anchoredPosition = new Vector2(0, 6);
+            description.sizeDelta = new Vector2(360, 80);
+            _pattern.fontSize = 16; _pattern.alignment = TextAnchor.LowerCenter;
+            _pattern.color = _nameColor;
+        }
         _name.text = dead ? $"{displayName} · 쓰러짐" : displayName;
         _name.color = dead ? _deadNameColor : _nameColor;
         _name.fontSize = boss ? 22 : 18;
         _healthRect.gameObject.SetActive(!dead);
-        int shownDamage = aiming ? previewDamage : 0;
+        int shownDamage = aiming ? Mathf.Max(0, previewDamage - block) : 0;
         int after = Mathf.Max(0, health - shownDamage);
         _health.Bind(health, maxHealth, shownDamage, shownDamage > 0 ? $"{health} → {after} / {maxHealth}" : $"{health} / {maxHealth}");
         _targetChip.SetActive(false);
@@ -85,7 +95,7 @@ public sealed class SpellEnemyView : MonoBehaviour
         _aimFrame.sizeDelta = size + Vector2.one * AIM_PADDING * 2;
         _aimFrame.anchoredPosition = new Vector2(0, silhouetteBottom - AIM_PADDING);
         _previewChip.SetActive(aiming && !dead && previewDamage > 0);
-        _previewValue.text = $"-{previewDamage}";
+        _previewValue.text = $"-{shownDamage}";
         _previewResult.text = $"체력 {health} → {after}";
         _hitRect.sizeDelta = new Vector2(Mathf.Max(size.x + AIM_PADDING * 2, 240f), silhouetteBottom + size.y + AIM_PADDING);
         _hitArea.interactable = !dead;

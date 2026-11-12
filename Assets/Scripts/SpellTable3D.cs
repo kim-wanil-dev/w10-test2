@@ -339,6 +339,7 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>3D 조각의 기본 색을 반환한다. 코팅 색, 이전 효과 색, 점토 색, 일반 색 순으로 고른다.</summary>
     private Color PieceTint(SpellGame.Card card)
     {
+        if (card.IsContaminated) return _ui.ShapeTint(card);
         if (card.Coating != SpellGame.Coating.None) return _ui.CoatingColor(card.Coating);
         if (card.Effect != SpellGame.Effect.None) return _ui.EffectColor(card.Effect);
         return card.IsUnique ? CLAY_COLOR : NORMAL_COLOR;
