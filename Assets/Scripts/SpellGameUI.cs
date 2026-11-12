@@ -897,7 +897,8 @@ public sealed class SpellGameUI : MonoBehaviour
         string terms = "";
         foreach (string term in e.Terms) terms += term.StartsWith("오염 -", StringComparison.Ordinal) ? " − " + term.Substring(4) : " + " + term.Replace(" +", " ");
         string main;
-        if (e.Kind == SpellGame.SpellKind.Scatter) main = e.Terms.Count > 0 ? $"{e.Hits}타 × ({e.Base}{terms}) = 무작위 {e.Total}" : $"{e.Hits}타 × {e.Base} = 무작위 {e.Total}";
+        if (e.Kind == SpellGame.SpellKind.None) main = "기본 효과 없음";
+        else if (e.Kind == SpellGame.SpellKind.Scatter) main = e.Terms.Count > 0 ? $"{e.Hits}타 × ({e.Base}{terms}) = 무작위 {e.Total}" : $"{e.Hits}타 × {e.Base} = 무작위 {e.Total}";
         else
         {
             string word = e.Kind == SpellGame.SpellKind.Block ? "방어" : e.Kind == SpellGame.SpellKind.All ? "전체" : "피해";
@@ -907,8 +908,11 @@ public sealed class SpellGameUI : MonoBehaviour
         int guard = e.Block - (e.Kind == SpellGame.SpellKind.Block ? e.Value : 0);
         if (guard > 0) extras.Add($"방어 +{guard}");
         if (e.ShardHits > 0) extras.Add($"파편 {e.ShardHits}타");
+        if (e.KeywordRandomDamage > 0 && e.KeywordRandomHits > 0) extras.Add(e.KeywordRandomHits > 1 ? $"무작위 적 피해 {e.KeywordRandomDamage}×{e.KeywordRandomHits}" : $"무작위 적 피해 {e.KeywordRandomDamage}");
         if (e.Draws > 0) extras.Add($"보충 {e.Draws}장");
         if (e.Recalls > 0) extras.Add($"회수 {e.Recalls}장");
+        // 기본 효과가 없는 도안은 부가 효과가 있으면 그것만 보여 준다.
+        if (e.Kind == SpellGame.SpellKind.None && extras.Count > 0) return string.Join(" · ", extras);
         return extras.Count > 0 ? main + "  ·  " + string.Join(" · ", extras) : main;
     }
 

@@ -117,7 +117,7 @@ public sealed class SpellPieceEditorWindow : EditorWindow
         foreach (SpellGame.Shape shape in SHAPES)
         {
             SpellPieceData piece = Find(shape);
-            string text = piece == null ? $"{shape}  [누락]" : $"{piece.Name} ({shape}){(IsLocked(shape) ? "  [잠금]" : "")}";
+            string text = piece == null ? $"{shape}  [누락]" : $"{piece.Name} ({shape}){(IsLocked(shape) ? "  [잠금]" : "")}{(piece.StarterCount > 0 ? $"  기본 {piece.StarterCount}장" : "")}";
             Color previous = GUI.contentColor;
             if (piece == null) GUI.contentColor = MISSING_COLOR;
             if (GUILayout.Toggle(shape == _selected, text, EditorStyles.toolbarButton) && shape != _selected) { _selected = shape; GUI.FocusControl(null); }
@@ -147,6 +147,7 @@ public sealed class SpellPieceEditorWindow : EditorWindow
         piece.Name = EditorGUILayout.TextField("이름", piece.Name);
         piece.Rotation = (SpellPieceData.RotationMode)EditorGUILayout.EnumPopup(new GUIContent("회전 방식", "MirrorAlternate는 2·3 방향에 좌우를 뒤집은 모양을 씁니다."), piece.Rotation);
         piece.IsInRewardPool = EditorGUILayout.Toggle("보상 후보", piece.IsInRewardPool);
+        DrawStarterCount(piece);
         bool isChanged = EditorGUI.EndChangeCheck();
 
         EditorGUILayout.Space();
@@ -162,6 +163,22 @@ public sealed class SpellPieceEditorWindow : EditorWindow
         EditorGUILayout.EndScrollView();
         EditorGUILayout.EndVertical();
         if (isChanged) MarkDirty();
+    }
+
+    /// <summary>기본 덱 체크와, 체크했을 때 넣을 장수 입력을 그린다. 체크하면 1장으로 시작하고 해제하면 0장이다. 아래에 전체 기본 덱 장수를 표시한다.</summary>
+    private void DrawStarterCount(SpellPieceData piece)
+    {
+        bool isStarter = EditorGUILayout.Toggle(new GUIContent("기본 덱", "체크하면 새 게임 시작 덱에 이 조각을 넣습니다."), piece.StarterCount > 0);
+        if (!isStarter) piece.StarterCount = 0;
+        else
+        {
+            EditorGUI.indentLevel++;
+            piece.StarterCount = Mathf.Max(1, EditorGUILayout.IntField("장수", Mathf.Max(1, piece.StarterCount)));
+            EditorGUI.indentLevel--;
+        }
+        int total = 0;
+        foreach (SpellPieceData other in _table.Pieces) total += Mathf.Max(0, other.StarterCount);
+        EditorGUILayout.LabelField($"기본 덱 합계 {total}장", EditorStyles.miniLabel);
     }
 
     /// <summary>편집 중인 칸을 정규화해 SpellGame.OrientCells로 네 방향을 계산하고 나란히 그린다. 런타임 데이터를 읽지 못하는 상태면 안내만 표시한다.</summary>

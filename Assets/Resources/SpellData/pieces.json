@@ -27,7 +27,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": true,
+      "starterCount": 1
     },
     {
       "shape": "Triangle",
@@ -45,7 +46,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": true,
+      "starterCount": 3
     },
     {
       "shape": "Rectangle",
@@ -88,7 +90,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": false,
+      "starterCount": 0
     },
     {
       "shape": "QuarterTriangle",
@@ -101,7 +104,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": true,
+      "starterCount": 4
     },
     {
       "shape": "Diamond",
@@ -114,7 +118,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": true,
+      "starterCount": 4
     },
     {
       "shape": "Parallelogram",
@@ -128,16 +133,12 @@
         {
           "x": 1,
           "y": 0,
-          "mask": 15
-        },
-        {
-          "x": 2,
-          "y": 0,
           "mask": 12
         }
       ],
       "rotation": "MirrorAlternate",
-      "isInRewardPool": true
+      "isInRewardPool": true,
+      "starterCount": 3
     },
     {
       "shape": "MediumTriangle",
@@ -160,7 +161,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": true,
+      "starterCount": 0
     },
     {
       "shape": "House",
@@ -188,7 +190,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": false
+      "isInRewardPool": false,
+      "starterCount": 0
     },
     {
       "shape": "LargeTriangle",
@@ -226,7 +229,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": false
+      "isInRewardPool": false,
+      "starterCount": 0
     },
     {
       "shape": "LShape",
@@ -284,7 +288,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": false
+      "isInRewardPool": false,
+      "starterCount": 0
     },
     {
       "shape": "Clay",
@@ -297,7 +302,8 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true
+      "isInRewardPool": true,
+      "starterCount": 0
     }
   ]
 }

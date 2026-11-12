@@ -17,13 +17,17 @@ public sealed class SpellGame
     public enum Coating { None, Guard, Amplify, Cog }
     public enum RewardKind { None, Piece, Pattern, Seal }
     public enum Phase { Title, Combat, Reward, Loadout, Victory, Defeat, Event, Rest }
-    public enum SpellKind { Single, Block, All, Scatter }
+    // None은 기본 효과가 없고 키워드·씰링·코팅 효과만 쓰는 도안이다. JSON은 이름으로 저장하므로 끝에 추가했다.
+    public enum SpellKind { Single, Block, All, Scatter, None }
     public enum Keyword { None, OneStroke, Mosaic, Purity }
+    // 키워드 조건을 만족했을 때 받는 보상 종류다. 추가 피해는 주문 수치에 더하고, 무작위 적 피해는 별도 1타, 방어도는 시전자 방어에 더한다.
+    public enum KeywordBonus { Damage, RandomDamage, Block }
     public enum EnemyAction { Attack, Defend, Curse, Charge }
 
     public const int MAX_HAND = 7;
-    public const int MAX_HITS = 6;
     public const int SHARD_DAMAGE = 2;
+    // 도안 데이터에 키워드 보상 수치가 없을 때 쓰는 기본값이다.
+    public const int DEFAULT_KEYWORD_BONUS = 6;
     // 도안 기준 좌표 범위의 한 변 칸 수다. 칸은 화면에 똑바로 놓인 정사각형이고 두 대각선이 1/4 구역을 나눈다.
     public const int LOCAL_SIZE = 4;
     private const int CELL_COUNT = LOCAL_SIZE * LOCAL_SIZE;
@@ -39,8 +43,6 @@ public sealed class SpellGame
     private const int RESONANCE_COUNT = 3;
     private const int COG_LIMIT = 3;
     private const int OVERPAINT_BONUS = 2;
-    private const int ONE_STROKE_BONUS = 6;
-    private const int PURITY_BONUS = 6;
     private const int VICTORY_HEAL = 6;
     private const int START_HEALTH = 50;
     private const int DEVELOPER_HEALTH = 9999;
@@ -88,9 +90,9 @@ public sealed class SpellGame
     /// <summary>시전 순간의 판 상태로 계산한 주문 결과다. Value는 다타 주문이면 타격 하나의 피해다.</summary>
     public sealed class SpellEvaluation
     {
-        public SpellKind Kind; public int Base; public int Value; public int Hits = 1; public int Block; public int ShardHits; public int Draws; public int Recalls;
+        public SpellKind Kind; public int Base; public int Value; public int Hits = 1; public int Block; public int ShardHits; public int Draws; public int Recalls; public int KeywordRandomDamage; public int KeywordRandomHits;
         public readonly List<string> Terms = new List<string>();
-        public int Total { get { return Kind == SpellKind.Scatter ? Value * Hits : Value; } }
+        public int Total { get { return Kind == SpellKind.None ? 0 : Kind == SpellKind.Scatter ? Value * Hits : Value; } }
     }
     public enum CurseFailureEffect { HPDamage }
     public enum CurseResolution { None, Spell, Hammer }
@@ -282,6 +284,7 @@ public sealed class SpellGame
     private static readonly string[] SHAPE_NAMES;
     private static readonly bool[] SHAPE_MIRRORED;
     private static readonly Shape[] REWARD_SHAPES;
+    private static readonly int[] STARTER_COUNTS;
     private static readonly ShapeCell[][][] SHAPE_ORIENTATIONS;
 
     private readonly Random _random = new Random();
@@ -367,8 +370,10 @@ public sealed class SpellGame
         SHAPE_NAMES = new string[SHAPE_KIND_COUNT];
         SHAPE_MIRRORED = new bool[SHAPE_KIND_COUNT];
         bool[] isReward = new bool[SHAPE_KIND_COUNT];
+        STARTER_COUNTS = new int[SHAPE_KIND_COUNT];
         foreach (SpellPieceData piece in SpellDataStore.LoadPieces().Pieces)
         {
+            STARTER_COUNTS[(int)piece.Shape] = piece.StarterCount;
             int shape = (int)piece.Shape;
             BASE_SHAPES[shape] = new ShapeCell[piece.Cells.Count];
             for (int i = 0; i < piece.Cells.Count; i++) BASE_SHAPES[shape][i] = new ShapeCell(piece.Cells[i].X, piece.Cells[i].Y, piece.Cells[i].Mask);
@@ -599,19 +604,7 @@ public sealed class SpellGame
     public static bool NeedsTarget(int spell) { return spell >= 0 && spell < PatternCount && PATTERNS[spell].Kind == SpellKind.Single; }
 
     /// <summary>도안의 기본 효과와 키워드를 한 줄 설명으로 반환한다.</summary>
-    public static string PatternDescription(int spell)
-    {
-        int value = PATTERNS[spell].BaseValue;
-        SpellKind kind = PATTERNS[spell].Kind;
-        string text = kind == SpellKind.Single ? $"단일 피해 {value}" : kind == SpellKind.Block ? $"방어 {value}" : kind == SpellKind.All ? $"전체 피해 {value}" : $"조각 1장마다 무작위 피해 {value} (최대 {MAX_HITS}타)";
-        switch (PATTERNS[spell].Keyword)
-        {
-            case Keyword.OneStroke: return text + $" · 한 방: 조각 1장으로 완성하면 +{ONE_STROKE_BONUS}";
-            case Keyword.Mosaic: return "모자이크 · " + text;
-            case Keyword.Purity: return text + $" · 순수: 한 가지 도형으로만 완성하면 +{PURITY_BONUS}";
-            default: return text;
-        }
-    }
+    public static string PatternDescription(int spell) { return SpellDataStore.PatternDescription(PATTERNS[spell]); }
 
     /// <summary>도안의 1/4 구역 총수를 반환한다.</summary>
     public static int PatternArea(int spell)
@@ -647,7 +640,7 @@ public sealed class SpellGame
     /// <summary>지정한 도안을 지금 시전했을 때의 공격 피해 합을 반환한다. 방어 도안은 0이다.</summary>
     public int GetSpellDamage(int boardIndex)
     {
-        if (boardIndex < 0 || boardIndex >= Boards.Count || PATTERNS[boardIndex].Kind == SpellKind.Block) return 0;
+        if (boardIndex < 0 || boardIndex >= Boards.Count || PATTERNS[boardIndex].Kind == SpellKind.Block || PATTERNS[boardIndex].Kind == SpellKind.None) return 0;
         return Evaluate(boardIndex).Total;
     }
 
@@ -667,10 +660,9 @@ public sealed class SpellGame
             if (!isDeveloperMode && !PATTERNS[i].IsStarter) continue;
             _ownedSpells.Add(i); _spells.Add(i);
         }
-        for (int i = 0; i < 4; i++) AddCard(Shape.QuarterTriangle, Effect.None);
-        for (int i = 0; i < 3; i++) AddCard(Shape.Triangle, Effect.None);
-        for (int i = 0; i < 4; i++) AddCard(Shape.Diamond, Effect.None);
-        AddCard(Shape.Square, Effect.None);
+        // 기본 덱은 조각 데이터(pieces.json)의 도형별 starterCount 장수로 만든다.
+        for (int shape = 0; shape < STARTER_COUNTS.Length; shape++)
+            for (int i = 0; i < STARTER_COUNTS[shape]; i++) AddCard((Shape)shape, Effect.None);
         StartBattle();
     }
 
@@ -1511,18 +1503,32 @@ public sealed class SpellGame
             overpaint += SealCount(p.Card, Seal.Overpaint);
             resonance += EffectCount(p.Card, Effect.Resonance);
         }
-        bool attack = e.Kind != SpellKind.Block;
+        bool attack = e.Kind != SpellKind.Block && e.Kind != SpellKind.None;
         int value = e.Base;
         if (attack && amplify > 0) { int bonus = amplify * (e.Kind == SpellKind.Scatter ? AMPLIFY_HIT_BONUS : AMPLIFY_BONUS); value += bonus; e.Terms.Add($"증폭 +{bonus}"); }
         if (attack && cog > 0) { value += cog; e.Terms.Add($"톱니 +{cog}"); }
         if (board.Completer != null && EffectCount(board.Completer.Card, Effect.Period) > 0) { int bonus = PERIOD_BONUS * EffectCount(board.Completer.Card, Effect.Period); value += bonus; e.Terms.Add($"마침표 +{bonus}"); }
         if (resonance > 0 && counted >= RESONANCE_COUNT) { value += resonance * RESONANCE_BONUS; e.Terms.Add($"공명 +{resonance * RESONANCE_BONUS}"); }
         if (overpaint > 0) { value += overpaint * OVERPAINT_BONUS; e.Terms.Add($"덧칠 +{overpaint * OVERPAINT_BONUS}"); }
-        if (PATTERNS[spell].Keyword == Keyword.OneStroke && counted == 1) { value += ONE_STROKE_BONUS; e.Terms.Add($"한 방 +{ONE_STROKE_BONUS}"); }
-        if (PATTERNS[spell].Keyword == Keyword.Purity && pure) { value += PURITY_BONUS; e.Terms.Add($"순수 +{PURITY_BONUS}"); }
-        if (e.Kind == SpellKind.Scatter) e.Hits = Math.Max(1, Math.Min(MAX_HITS, counted));
+        SpellPatternData data = PATTERNS[spell];
+        // 모자이크는 조각 1장 이상이면 항상 발동하고 보상을 조각 수만큼 받는다. 한 방·순수는 조건을 만족하면 1번 받는다.
+        bool isMosaic = data.Keyword == Keyword.Mosaic;
+        bool keywordMet = (data.Keyword == Keyword.OneStroke && counted == 1) || (data.Keyword == Keyword.Purity && pure) || (isMosaic && counted >= 1);
+        int keywordBlock = 0, times = isMosaic ? counted : 1;
+        if (keywordMet && data.KeywordBonusValue > 0)
+        {
+            string name = isMosaic ? "모자이크" : data.Keyword == Keyword.OneStroke ? "한 방" : "순수";
+            string amount = isMosaic ? $"{data.KeywordBonusValue}×{times}" : $"{data.KeywordBonusValue}";
+            if (data.KeywordBonus == KeywordBonus.Damage) { value += data.KeywordBonusValue * times; e.Terms.Add($"{name} +{amount}"); }
+            else if (data.KeywordBonus == KeywordBonus.RandomDamage) { e.KeywordRandomDamage = data.KeywordBonusValue; e.KeywordRandomHits = times; }
+            else keywordBlock = data.KeywordBonusValue * times;
+        }
+        // 산탄은 조각 수와 관계없이 도안에 정한 횟수만큼 타격한다.
+        if (e.Kind == SpellKind.Scatter) e.Hits = Math.Max(1, data.Hits);
+        // 기본 효과가 없는 도안은 주문 수치에 더하는 항목도 적용할 곳이 없어 버린다. 무작위 적 피해·방어도·파편·보충·회수는 그대로 받는다.
+        if (e.Kind == SpellKind.None) { value = 0; e.Base = 0; e.Terms.Clear(); }
         e.Value = value;
-        e.Block = (e.Kind == SpellKind.Block ? value : 0) + guard * GUARD_BONUS;
+        e.Block = (e.Kind == SpellKind.Block ? value : 0) + guard * GUARD_BONUS + keywordBlock;
         if (contamination > 0)
         {
             e.Value = Math.Max(0, e.Value - contamination);
@@ -1559,6 +1565,7 @@ public sealed class SpellGame
         else if (e.Kind == SpellKind.All) { foreach (Enemy enemy in Enemies) if (enemy.Health > 0) DamageEnemy(enemy, e.Value); }
         else if (e.Kind == SpellKind.Scatter) for (int i = 0; i < e.Hits; i++) HitRandom(e.Value);
         for (int i = 0; i < e.ShardHits; i++) HitRandom(SHARD_DAMAGE);
+        for (int i = 0; i < e.KeywordRandomHits && e.KeywordRandomDamage > 0; i++) HitRandom(e.KeywordRandomDamage);
         bool alive = false; for (int i = 0; i < Enemies.Count; i++) if (Enemies[i].Health > 0) { if (!alive && Enemies[Target].Health <= 0) Target = i; alive = true; }
         List<Card> recalled = new List<Card>();
         for (int i = board.Pieces.Count - 1; i >= 0; i--)
@@ -1599,7 +1606,7 @@ public sealed class SpellGame
             hasClay |= piece.IsUnique;
             _rewards.Add(new Reward { Pattern = -1, Piece = piece });
         }
-        for (int spell = 0; spell < PatternCount; spell++) if (!_ownedSpells.Contains(spell)) _patternRewards.Add(new Reward { Pattern = spell });
+        for (int spell = 0; spell < PatternCount; spell++) if (!_ownedSpells.Contains(spell) && PATTERNS[spell].IsInRewardPool) _patternRewards.Add(new Reward { Pattern = spell });
         int patternCount = Math.Min(REWARD_PATTERN_COUNT, _patternRewards.Count);
         for (int i = 0; i < patternCount; i++)
         {
