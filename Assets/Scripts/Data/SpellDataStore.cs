@@ -94,6 +94,86 @@ public static class SpellDataStore
         return "#" + ColorUtility.ToHtmlStringRGB(color);
     }
 
+    /// <summary>도안 이름과 효과를 게임 화면 표기로 반환한다. 첫 줄은 "이름 - 기본 효과", 키워드 보상이 있으면 둘째 줄에 "태그: 보상"을 붙인다. 예: "방패 밀치기 - 방어 9\n순수: 무작위 적 피해 6"</summary>
+    public static string PatternTitle(SpellPatternData data)
+    {
+        string description = PatternDescription(data);
+        return $"{data.Name} - {description}";
+    }
+
+    /// <summary>도안의 기본 효과 줄과 키워드 태그 줄을 줄바꿈으로 이어 반환한다. SpellGame 정적 데이터를 읽지 않으므로 에디터 미저장 편집본에도 쓸 수 있다.</summary>
+    public static string PatternDescription(SpellPatternData data)
+    {
+        string text = BaseEffectText(data);
+        if (text.Length == 0) text = "기본 효과 없음";
+        string keyword = KeywordLine(data);
+        return keyword.Length == 0 ? text : text + "\n" + keyword;
+    }
+
+    /// <summary>키워드 태그와 보상을 "태그: 보상" 한 줄로 반환한다. 키워드가 없거나 보상 수치가 0이면 빈 문자열이다. 모자이크는 "× 조각 수"를 붙인다.</summary>
+    public static string KeywordLine(SpellPatternData data)
+    {
+        if (!HasKeywordBonus(data.Keyword) || data.KeywordBonusValue == 0) return "";
+        string line = $"{KeywordName(data.Keyword)}: {KeywordBonusText(data)}";
+        return data.Keyword == SpellGame.Keyword.Mosaic ? line + " × 조각 수" : line;
+    }
+
+    /// <summary>키워드 태그의 표시 이름을 반환한다. 없음이면 빈 문자열이다.</summary>
+    public static string KeywordName(SpellGame.Keyword keyword)
+    {
+        switch (keyword)
+        {
+            case SpellGame.Keyword.OneStroke: return "한 방";
+            case SpellGame.Keyword.Mosaic: return "모자이크";
+            case SpellGame.Keyword.Purity: return "순수";
+            default: return "";
+        }
+    }
+
+    /// <summary>도안 키워드 태그의 발동 조건 설명을 "태그 이름\n조건" 형식으로 반환한다. 태그 줄이 없으면 빈 문자열이다.</summary>
+    public static string KeywordExplanation(SpellPatternData data)
+    {
+        if (KeywordLine(data).Length == 0) return "";
+        switch (data.Keyword)
+        {
+            case SpellGame.Keyword.OneStroke: return "<b>한 방</b>\n조각 1장으로 도안을 완성해 시전하면 보상을 받습니다.";
+            case SpellGame.Keyword.Mosaic: return "<b>모자이크</b>\n도안에 놓인 조각 수만큼 보상을 받습니다. 조각 1장이어도 발동합니다.";
+            case SpellGame.Keyword.Purity: return "<b>순수</b>\n한 가지 도형으로만 도안을 완성해 시전하면 보상을 받습니다. 접착 조각은 순수로 치지 않습니다.";
+            default: return "";
+        }
+    }
+
+    /// <summary>도안 효과 종류의 기본 효과 문구를 반환한다. 효과 종류가 None이면 빈 문자열이다.</summary>
+    private static string BaseEffectText(SpellPatternData data)
+    {
+        int value = data.BaseValue;
+        switch (data.Kind)
+        {
+            case SpellGame.SpellKind.Single: return $"단일 피해 {value}";
+            case SpellGame.SpellKind.Block: return $"방어 {value}";
+            case SpellGame.SpellKind.All: return $"전체 피해 {value}";
+            case SpellGame.SpellKind.Scatter: return $"무작위 피해 {value} × {Math.Max(1, data.Hits)}타";
+            default: return "";
+        }
+    }
+
+    /// <summary>키워드가 만족 시 보상(종류·수치)을 쓰는지 반환한다. 한 방·순수·모자이크가 해당한다.</summary>
+    public static bool HasKeywordBonus(SpellGame.Keyword keyword)
+    {
+        return keyword == SpellGame.Keyword.OneStroke || keyword == SpellGame.Keyword.Purity || keyword == SpellGame.Keyword.Mosaic;
+    }
+
+    /// <summary>도안 키워드 보상의 종류와 수치를 설명 문구로 반환한다. 예: "추가 피해 +6", "무작위 적 피해 6", "방어도 +6"</summary>
+    private static string KeywordBonusText(SpellPatternData data)
+    {
+        switch (data.KeywordBonus)
+        {
+            case SpellGame.KeywordBonus.RandomDamage: return $"무작위 적 피해 {data.KeywordBonusValue}";
+            case SpellGame.KeywordBonus.Block: return $"방어도 +{data.KeywordBonusValue}";
+            default: return $"추가 피해 +{data.KeywordBonusValue}";
+        }
+    }
+
     /// <summary>도안 표를 검사해 오류와 경고 문구를 목록에 추가한다. warnings가 null이면 경고 검사를 건너뛴다.</summary>
     public static void ValidatePatterns(SpellPatternTable table, List<string> errors, List<string> warnings)
     {
@@ -109,15 +189,27 @@ public static class SpellDataStore
             else if (!ids.Add(pattern.Id)) errors.Add($"{label}: id '{pattern.Id}'가 중복됩니다");
             if (string.IsNullOrWhiteSpace(pattern.Name)) errors.Add($"{label}: 이름이 비어 있습니다");
             if (pattern.BaseValue < 0) errors.Add($"{label}: 기본 수치는 0 이상이어야 합니다");
+            if (pattern.KeywordBonusValue < 0) errors.Add($"{label}: 키워드 보상 수치는 0 이상이어야 합니다");
+            if (pattern.Kind == SpellGame.SpellKind.Scatter && pattern.Hits < 1) errors.Add($"{label}: 산탄 타격 횟수는 1 이상이어야 합니다");
             if (pattern.LayoutRotation < 0 || pattern.LayoutRotation > 3) errors.Add($"{label}: 배치 회전은 0~3이어야 합니다");
             if (!ParseColor(pattern.Color, out _)) errors.Add($"{label}: 색은 #RRGGBB 형식이어야 합니다");
             ValidateCells(label, pattern.Cells, errors);
             hasStarter |= pattern.IsStarter;
             if (warnings == null) continue;
-            if (pattern.Keyword == SpellGame.Keyword.Mosaic) warnings.Add($"{label}: 모자이크 키워드는 설명 문구만 있고 전투 효과가 없습니다");
+            bool hasBonus = HasKeywordBonus(pattern.Keyword);
+            if (hasBonus && pattern.KeywordBonusValue == 0) warnings.Add($"{label}: 키워드 보상 수치가 0이라 키워드 효과가 없습니다");
+            if (pattern.Kind == SpellGame.SpellKind.None && hasBonus && pattern.KeywordBonus == SpellGame.KeywordBonus.Damage && pattern.KeywordBonusValue > 0)
+                warnings.Add($"{label}: 기본 효과가 없어 키워드 추가 피해가 적용되지 않습니다. 무작위 적 피해나 방어도를 고르세요");
+            if (pattern.Kind == SpellGame.SpellKind.None && (!hasBonus || pattern.KeywordBonusValue == 0))
+                warnings.Add($"{label}: 기본 효과와 키워드 보상이 모두 없어 시전해도 씰링·코팅 효과만 납니다");
+            if (hasBonus && pattern.Kind == SpellGame.SpellKind.Block && pattern.KeywordBonus == SpellGame.KeywordBonus.Damage)
+                warnings.Add($"{label}: 방어 도안의 키워드 추가 피해는 방어 수치에 더해집니다");
             if (pattern.Cells != null && !FitsBoard(pattern)) warnings.Add($"{label}: 기본 위치·회전에서 판 밖으로 나갑니다. 실행 중에는 빈 자리를 찾아 배치합니다");
         }
         if (!hasStarter) errors.Add("시작 도안이 하나 이상 있어야 합니다");
+        bool hasRewardPattern = false;
+        foreach (SpellPatternData pattern in table.Patterns) hasRewardPattern |= pattern.IsInRewardPool && !pattern.IsStarter;
+        if (warnings != null && !hasRewardPattern) warnings.Add("보상 후보인 비시작 도안이 없어 전투 보상에 도안이 나오지 않습니다");
         if (warnings != null) AddStarterOverlapWarnings(table, warnings);
     }
 
@@ -128,9 +220,12 @@ public static class SpellDataStore
         if (table.Version != CURRENT_VERSION) errors.Add($"지원하지 않는 조각 JSON 버전입니다: {table.Version}");
         HashSet<SpellGame.Shape> found = new HashSet<SpellGame.Shape>();
         bool hasNormalReward = false;
+        int starterTotal = 0;
         foreach (SpellPieceData piece in table.Pieces)
         {
             string label = $"조각 {piece.Shape}";
+            if (piece.StarterCount < 0) errors.Add($"{label}: 기본 덱 장수는 0 이상이어야 합니다");
+            starterTotal += Math.Max(0, piece.StarterCount);
             // 보상은 점토를 뺀 도형을 반드시 뽑을 수 있어야 한다.
             hasNormalReward |= piece.IsInRewardPool && piece.Shape != SpellGame.Shape.Clay;
             if (!Enum.IsDefined(typeof(SpellGame.Shape), piece.Shape)) { errors.Add($"{label}: 알 수 없는 도형입니다"); continue; }
@@ -141,6 +236,7 @@ public static class SpellDataStore
         foreach (SpellGame.Shape shape in Enum.GetValues(typeof(SpellGame.Shape)))
             if (!found.Contains(shape)) errors.Add($"조각 {shape}: JSON 항목이 없습니다");
         if (!hasNormalReward) errors.Add("점토가 아닌 보상 후보 조각이 하나 이상 있어야 합니다");
+        if (starterTotal == 0) errors.Add("기본 덱에 넣은 조각이 없습니다. 조각 하나 이상에 기본 덱을 체크하세요");
     }
 
     /// <summary>칸 목록의 범위·마스크·중복·정규화를 검사해 오류를 추가한다. 오류가 없으면 true를 반환한다.</summary>

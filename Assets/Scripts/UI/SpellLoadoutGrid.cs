@@ -143,12 +143,38 @@ public sealed class SpellLoadoutGrid : UnityEngine.UI.MaskableGraphic, IPointerC
     /// <summary>화면 좌표를 격자 칸으로 바꾼다. 격자 밖이면 false를 반환한다.</summary>
     private bool TryCell(PointerEventData data, out Vector2Int cell)
     {
-        cell = new Vector2Int(-1, -1);
-        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(rectTransform, data.position, data.pressEventCamera, out Vector2 local)) return false;
+        return TryPoint(data.position, data.pressEventCamera, out cell, out _);
+    }
+
+    /// <summary>화면 좌표를 격자 칸과 칸 안의 상·우·하·좌 구역으로 바꾼다. 격자 밖이면 false를 반환한다.</summary>
+    private bool TryPoint(Vector2 screen, Camera eventCamera, out Vector2Int cell, out int sector)
+    {
+        cell = new Vector2Int(-1, -1); sector = 0;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(rectTransform, screen, eventCamera, out Vector2 local)) return false;
         Vector2 offset = local - rectTransform.rect.center;
         Vector2 grid = SpellPatternLayout.BoardToGrid(new Vector2(offset.x, -offset.y) / _cellSize);
         if (!SpellPatternLayout.Contains(grid)) return false;
-        cell = new Vector2Int(Mathf.FloorToInt(grid.x), Mathf.FloorToInt(grid.y)); return true;
+        cell = new Vector2Int(Mathf.FloorToInt(grid.x), Mathf.FloorToInt(grid.y));
+        float dx = grid.x - cell.x - 0.5f, dy = grid.y - cell.y - 0.5f;
+        sector = Mathf.Abs(dx) > Mathf.Abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+        return true;
+    }
+
+    /// <summary>캔버스 렌더 방식에 맞춰 화면 좌표 변환에 쓸 카메라를 반환한다. Overlay면 null이다.</summary>
+    private Camera EventCamera()
+    {
+        return canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+    }
+
+    /// <summary>드래그 중 화면 좌표로 격자 칸과 구역을 찾는다. 격자 밖이면 false를 반환한다.</summary>
+    public bool TryScreenPoint(Vector2 screen, out Vector2Int cell, out int sector) { return TryPoint(screen, EventCamera(), out cell, out sector); }
+
+    /// <summary>드래그 중 포인터 위치의 칸을 놓기 미리 보기 칸으로 정한다. 격자 밖이면 미리 보기를 숨긴다.</summary>
+    public void HoverAt(Vector2 screen)
+    {
+        TryPoint(screen, EventCamera(), out Vector2Int cell, out _);
+        if (cell == _hover) return;
+        _hover = cell; SetVerticesDirty();
     }
 
     public void OnPointerMove(PointerEventData data)

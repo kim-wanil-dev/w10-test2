@@ -1,0 +1,672 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="3300" viewBox="0 0 2400 3300">
+<rect x="0" y="0" width="2400" height="3300" rx="0" fill="#0D1422" stroke="none"/>
+<text x="64" y="75" font-family="Noto Sans KR" font-size="20" font-weight="600" fill="#91A8CB">SPELL PIECES  /  LIVE GAME CATALOG</text>
+<text x="64" y="140" font-family="Noto Sans KR" font-size="55" font-weight="700" fill="#F5F1E8">도안 · 조각 · 씰링 · 코팅</text>
+<text x="64" y="188" font-family="Noto Sans KR" font-size="23" font-weight="400" fill="#AEBBD0">현재 코드·JSON 기준  ·  2026.11.12  ·  인게임 이름 / 도형 마스크 / 설명 / 보상 조건</text>
+<rect x="64" y="220" width="2272" height="108" rx="18" fill="#182438" stroke="none"/>
+<text x="90" y="258" font-family="Noto Sans KR" font-size="23" font-weight="700" fill="#DCE6F7">보상 읽는 법</text>
+<text x="90" y="296" font-family="Noto Sans KR" font-size="22" font-weight="400" fill="#B8C9DF">조각: 매 전투 3개 중 1개  |  도안: 50% 확률로 등장, 미보유 중 최대 3개에서 1개  |  인장 단독 보상: 현재 비활성</text>
+<text x="64" y="400" font-family="Noto Sans KR" font-size="20" font-weight="700" fill="#8CA7D4">01</text>
+<text x="118" y="400" font-family="Noto Sans KR" font-size="36" font-weight="700" fill="#F3F5F9">도안  8종</text>
+<text x="118" y="442" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#9DAEC7">격자 1칸 = 인게임 격자 1칸 · 모든 미리보기에서 칸 크기 동일</text>
+<rect x="64" y="475" width="550" height="345" rx="18" fill="#182235" stroke="none"/>
+<text x="88" y="519" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#F4C95D">불씨</text>
+<rect x="354" y="493" width="135" height="34" rx="17" fill="#3D3037" stroke="none"/>
+<text x="368" y="517" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#E4B2BA">시작 보유</text>
+<path d="M 323,586 L 355,586 L 355,618 L 323,618 Z M 323,586 L 355,618 M 355,586 L 323,618" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 323,618 L 355,618 L 355,650 L 323,650 Z M 323,618 L 355,650 M 355,618 L 323,650" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="355,618 323,618 339,602" fill="#F4C95D"/>
+<polygon points="323,618 323,586 339,602" fill="#F4C95D"/>
+<polygon points="323,618 355,618 339,634" fill="#F4C95D"/>
+<polygon points="355,618 355,650 339,634" fill="#F4C95D"/>
+<polygon points="355,650 323,650 339,634" fill="#F4C95D"/>
+<polygon points="323,650 323,618 339,634" fill="#F4C95D"/>
+<path d="M 339,602 L 355,618" stroke="#F4C95D" fill="none" stroke-width="2"/>
+<path d="M 323,618 L 323,586" stroke="#F4C95D" fill="none" stroke-width="2"/>
+<path d="M 323,586 L 339,602" stroke="#F4C95D" fill="none" stroke-width="2"/>
+<path d="M 355,618 L 355,650" stroke="#F4C95D" fill="none" stroke-width="2"/>
+<path d="M 355,650 L 323,650" stroke="#F4C95D" fill="none" stroke-width="2"/>
+<path d="M 323,650 L 323,618" stroke="#F4C95D" fill="none" stroke-width="2"/>
+<text x="88" y="710" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2">단일 피해 6</text>
+<text x="88" y="800" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#93A6C2">일반 시작: 이미 보유 → 보상 제외</text>
+<rect x="638" y="475" width="550" height="345" rx="18" fill="#182235" stroke="none"/>
+<text x="662" y="519" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#E6EBF0">방벽</text>
+<rect x="928" y="493" width="135" height="34" rx="17" fill="#3D3037" stroke="none"/>
+<text x="942" y="517" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#E4B2BA">시작 보유</text>
+<path d="M 897,602 L 929,602 L 929,634 L 897,634 Z M 897,602 L 929,634 M 929,602 L 897,634" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="897,602 929,602 913,618" fill="#E6EBF0"/>
+<polygon points="929,602 929,634 913,618" fill="#E6EBF0"/>
+<polygon points="929,634 897,634 913,618" fill="#E6EBF0"/>
+<polygon points="897,634 897,602 913,618" fill="#E6EBF0"/>
+<path d="M 897,602 L 929,602" stroke="#E6EBF0" fill="none" stroke-width="2"/>
+<path d="M 929,602 L 929,634" stroke="#E6EBF0" fill="none" stroke-width="2"/>
+<path d="M 929,634 L 897,634" stroke="#E6EBF0" fill="none" stroke-width="2"/>
+<path d="M 897,634 L 897,602" stroke="#E6EBF0" fill="none" stroke-width="2"/>
+<text x="662" y="710" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2">방어 7</text>
+<text x="662" y="800" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#93A6C2">일반 시작: 이미 보유 → 보상 제외</text>
+<rect x="1212" y="475" width="550" height="345" rx="18" fill="#182235" stroke="none"/>
+<text x="1236" y="519" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#B9E36B">번개</text>
+<rect x="1502" y="493" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="1516" y="517" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 후보</text>
+<path d="M 1439,586 L 1471,586 L 1471,618 L 1439,618 Z M 1439,586 L 1471,618 M 1471,586 L 1439,618" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1439,618 L 1471,618 L 1471,650 L 1439,650 Z M 1439,618 L 1471,650 M 1471,618 L 1439,650" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1471,586 L 1503,586 L 1503,618 L 1471,618 Z M 1471,586 L 1503,618 M 1503,586 L 1471,618" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1471,618 L 1503,618 L 1503,650 L 1471,650 Z M 1471,618 L 1503,650 M 1503,618 L 1471,650" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1503,586 L 1535,586 L 1535,618 L 1503,618 Z M 1503,586 L 1535,618 M 1535,586 L 1503,618" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1503,618 L 1535,618 L 1535,650 L 1503,650 Z M 1503,618 L 1535,650 M 1535,618 L 1503,650" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="1471,586 1503,586 1487,602" fill="#B9E36B"/>
+<polygon points="1503,586 1503,618 1487,602" fill="#B9E36B"/>
+<polygon points="1503,618 1471,618 1487,602" fill="#B9E36B"/>
+<polygon points="1471,618 1471,586 1487,602" fill="#B9E36B"/>
+<polygon points="1503,586 1535,586 1519,602" fill="#B9E36B"/>
+<polygon points="1503,618 1503,586 1519,602" fill="#B9E36B"/>
+<polygon points="1471,618 1471,650 1455,634" fill="#B9E36B"/>
+<polygon points="1471,650 1439,650 1455,634" fill="#B9E36B"/>
+<polygon points="1471,618 1503,618 1487,634" fill="#B9E36B"/>
+<polygon points="1503,618 1503,650 1487,634" fill="#B9E36B"/>
+<polygon points="1503,650 1471,650 1487,634" fill="#B9E36B"/>
+<polygon points="1471,650 1471,618 1487,634" fill="#B9E36B"/>
+<path d="M 1471,586 L 1503,586" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<path d="M 1471,618 L 1471,586" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<path d="M 1503,586 L 1535,586" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<path d="M 1535,586 L 1519,602" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<path d="M 1519,602 L 1503,618" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<path d="M 1455,634 L 1471,618" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<path d="M 1471,650 L 1439,650" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<path d="M 1439,650 L 1455,634" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<path d="M 1503,618 L 1503,650" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<path d="M 1503,650 L 1471,650" stroke="#B9E36B" fill="none" stroke-width="2"/>
+<text x="1236" y="710" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2">단일 피해 14</text>
+<text x="1236" y="800" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#93A6C2">미보유일 때만 도안 보상에 등장</text>
+<rect x="1786" y="475" width="550" height="345" rx="18" fill="#182235" stroke="none"/>
+<text x="1810" y="519" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#F28DB2">유성</text>
+<rect x="2076" y="493" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="2090" y="517" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 후보</text>
+<path d="M 1997,586 L 2029,586 L 2029,618 L 1997,618 Z M 1997,586 L 2029,618 M 2029,586 L 1997,618" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1997,618 L 2029,618 L 2029,650 L 1997,650 Z M 1997,618 L 2029,650 M 2029,618 L 1997,650" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2029,586 L 2061,586 L 2061,618 L 2029,618 Z M 2029,586 L 2061,618 M 2061,586 L 2029,618" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2029,618 L 2061,618 L 2061,650 L 2029,650 Z M 2029,618 L 2061,650 M 2061,618 L 2029,650" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2061,586 L 2093,586 L 2093,618 L 2061,618 Z M 2061,586 L 2093,618 M 2093,586 L 2061,618" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2061,618 L 2093,618 L 2093,650 L 2061,650 Z M 2061,618 L 2093,650 M 2093,618 L 2061,650" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2093,586 L 2125,586 L 2125,618 L 2093,618 Z M 2093,586 L 2125,618 M 2125,586 L 2093,618" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2093,618 L 2125,618 L 2125,650 L 2093,650 Z M 2093,618 L 2125,650 M 2125,618 L 2093,650" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="2029,586 2029,618 2013,602" fill="#F28DB2"/>
+<polygon points="2029,618 1997,618 2013,602" fill="#F28DB2"/>
+<polygon points="2029,586 2061,586 2045,602" fill="#F28DB2"/>
+<polygon points="2061,586 2061,618 2045,602" fill="#F28DB2"/>
+<polygon points="2061,618 2029,618 2045,602" fill="#F28DB2"/>
+<polygon points="2029,618 2029,586 2045,602" fill="#F28DB2"/>
+<polygon points="2061,586 2093,586 2077,602" fill="#F28DB2"/>
+<polygon points="2093,586 2093,618 2077,602" fill="#F28DB2"/>
+<polygon points="2093,618 2061,618 2077,602" fill="#F28DB2"/>
+<polygon points="2061,618 2061,586 2077,602" fill="#F28DB2"/>
+<polygon points="2125,618 2093,618 2109,602" fill="#F28DB2"/>
+<polygon points="2093,618 2093,586 2109,602" fill="#F28DB2"/>
+<polygon points="1997,618 2029,618 2013,634" fill="#F28DB2"/>
+<polygon points="2029,618 2029,650 2013,634" fill="#F28DB2"/>
+<polygon points="2029,618 2061,618 2045,634" fill="#F28DB2"/>
+<polygon points="2061,618 2061,650 2045,634" fill="#F28DB2"/>
+<polygon points="2061,650 2029,650 2045,634" fill="#F28DB2"/>
+<polygon points="2029,650 2029,618 2045,634" fill="#F28DB2"/>
+<polygon points="2061,618 2093,618 2077,634" fill="#F28DB2"/>
+<polygon points="2093,618 2093,650 2077,634" fill="#F28DB2"/>
+<polygon points="2093,650 2061,650 2077,634" fill="#F28DB2"/>
+<polygon points="2061,650 2061,618 2077,634" fill="#F28DB2"/>
+<polygon points="2093,618 2125,618 2109,634" fill="#F28DB2"/>
+<polygon points="2093,650 2093,618 2109,634" fill="#F28DB2"/>
+<path d="M 2013,602 L 2029,586" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 1997,618 L 2013,602" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2029,586 L 2061,586" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2061,586 L 2093,586" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2109,602 L 2125,618" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2093,586 L 2109,602" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2013,634 L 1997,618" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2029,650 L 2013,634" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2061,650 L 2029,650" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2093,650 L 2061,650" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2125,618 L 2109,634" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<path d="M 2109,634 L 2093,650" stroke="#F28DB2" fill="none" stroke-width="2"/>
+<text x="1810" y="710" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2">전체 피해 10</text>
+<text x="1810" y="800" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#93A6C2">미보유일 때만 도안 보상에 등장</text>
+<rect x="64" y="845" width="550" height="345" rx="18" fill="#182235" stroke="none"/>
+<text x="88" y="889" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#8CD9F2">섬광</text>
+<rect x="354" y="863" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="368" y="887" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 후보</text>
+<path d="M 291,956 L 323,956 L 323,988 L 291,988 Z M 291,956 L 323,988 M 323,956 L 291,988" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 291,988 L 323,988 L 323,1020 L 291,1020 Z M 291,988 L 323,1020 M 323,988 L 291,1020" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 323,956 L 355,956 L 355,988 L 323,988 Z M 323,956 L 355,988 M 355,956 L 323,988" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 323,988 L 355,988 L 355,1020 L 323,1020 Z M 323,988 L 355,1020 M 355,988 L 323,1020" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 355,956 L 387,956 L 387,988 L 355,988 Z M 355,956 L 387,988 M 387,956 L 355,988" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 355,988 L 387,988 L 387,1020 L 355,1020 Z M 355,988 L 387,1020 M 387,988 L 355,1020" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="355,956 355,988 339,972" fill="#8CD9F2"/>
+<polygon points="355,988 323,988 339,972" fill="#8CD9F2"/>
+<polygon points="387,988 355,988 371,972" fill="#8CD9F2"/>
+<polygon points="355,988 355,956 371,972" fill="#8CD9F2"/>
+<polygon points="323,988 323,1020 307,1004" fill="#8CD9F2"/>
+<polygon points="323,1020 291,1020 307,1004" fill="#8CD9F2"/>
+<polygon points="323,988 355,988 339,1004" fill="#8CD9F2"/>
+<polygon points="355,988 355,1020 339,1004" fill="#8CD9F2"/>
+<polygon points="355,1020 323,1020 339,1004" fill="#8CD9F2"/>
+<polygon points="323,1020 323,988 339,1004" fill="#8CD9F2"/>
+<polygon points="355,988 387,988 371,1004" fill="#8CD9F2"/>
+<polygon points="355,1020 355,988 371,1004" fill="#8CD9F2"/>
+<path d="M 339,972 L 355,956" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<path d="M 323,988 L 339,972" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<path d="M 371,972 L 387,988" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<path d="M 355,956 L 371,972" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<path d="M 307,1004 L 323,988" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<path d="M 323,1020 L 291,1020" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<path d="M 291,1020 L 307,1004" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<path d="M 355,1020 L 323,1020" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<path d="M 387,988 L 371,1004" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<path d="M 371,1004 L 355,1020" stroke="#8CD9F2" fill="none" stroke-width="2"/>
+<text x="88" y="1080" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2">단일 피해 8 · 한 방: 조각 1장으로 완성하면</text>
+<text x="88" y="1112" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2"> +6</text>
+<text x="88" y="1170" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#93A6C2">미보유일 때만 도안 보상에 등장</text>
+<rect x="638" y="845" width="550" height="345" rx="18" fill="#182235" stroke="none"/>
+<text x="662" y="889" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#F59959">산탄</text>
+<rect x="928" y="863" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="942" y="887" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 후보</text>
+<path d="M 865,940 L 897,940 L 897,972 L 865,972 Z M 865,940 L 897,972 M 897,940 L 865,972" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 865,972 L 897,972 L 897,1004 L 865,1004 Z M 865,972 L 897,1004 M 897,972 L 865,1004" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 865,1004 L 897,1004 L 897,1036 L 865,1036 Z M 865,1004 L 897,1036 M 897,1004 L 865,1036" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 897,940 L 929,940 L 929,972 L 897,972 Z M 897,940 L 929,972 M 929,940 L 897,972" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 897,972 L 929,972 L 929,1004 L 897,1004 Z M 897,972 L 929,1004 M 929,972 L 897,1004" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 897,1004 L 929,1004 L 929,1036 L 897,1036 Z M 897,1004 L 929,1036 M 929,1004 L 897,1036" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 929,940 L 961,940 L 961,972 L 929,972 Z M 929,940 L 961,972 M 961,940 L 929,972" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 929,972 L 961,972 L 961,1004 L 929,1004 Z M 929,972 L 961,1004 M 961,972 L 929,1004" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 929,1004 L 961,1004 L 961,1036 L 929,1036 Z M 929,1004 L 961,1036 M 961,1004 L 929,1036" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="865,940 897,940 881,956" fill="#F59959"/>
+<polygon points="897,940 897,972 881,956" fill="#F59959"/>
+<polygon points="897,940 929,940 913,956" fill="#F59959"/>
+<polygon points="929,940 929,972 913,956" fill="#F59959"/>
+<polygon points="929,972 897,972 913,956" fill="#F59959"/>
+<polygon points="897,972 897,940 913,956" fill="#F59959"/>
+<polygon points="961,972 929,972 945,956" fill="#F59959"/>
+<polygon points="929,972 929,940 945,956" fill="#F59959"/>
+<polygon points="897,972 929,972 913,988" fill="#F59959"/>
+<polygon points="929,972 929,1004 913,988" fill="#F59959"/>
+<polygon points="929,972 961,972 945,988" fill="#F59959"/>
+<polygon points="961,972 961,1004 945,988" fill="#F59959"/>
+<polygon points="961,1004 929,1004 945,988" fill="#F59959"/>
+<polygon points="929,1004 929,972 945,988" fill="#F59959"/>
+<polygon points="929,1004 961,1004 945,1020" fill="#F59959"/>
+<polygon points="961,1004 961,1036 945,1020" fill="#F59959"/>
+<path d="M 865,940 L 897,940" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 881,956 L 865,940" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 897,972 L 881,956" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 897,940 L 929,940" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 945,956 L 961,972" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 929,940 L 945,956" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 913,988 L 897,972" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 929,1004 L 913,988" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 961,972 L 961,1004" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 945,1020 L 929,1004" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 961,1004 L 961,1036" stroke="#F59959" fill="none" stroke-width="2"/>
+<path d="M 961,1036 L 945,1020" stroke="#F59959" fill="none" stroke-width="2"/>
+<text x="662" y="1080" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2">모자이크 · 조각 1장마다 무작위 피해 3 (최대</text>
+<text x="662" y="1112" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2"> 6타)</text>
+<text x="662" y="1170" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#93A6C2">미보유일 때만 도안 보상에 등장</text>
+<rect x="1212" y="845" width="550" height="345" rx="18" fill="#182235" stroke="none"/>
+<text x="1236" y="889" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#B89EFA">만화경</text>
+<rect x="1502" y="863" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="1516" y="887" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 후보</text>
+<path d="M 1455,956 L 1487,956 L 1487,988 L 1455,988 Z M 1455,956 L 1487,988 M 1487,956 L 1455,988" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1455,988 L 1487,988 L 1487,1020 L 1455,1020 Z M 1455,988 L 1487,1020 M 1487,988 L 1455,1020" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1487,956 L 1519,956 L 1519,988 L 1487,988 Z M 1487,956 L 1519,988 M 1519,956 L 1487,988" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1487,988 L 1519,988 L 1519,1020 L 1487,1020 Z M 1487,988 L 1519,1020 M 1519,988 L 1487,1020" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="1455,956 1487,956 1471,972" fill="#B89EFA"/>
+<polygon points="1487,956 1487,988 1471,972" fill="#B89EFA"/>
+<polygon points="1487,988 1455,988 1471,972" fill="#B89EFA"/>
+<polygon points="1455,988 1455,956 1471,972" fill="#B89EFA"/>
+<polygon points="1519,988 1487,988 1503,972" fill="#B89EFA"/>
+<polygon points="1487,988 1487,956 1503,972" fill="#B89EFA"/>
+<polygon points="1455,988 1487,988 1471,1004" fill="#B89EFA"/>
+<polygon points="1487,988 1487,1020 1471,1004" fill="#B89EFA"/>
+<polygon points="1487,1020 1455,1020 1471,1004" fill="#B89EFA"/>
+<polygon points="1455,1020 1455,988 1471,1004" fill="#B89EFA"/>
+<polygon points="1487,988 1519,988 1503,1004" fill="#B89EFA"/>
+<polygon points="1487,1020 1487,988 1503,1004" fill="#B89EFA"/>
+<path d="M 1455,956 L 1487,956" stroke="#B89EFA" fill="none" stroke-width="2"/>
+<path d="M 1455,988 L 1455,956" stroke="#B89EFA" fill="none" stroke-width="2"/>
+<path d="M 1503,972 L 1519,988" stroke="#B89EFA" fill="none" stroke-width="2"/>
+<path d="M 1487,956 L 1503,972" stroke="#B89EFA" fill="none" stroke-width="2"/>
+<path d="M 1487,1020 L 1455,1020" stroke="#B89EFA" fill="none" stroke-width="2"/>
+<path d="M 1455,1020 L 1455,988" stroke="#B89EFA" fill="none" stroke-width="2"/>
+<path d="M 1519,988 L 1503,1004" stroke="#B89EFA" fill="none" stroke-width="2"/>
+<path d="M 1503,1004 L 1487,1020" stroke="#B89EFA" fill="none" stroke-width="2"/>
+<text x="1236" y="1080" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2">전체 피해 6 · 순수: 한 가지 도형으로만 완성</text>
+<text x="1236" y="1112" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2">하면 +6</text>
+<text x="1236" y="1170" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#93A6C2">미보유일 때만 도안 보상에 등장</text>
+<rect x="1786" y="845" width="550" height="345" rx="18" fill="#182235" stroke="none"/>
+<text x="1810" y="889" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#E65959">강타</text>
+<rect x="2076" y="863" width="135" height="34" rx="17" fill="#3D3037" stroke="none"/>
+<text x="2090" y="887" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#E4B2BA">시작 보유</text>
+<path d="M 2029,956 L 2061,956 L 2061,988 L 2029,988 Z M 2029,956 L 2061,988 M 2061,956 L 2029,988" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2029,988 L 2061,988 L 2061,1020 L 2029,1020 Z M 2029,988 L 2061,1020 M 2061,988 L 2029,1020" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2061,956 L 2093,956 L 2093,988 L 2061,988 Z M 2061,956 L 2093,988 M 2093,956 L 2061,988" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2061,988 L 2093,988 L 2093,1020 L 2061,1020 Z M 2061,988 L 2093,1020 M 2093,988 L 2061,1020" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="2061,956 2061,988 2045,972" fill="#E65959"/>
+<polygon points="2061,988 2029,988 2045,972" fill="#E65959"/>
+<polygon points="2093,988 2061,988 2077,972" fill="#E65959"/>
+<polygon points="2061,988 2061,956 2077,972" fill="#E65959"/>
+<polygon points="2029,988 2061,988 2045,1004" fill="#E65959"/>
+<polygon points="2061,988 2061,1020 2045,1004" fill="#E65959"/>
+<polygon points="2061,988 2093,988 2077,1004" fill="#E65959"/>
+<polygon points="2061,1020 2061,988 2077,1004" fill="#E65959"/>
+<path d="M 2045,972 L 2061,956" stroke="#E65959" fill="none" stroke-width="2"/>
+<path d="M 2029,988 L 2045,972" stroke="#E65959" fill="none" stroke-width="2"/>
+<path d="M 2077,972 L 2093,988" stroke="#E65959" fill="none" stroke-width="2"/>
+<path d="M 2061,956 L 2077,972" stroke="#E65959" fill="none" stroke-width="2"/>
+<path d="M 2045,1004 L 2029,988" stroke="#E65959" fill="none" stroke-width="2"/>
+<path d="M 2061,1020 L 2045,1004" stroke="#E65959" fill="none" stroke-width="2"/>
+<path d="M 2093,988 L 2077,1004" stroke="#E65959" fill="none" stroke-width="2"/>
+<path d="M 2077,1004 L 2061,1020" stroke="#E65959" fill="none" stroke-width="2"/>
+<text x="1810" y="1080" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#E1E7F2">단일 피해 9</text>
+<text x="1810" y="1170" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#93A6C2">일반 시작: 이미 보유 → 보상 제외</text>
+<text x="64" y="1290" font-family="Noto Sans KR" font-size="20" font-weight="700" fill="#8CA7D4">02</text>
+<text x="118" y="1290" font-family="Noto Sans KR" font-size="36" font-weight="700" fill="#F3F5F9">기본 조각  11종</text>
+<text x="118" y="1332" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#9DAEC7">위 도안 미리보기와 동일한 칸 크기 · 1칸 = 인게임 격자 1칸</text>
+<rect x="64" y="1360" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="84" y="1395" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">마름모</text>
+<path d="M 211,1443.5 L 243,1443.5 L 243,1475.5 L 211,1475.5 Z M 211,1443.5 L 243,1475.5 M 243,1443.5 L 211,1475.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 211,1475.5 L 243,1475.5 L 243,1507.5 L 211,1507.5 Z M 211,1475.5 L 243,1507.5 M 243,1475.5 L 211,1507.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 243,1443.5 L 275,1443.5 L 275,1475.5 L 243,1475.5 Z M 243,1443.5 L 275,1475.5 M 275,1443.5 L 243,1475.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 243,1475.5 L 275,1475.5 L 275,1507.5 L 243,1507.5 Z M 243,1475.5 L 275,1507.5 M 275,1475.5 L 243,1507.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="243,1443.5 243,1475.5 227,1459.5" fill="#C4D1D6"/>
+<polygon points="243,1475.5 211,1475.5 227,1459.5" fill="#C4D1D6"/>
+<polygon points="275,1475.5 243,1475.5 259,1459.5" fill="#C4D1D6"/>
+<polygon points="243,1475.5 243,1443.5 259,1459.5" fill="#C4D1D6"/>
+<polygon points="211,1475.5 243,1475.5 227,1491.5" fill="#C4D1D6"/>
+<polygon points="243,1475.5 243,1507.5 227,1491.5" fill="#C4D1D6"/>
+<polygon points="243,1475.5 275,1475.5 259,1491.5" fill="#C4D1D6"/>
+<polygon points="243,1507.5 243,1475.5 259,1491.5" fill="#C4D1D6"/>
+<path d="M 227,1459.5 L 243,1443.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 211,1475.5 L 227,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 259,1459.5 L 275,1475.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 243,1443.5 L 259,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 227,1491.5 L 211,1475.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 243,1507.5 L 227,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 275,1475.5 L 259,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 259,1491.5 L 243,1507.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="84" y="1552" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="98" y="1576" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O</text>
+<rect x="446" y="1360" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="466" y="1395" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">반칸 삼각형</text>
+<path d="M 609,1443.5 L 641,1443.5 L 641,1475.5 L 609,1475.5 Z M 609,1443.5 L 641,1475.5 M 641,1443.5 L 609,1475.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 609,1475.5 L 641,1475.5 L 641,1507.5 L 609,1507.5 Z M 609,1475.5 L 641,1507.5 M 641,1475.5 L 609,1507.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="641,1475.5 609,1475.5 625,1459.5" fill="#C4D1D6"/>
+<polygon points="609,1475.5 609,1443.5 625,1459.5" fill="#C4D1D6"/>
+<polygon points="609,1475.5 641,1475.5 625,1491.5" fill="#C4D1D6"/>
+<polygon points="609,1507.5 609,1475.5 625,1491.5" fill="#C4D1D6"/>
+<path d="M 625,1459.5 L 641,1475.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 609,1475.5 L 609,1443.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 609,1443.5 L 625,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 641,1475.5 L 625,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 609,1507.5 L 609,1475.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 625,1491.5 L 609,1507.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="466" y="1552" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="480" y="1576" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O</text>
+<rect x="828" y="1360" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="848" y="1395" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">직사각형</text>
+<path d="M 959,1427.5 L 991,1427.5 L 991,1459.5 L 959,1459.5 Z M 959,1427.5 L 991,1459.5 M 991,1427.5 L 959,1459.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 959,1459.5 L 991,1459.5 L 991,1491.5 L 959,1491.5 Z M 959,1459.5 L 991,1491.5 M 991,1459.5 L 959,1491.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 959,1491.5 L 991,1491.5 L 991,1523.5 L 959,1523.5 Z M 959,1491.5 L 991,1523.5 M 991,1491.5 L 959,1523.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 991,1427.5 L 1023,1427.5 L 1023,1459.5 L 991,1459.5 Z M 991,1427.5 L 1023,1459.5 M 1023,1427.5 L 991,1459.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 991,1459.5 L 1023,1459.5 L 1023,1491.5 L 991,1491.5 Z M 991,1459.5 L 1023,1491.5 M 1023,1459.5 L 991,1491.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 991,1491.5 L 1023,1491.5 L 1023,1523.5 L 991,1523.5 Z M 991,1491.5 L 1023,1523.5 M 1023,1491.5 L 991,1523.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1023,1427.5 L 1055,1427.5 L 1055,1459.5 L 1023,1459.5 Z M 1023,1427.5 L 1055,1459.5 M 1055,1427.5 L 1023,1459.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1023,1459.5 L 1055,1459.5 L 1055,1491.5 L 1023,1491.5 Z M 1023,1459.5 L 1055,1491.5 M 1055,1459.5 L 1023,1491.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1023,1491.5 L 1055,1491.5 L 1055,1523.5 L 1023,1523.5 Z M 1023,1491.5 L 1055,1523.5 M 1055,1491.5 L 1023,1523.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="991,1427.5 991,1459.5 975,1443.5" fill="#C4D1D6"/>
+<polygon points="991,1459.5 959,1459.5 975,1443.5" fill="#C4D1D6"/>
+<polygon points="1023,1459.5 991,1459.5 1007,1443.5" fill="#C4D1D6"/>
+<polygon points="991,1459.5 991,1427.5 1007,1443.5" fill="#C4D1D6"/>
+<polygon points="959,1459.5 991,1459.5 975,1475.5" fill="#C4D1D6"/>
+<polygon points="991,1459.5 991,1491.5 975,1475.5" fill="#C4D1D6"/>
+<polygon points="991,1459.5 1023,1459.5 1007,1475.5" fill="#C4D1D6"/>
+<polygon points="1023,1459.5 1023,1491.5 1007,1475.5" fill="#C4D1D6"/>
+<polygon points="1023,1491.5 991,1491.5 1007,1475.5" fill="#C4D1D6"/>
+<polygon points="991,1491.5 991,1459.5 1007,1475.5" fill="#C4D1D6"/>
+<polygon points="1055,1491.5 1023,1491.5 1039,1475.5" fill="#C4D1D6"/>
+<polygon points="1023,1491.5 1023,1459.5 1039,1475.5" fill="#C4D1D6"/>
+<polygon points="991,1491.5 1023,1491.5 1007,1507.5" fill="#C4D1D6"/>
+<polygon points="1023,1491.5 1023,1523.5 1007,1507.5" fill="#C4D1D6"/>
+<polygon points="1023,1491.5 1055,1491.5 1039,1507.5" fill="#C4D1D6"/>
+<polygon points="1023,1523.5 1023,1491.5 1039,1507.5" fill="#C4D1D6"/>
+<path d="M 975,1443.5 L 991,1427.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 959,1459.5 L 975,1443.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1007,1443.5 L 1023,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 991,1427.5 L 1007,1443.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 975,1475.5 L 959,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 991,1491.5 L 975,1475.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1039,1475.5 L 1055,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1023,1459.5 L 1039,1475.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1007,1507.5 L 991,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1023,1523.5 L 1007,1507.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1055,1491.5 L 1039,1507.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1039,1507.5 L 1023,1523.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="848" y="1552" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="862" y="1576" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O</text>
+<rect x="1210" y="1360" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="1230" y="1395" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">1/4 삼각형</text>
+<path d="M 1373,1459.5 L 1405,1459.5 L 1405,1491.5 L 1373,1491.5 Z M 1373,1459.5 L 1405,1491.5 M 1405,1459.5 L 1373,1491.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="1405,1491.5 1373,1491.5 1389,1475.5" fill="#C4D1D6"/>
+<polygon points="1373,1491.5 1373,1459.5 1389,1475.5" fill="#C4D1D6"/>
+<path d="M 1405,1491.5 L 1373,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1389,1475.5 L 1405,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1373,1491.5 L 1373,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1373,1459.5 L 1389,1475.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="1230" y="1552" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="1244" y="1576" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O</text>
+<rect x="1592" y="1360" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="1612" y="1395" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">정사각형</text>
+<path d="M 1755,1459.5 L 1787,1459.5 L 1787,1491.5 L 1755,1491.5 Z M 1755,1459.5 L 1787,1491.5 M 1787,1459.5 L 1755,1491.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="1755,1459.5 1787,1459.5 1771,1475.5" fill="#C4D1D6"/>
+<polygon points="1787,1459.5 1787,1491.5 1771,1475.5" fill="#C4D1D6"/>
+<polygon points="1787,1491.5 1755,1491.5 1771,1475.5" fill="#C4D1D6"/>
+<polygon points="1755,1491.5 1755,1459.5 1771,1475.5" fill="#C4D1D6"/>
+<path d="M 1755,1459.5 L 1787,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1787,1459.5 L 1787,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1787,1491.5 L 1755,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1755,1491.5 L 1755,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="1612" y="1552" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="1626" y="1576" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O</text>
+<rect x="1974" y="1360" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="1994" y="1395" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">평행사변형</text>
+<path d="M 2105,1459.5 L 2137,1459.5 L 2137,1491.5 L 2105,1491.5 Z M 2105,1459.5 L 2137,1491.5 M 2137,1459.5 L 2105,1491.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2137,1459.5 L 2169,1459.5 L 2169,1491.5 L 2137,1491.5 Z M 2137,1459.5 L 2169,1491.5 M 2169,1459.5 L 2137,1491.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 2169,1459.5 L 2201,1459.5 L 2201,1491.5 L 2169,1491.5 Z M 2169,1459.5 L 2201,1491.5 M 2201,1459.5 L 2169,1491.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="2105,1459.5 2137,1459.5 2121,1475.5" fill="#C4D1D6"/>
+<polygon points="2137,1459.5 2137,1491.5 2121,1475.5" fill="#C4D1D6"/>
+<polygon points="2137,1459.5 2169,1459.5 2153,1475.5" fill="#C4D1D6"/>
+<polygon points="2169,1459.5 2169,1491.5 2153,1475.5" fill="#C4D1D6"/>
+<polygon points="2169,1491.5 2137,1491.5 2153,1475.5" fill="#C4D1D6"/>
+<polygon points="2137,1491.5 2137,1459.5 2153,1475.5" fill="#C4D1D6"/>
+<polygon points="2201,1491.5 2169,1491.5 2185,1475.5" fill="#C4D1D6"/>
+<polygon points="2169,1491.5 2169,1459.5 2185,1475.5" fill="#C4D1D6"/>
+<path d="M 2105,1459.5 L 2137,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2121,1475.5 L 2105,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2137,1491.5 L 2121,1475.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2137,1459.5 L 2169,1459.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2169,1491.5 L 2137,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2201,1491.5 L 2169,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2185,1475.5 L 2201,1491.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2169,1459.5 L 2185,1475.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="1994" y="1552" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="2008" y="1576" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O</text>
+<text x="2151" y="1576" font-family="Noto Sans KR" font-size="14" font-weight="400" fill="#98A9C3">뒤집기 포함 회전</text>
+<rect x="64" y="1635" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="84" y="1670" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">중간 삼각형</text>
+<path d="M 211,1718.5 L 243,1718.5 L 243,1750.5 L 211,1750.5 Z M 211,1718.5 L 243,1750.5 M 243,1718.5 L 211,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 211,1750.5 L 243,1750.5 L 243,1782.5 L 211,1782.5 Z M 211,1750.5 L 243,1782.5 M 243,1750.5 L 211,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 243,1718.5 L 275,1718.5 L 275,1750.5 L 243,1750.5 Z M 243,1718.5 L 275,1750.5 M 275,1718.5 L 243,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 243,1750.5 L 275,1750.5 L 275,1782.5 L 243,1782.5 Z M 243,1750.5 L 275,1782.5 M 275,1750.5 L 243,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="211,1718.5 243,1718.5 227,1734.5" fill="#C4D1D6"/>
+<polygon points="243,1718.5 243,1750.5 227,1734.5" fill="#C4D1D6"/>
+<polygon points="243,1718.5 275,1718.5 259,1734.5" fill="#C4D1D6"/>
+<polygon points="275,1718.5 275,1750.5 259,1734.5" fill="#C4D1D6"/>
+<polygon points="275,1750.5 243,1750.5 259,1734.5" fill="#C4D1D6"/>
+<polygon points="243,1750.5 243,1718.5 259,1734.5" fill="#C4D1D6"/>
+<polygon points="243,1750.5 275,1750.5 259,1766.5" fill="#C4D1D6"/>
+<polygon points="275,1750.5 275,1782.5 259,1766.5" fill="#C4D1D6"/>
+<path d="M 211,1718.5 L 243,1718.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 227,1734.5 L 211,1718.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 243,1750.5 L 227,1734.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 243,1718.5 L 275,1718.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 275,1718.5 L 275,1750.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 259,1766.5 L 243,1750.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 275,1750.5 L 275,1782.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 275,1782.5 L 259,1766.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="84" y="1827" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="98" y="1851" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O</text>
+<rect x="446" y="1635" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="466" y="1670" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">맞춤 조각</text>
+<path d="M 593,1718.5 L 625,1718.5 L 625,1750.5 L 593,1750.5 Z M 593,1718.5 L 625,1750.5 M 625,1718.5 L 593,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 593,1750.5 L 625,1750.5 L 625,1782.5 L 593,1782.5 Z M 593,1750.5 L 625,1782.5 M 625,1750.5 L 593,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 625,1718.5 L 657,1718.5 L 657,1750.5 L 625,1750.5 Z M 625,1718.5 L 657,1750.5 M 657,1718.5 L 625,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 625,1750.5 L 657,1750.5 L 657,1782.5 L 625,1782.5 Z M 625,1750.5 L 657,1782.5 M 657,1750.5 L 625,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="625,1718.5 625,1750.5 609,1734.5" fill="#C4D1D6"/>
+<polygon points="625,1750.5 593,1750.5 609,1734.5" fill="#C4D1D6"/>
+<polygon points="625,1718.5 657,1718.5 641,1734.5" fill="#C4D1D6"/>
+<polygon points="657,1718.5 657,1750.5 641,1734.5" fill="#C4D1D6"/>
+<polygon points="657,1750.5 625,1750.5 641,1734.5" fill="#C4D1D6"/>
+<polygon points="625,1750.5 625,1718.5 641,1734.5" fill="#C4D1D6"/>
+<polygon points="593,1750.5 625,1750.5 609,1766.5" fill="#C4D1D6"/>
+<polygon points="625,1750.5 625,1782.5 609,1766.5" fill="#C4D1D6"/>
+<polygon points="625,1750.5 657,1750.5 641,1766.5" fill="#C4D1D6"/>
+<polygon points="625,1782.5 625,1750.5 641,1766.5" fill="#C4D1D6"/>
+<path d="M 609,1734.5 L 625,1718.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 593,1750.5 L 609,1734.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 625,1718.5 L 657,1718.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 657,1718.5 L 657,1750.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 609,1766.5 L 593,1750.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 625,1782.5 L 609,1766.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 657,1750.5 L 641,1766.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 641,1766.5 L 625,1782.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="466" y="1827" width="135" height="34" rx="17" fill="#3D3037" stroke="none"/>
+<text x="480" y="1851" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#E4B2BA">보상 X</text>
+<rect x="828" y="1635" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="848" y="1670" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">큰 삼각형</text>
+<path d="M 943,1718.5 L 975,1718.5 L 975,1750.5 L 943,1750.5 Z M 943,1718.5 L 975,1750.5 M 975,1718.5 L 943,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 943,1750.5 L 975,1750.5 L 975,1782.5 L 943,1782.5 Z M 943,1750.5 L 975,1782.5 M 975,1750.5 L 943,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 975,1718.5 L 1007,1718.5 L 1007,1750.5 L 975,1750.5 Z M 975,1718.5 L 1007,1750.5 M 1007,1718.5 L 975,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 975,1750.5 L 1007,1750.5 L 1007,1782.5 L 975,1782.5 Z M 975,1750.5 L 1007,1782.5 M 1007,1750.5 L 975,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1007,1718.5 L 1039,1718.5 L 1039,1750.5 L 1007,1750.5 Z M 1007,1718.5 L 1039,1750.5 M 1039,1718.5 L 1007,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1007,1750.5 L 1039,1750.5 L 1039,1782.5 L 1007,1782.5 Z M 1007,1750.5 L 1039,1782.5 M 1039,1750.5 L 1007,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1039,1718.5 L 1071,1718.5 L 1071,1750.5 L 1039,1750.5 Z M 1039,1718.5 L 1071,1750.5 M 1071,1718.5 L 1039,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1039,1750.5 L 1071,1750.5 L 1071,1782.5 L 1039,1782.5 Z M 1039,1750.5 L 1071,1782.5 M 1071,1750.5 L 1039,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="1007,1718.5 1007,1750.5 991,1734.5" fill="#C4D1D6"/>
+<polygon points="1007,1750.5 975,1750.5 991,1734.5" fill="#C4D1D6"/>
+<polygon points="1039,1750.5 1007,1750.5 1023,1734.5" fill="#C4D1D6"/>
+<polygon points="1007,1750.5 1007,1718.5 1023,1734.5" fill="#C4D1D6"/>
+<polygon points="975,1750.5 975,1782.5 959,1766.5" fill="#C4D1D6"/>
+<polygon points="975,1782.5 943,1782.5 959,1766.5" fill="#C4D1D6"/>
+<polygon points="975,1750.5 1007,1750.5 991,1766.5" fill="#C4D1D6"/>
+<polygon points="1007,1750.5 1007,1782.5 991,1766.5" fill="#C4D1D6"/>
+<polygon points="1007,1782.5 975,1782.5 991,1766.5" fill="#C4D1D6"/>
+<polygon points="975,1782.5 975,1750.5 991,1766.5" fill="#C4D1D6"/>
+<polygon points="1007,1750.5 1039,1750.5 1023,1766.5" fill="#C4D1D6"/>
+<polygon points="1039,1750.5 1039,1782.5 1023,1766.5" fill="#C4D1D6"/>
+<polygon points="1039,1782.5 1007,1782.5 1023,1766.5" fill="#C4D1D6"/>
+<polygon points="1007,1782.5 1007,1750.5 1023,1766.5" fill="#C4D1D6"/>
+<polygon points="1071,1782.5 1039,1782.5 1055,1766.5" fill="#C4D1D6"/>
+<polygon points="1039,1782.5 1039,1750.5 1055,1766.5" fill="#C4D1D6"/>
+<path d="M 991,1734.5 L 1007,1718.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 975,1750.5 L 991,1734.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1023,1734.5 L 1039,1750.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1007,1718.5 L 1023,1734.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 959,1766.5 L 975,1750.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 975,1782.5 L 943,1782.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 943,1782.5 L 959,1766.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1007,1782.5 L 975,1782.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1039,1782.5 L 1007,1782.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1071,1782.5 L 1039,1782.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1055,1766.5 L 1071,1782.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1039,1750.5 L 1055,1766.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="848" y="1827" width="135" height="34" rx="17" fill="#3D3037" stroke="none"/>
+<text x="862" y="1851" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#E4B2BA">보상 X</text>
+<rect x="1210" y="1635" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="1230" y="1670" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">L자 조각</text>
+<path d="M 1341,1686.5 L 1373,1686.5 L 1373,1718.5 L 1341,1718.5 Z M 1341,1686.5 L 1373,1718.5 M 1373,1686.5 L 1341,1718.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1341,1718.5 L 1373,1718.5 L 1373,1750.5 L 1341,1750.5 Z M 1341,1718.5 L 1373,1750.5 M 1373,1718.5 L 1341,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1341,1750.5 L 1373,1750.5 L 1373,1782.5 L 1341,1782.5 Z M 1341,1750.5 L 1373,1782.5 M 1373,1750.5 L 1341,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1341,1782.5 L 1373,1782.5 L 1373,1814.5 L 1341,1814.5 Z M 1341,1782.5 L 1373,1814.5 M 1373,1782.5 L 1341,1814.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1373,1686.5 L 1405,1686.5 L 1405,1718.5 L 1373,1718.5 Z M 1373,1686.5 L 1405,1718.5 M 1405,1686.5 L 1373,1718.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1373,1718.5 L 1405,1718.5 L 1405,1750.5 L 1373,1750.5 Z M 1373,1718.5 L 1405,1750.5 M 1405,1718.5 L 1373,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1373,1750.5 L 1405,1750.5 L 1405,1782.5 L 1373,1782.5 Z M 1373,1750.5 L 1405,1782.5 M 1405,1750.5 L 1373,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1373,1782.5 L 1405,1782.5 L 1405,1814.5 L 1373,1814.5 Z M 1373,1782.5 L 1405,1814.5 M 1405,1782.5 L 1373,1814.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1405,1686.5 L 1437,1686.5 L 1437,1718.5 L 1405,1718.5 Z M 1405,1686.5 L 1437,1718.5 M 1437,1686.5 L 1405,1718.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1405,1718.5 L 1437,1718.5 L 1437,1750.5 L 1405,1750.5 Z M 1405,1718.5 L 1437,1750.5 M 1437,1718.5 L 1405,1750.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1405,1750.5 L 1437,1750.5 L 1437,1782.5 L 1405,1782.5 Z M 1405,1750.5 L 1437,1782.5 M 1437,1750.5 L 1405,1782.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<path d="M 1405,1782.5 L 1437,1782.5 L 1437,1814.5 L 1405,1814.5 Z M 1405,1782.5 L 1437,1814.5 M 1437,1782.5 L 1405,1814.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<polygon points="1405,1686.5 1405,1718.5 1389,1702.5" fill="#C4D1D6"/>
+<polygon points="1405,1718.5 1373,1718.5 1389,1702.5" fill="#C4D1D6"/>
+<polygon points="1437,1718.5 1405,1718.5 1421,1702.5" fill="#C4D1D6"/>
+<polygon points="1405,1718.5 1405,1686.5 1421,1702.5" fill="#C4D1D6"/>
+<polygon points="1373,1718.5 1373,1750.5 1357,1734.5" fill="#C4D1D6"/>
+<polygon points="1373,1750.5 1341,1750.5 1357,1734.5" fill="#C4D1D6"/>
+<polygon points="1373,1718.5 1405,1718.5 1389,1734.5" fill="#C4D1D6"/>
+<polygon points="1405,1718.5 1405,1750.5 1389,1734.5" fill="#C4D1D6"/>
+<polygon points="1405,1750.5 1373,1750.5 1389,1734.5" fill="#C4D1D6"/>
+<polygon points="1373,1750.5 1373,1718.5 1389,1734.5" fill="#C4D1D6"/>
+<polygon points="1405,1718.5 1437,1718.5 1421,1734.5" fill="#C4D1D6"/>
+<polygon points="1405,1750.5 1405,1718.5 1421,1734.5" fill="#C4D1D6"/>
+<polygon points="1341,1750.5 1373,1750.5 1357,1766.5" fill="#C4D1D6"/>
+<polygon points="1373,1750.5 1373,1782.5 1357,1766.5" fill="#C4D1D6"/>
+<polygon points="1373,1750.5 1405,1750.5 1389,1766.5" fill="#C4D1D6"/>
+<polygon points="1405,1750.5 1405,1782.5 1389,1766.5" fill="#C4D1D6"/>
+<polygon points="1405,1782.5 1373,1782.5 1389,1766.5" fill="#C4D1D6"/>
+<polygon points="1373,1782.5 1373,1750.5 1389,1766.5" fill="#C4D1D6"/>
+<polygon points="1437,1782.5 1405,1782.5 1421,1766.5" fill="#C4D1D6"/>
+<polygon points="1405,1782.5 1405,1750.5 1421,1766.5" fill="#C4D1D6"/>
+<polygon points="1373,1782.5 1405,1782.5 1389,1798.5" fill="#C4D1D6"/>
+<polygon points="1405,1782.5 1405,1814.5 1389,1798.5" fill="#C4D1D6"/>
+<polygon points="1405,1782.5 1437,1782.5 1421,1798.5" fill="#C4D1D6"/>
+<polygon points="1405,1814.5 1405,1782.5 1421,1798.5" fill="#C4D1D6"/>
+<path d="M 1389,1702.5 L 1405,1686.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1373,1718.5 L 1389,1702.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1421,1702.5 L 1437,1718.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1405,1686.5 L 1421,1702.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1357,1734.5 L 1373,1718.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1341,1750.5 L 1357,1734.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1437,1718.5 L 1421,1734.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1421,1734.5 L 1405,1750.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1357,1766.5 L 1341,1750.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1373,1782.5 L 1357,1766.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1421,1766.5 L 1437,1782.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1405,1750.5 L 1421,1766.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1389,1798.5 L 1373,1782.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1405,1814.5 L 1389,1798.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1437,1782.5 L 1421,1798.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1421,1798.5 L 1405,1814.5" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<rect x="1230" y="1827" width="135" height="34" rx="17" fill="#3D3037" stroke="none"/>
+<text x="1244" y="1851" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#E4B2BA">보상 X</text>
+<rect x="1592" y="1635" width="358" height="250" rx="16" fill="#182235" stroke="none"/>
+<text x="1612" y="1670" font-family="Noto Sans KR" font-size="24" font-weight="700" fill="#E9EEF6">점토</text>
+<path d="M 1755,1734.5 L 1787,1734.5 L 1787,1766.5 L 1755,1766.5 Z M 1755,1734.5 L 1787,1766.5 M 1787,1734.5 L 1755,1766.5" stroke="#77859B" stroke-opacity=".72" fill="none" stroke-width="1.5"/>
+<circle cx="1771" cy="1750.5" r="11.84" fill="#B88F70" stroke="#D6B492" stroke-width="3"/>
+<rect x="1612" y="1827" width="135" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="1626" y="1851" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O</text>
+<text x="1769" y="1851" font-family="Noto Sans KR" font-size="14" font-weight="400" fill="#C3AD99">고유 · 효과 부착 불가</text>
+<text x="64" y="1937" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#C6B59A">보상에서 제외: 맞춤 조각 · 큰 삼각형 · L자 조각  /  효과 없는 일반형 그대로는 점토만 등장합니다.</text>
+<text x="64" y="2030" font-family="Noto Sans KR" font-size="20" font-weight="700" fill="#8CA7D4">03</text>
+<text x="118" y="2030" font-family="Noto Sans KR" font-size="36" font-weight="700" fill="#F3F5F9">씰링  4종</text>
+<text x="118" y="2072" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#9DAEC7">조각의 1/4 구역 위 색 동그라미 + 어두운 테두리 · 같은 씰링은 개수만큼 중복 발동</text>
+<rect x="64" y="2100" width="550" height="365" rx="18" fill="#182235" stroke="none"/>
+<text x="88" y="2142" font-family="Noto Sans KR" font-size="29" font-weight="700" fill="#55C7B3">회수</text>
+<polygon points="279,2165 399,2165 339,2225" fill="#C4D1D6"/>
+<polygon points="399,2165 399,2285 339,2225" fill="#C4D1D6"/>
+<polygon points="399,2285 279,2285 339,2225" fill="#C4D1D6"/>
+<polygon points="279,2285 279,2165 339,2225" fill="#C4D1D6"/>
+<path d="M 279,2165 L 399,2165" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 399,2165 L 399,2285" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 399,2285 L 279,2285" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 279,2285 L 279,2165" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<circle cx="339" cy="2185" r="15.600000000000001" fill="#55C7B3" stroke="#171C27" stroke-width="4.2"/>
+<text x="88" y="2319" font-family="Noto Sans KR" font-size="18" font-weight="400" fill="#9DAEC7">표시색 #55C7B3 · 구역 위 원형 표식</text>
+<text x="88" y="2356" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">시전 후 회수 씰링을 뺀 복사본 1장을 손패로 가져</text>
+<text x="88" y="2389" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">옴 (이번 전투 동안)</text>
+<rect x="88" y="2415" width="238" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="102" y="2439" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O · 조각에 부착</text>
+<rect x="638" y="2100" width="550" height="365" rx="18" fill="#182235" stroke="none"/>
+<text x="662" y="2142" font-family="Noto Sans KR" font-size="29" font-weight="700" fill="#F25973">파편</text>
+<polygon points="853,2165 973,2165 913,2225" fill="#C4D1D6"/>
+<polygon points="973,2165 973,2285 913,2225" fill="#C4D1D6"/>
+<polygon points="973,2285 853,2285 913,2225" fill="#C4D1D6"/>
+<polygon points="853,2285 853,2165 913,2225" fill="#C4D1D6"/>
+<path d="M 853,2165 L 973,2165" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 973,2165 L 973,2285" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 973,2285 L 853,2285" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 853,2285 L 853,2165" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<circle cx="913" cy="2185" r="15.600000000000001" fill="#F25973" stroke="#171C27" stroke-width="4.2"/>
+<text x="662" y="2319" font-family="Noto Sans KR" font-size="18" font-weight="400" fill="#9DAEC7">표시색 #F25973 · 구역 위 원형 표식</text>
+<text x="662" y="2356" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">시전 시 무작위 적에게 2 피해</text>
+<rect x="662" y="2415" width="238" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="676" y="2439" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O · 조각에 부착</text>
+<rect x="1212" y="2100" width="550" height="365" rx="18" fill="#182235" stroke="none"/>
+<text x="1236" y="2142" font-family="Noto Sans KR" font-size="29" font-weight="700" fill="#EDD98C">보충</text>
+<polygon points="1427,2165 1547,2165 1487,2225" fill="#C4D1D6"/>
+<polygon points="1547,2165 1547,2285 1487,2225" fill="#C4D1D6"/>
+<polygon points="1547,2285 1427,2285 1487,2225" fill="#C4D1D6"/>
+<polygon points="1427,2285 1427,2165 1487,2225" fill="#C4D1D6"/>
+<path d="M 1427,2165 L 1547,2165" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1547,2165 L 1547,2285" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1547,2285 L 1427,2285" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 1427,2285 L 1427,2165" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<circle cx="1487" cy="2185" r="15.600000000000001" fill="#EDD98C" stroke="#171C27" stroke-width="4.2"/>
+<text x="1236" y="2319" font-family="Noto Sans KR" font-size="18" font-weight="400" fill="#9DAEC7">표시색 #EDD98C · 구역 위 원형 표식</text>
+<text x="1236" y="2356" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">시전 시 조각 1장 뽑기</text>
+<rect x="1236" y="2415" width="238" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="1250" y="2439" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O · 조각에 부착</text>
+<rect x="1786" y="2100" width="550" height="365" rx="18" fill="#182235" stroke="none"/>
+<text x="1810" y="2142" font-family="Noto Sans KR" font-size="29" font-weight="700" fill="#E673D9">덧칠</text>
+<polygon points="2001,2165 2121,2165 2061,2225" fill="#C4D1D6"/>
+<polygon points="2121,2165 2121,2285 2061,2225" fill="#C4D1D6"/>
+<polygon points="2121,2285 2001,2285 2061,2225" fill="#C4D1D6"/>
+<polygon points="2001,2285 2001,2165 2061,2225" fill="#C4D1D6"/>
+<path d="M 2001,2165 L 2121,2165" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2121,2165 L 2121,2285" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2121,2285 L 2001,2285" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<path d="M 2001,2285 L 2001,2165" stroke="#C4D1D6" fill="none" stroke-width="2"/>
+<circle cx="2061" cy="2185" r="15.600000000000001" fill="#E673D9" stroke="#171C27" stroke-width="4.2"/>
+<text x="1810" y="2319" font-family="Noto Sans KR" font-size="18" font-weight="400" fill="#9DAEC7">표시색 #E673D9 · 구역 위 원형 표식</text>
+<text x="1810" y="2356" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">조각 전체를 놓인 조각 위에 한 겹 겹쳐 놓을 수 </text>
+<text x="1810" y="2389" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">있음 · 수치 +2</text>
+<rect x="1810" y="2415" width="238" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="1824" y="2439" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O · 조각에 부착</text>
+<text x="64" y="2506" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#C6B59A">씰링 단독 「인장 획득」 보상은 현재 OFF. 랜덤 조각 보상의 씰링 4종은 모두 ON.</text>
+<text x="64" y="2595" font-family="Noto Sans KR" font-size="20" font-weight="700" fill="#8CA7D4">04</text>
+<text x="118" y="2595" font-family="Noto Sans KR" font-size="36" font-weight="700" fill="#F3F5F9">코팅  3종</text>
+<text x="118" y="2637" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#9DAEC7">조각 전체의 색과 Material로 표현 · 조각당 하나 · 고유 점토는 코팅 불가</text>
+<rect x="64" y="2665" width="742" height="340" rx="18" fill="#182235" stroke="none"/>
+<text x="88" y="2708" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#4F95D6">수호</text>
+<polygon points="89,2745 229,2745 159,2815" fill="#4F95D6"/>
+<polygon points="229,2745 229,2885 159,2815" fill="#4F95D6"/>
+<polygon points="229,2885 89,2885 159,2815" fill="#4F95D6"/>
+<polygon points="89,2885 89,2745 159,2815" fill="#4F95D6"/>
+<path d="M 89,2745 L 229,2745" stroke="#4F95D6" fill="none" stroke-width="2"/>
+<path d="M 229,2745 L 229,2885" stroke="#4F95D6" fill="none" stroke-width="2"/>
+<path d="M 229,2885 L 89,2885" stroke="#4F95D6" fill="none" stroke-width="2"/>
+<path d="M 89,2885 L 89,2745" stroke="#4F95D6" fill="none" stroke-width="2"/>
+<text x="261" y="2771" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#A7B7CE">2D: #4F95D6 전체 채움</text>
+<text x="261" y="2812" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">시전 시 방어 +3</text>
+<rect x="261" y="2893" width="238" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="275" y="2917" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O · 조각에 부착</text>
+<text x="88" y="2972" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#A0AEC3">3D: 매끄러운 표면 · Metallic 0.05 / Smoothness 0.92</text>
+<rect x="830" y="2665" width="742" height="340" rx="18" fill="#182235" stroke="none"/>
+<text x="854" y="2708" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#E07A3F">증폭</text>
+<polygon points="855,2745 995,2745 925,2815" fill="#E07A3F"/>
+<polygon points="995,2745 995,2885 925,2815" fill="#E07A3F"/>
+<polygon points="995,2885 855,2885 925,2815" fill="#E07A3F"/>
+<polygon points="855,2885 855,2745 925,2815" fill="#E07A3F"/>
+<path d="M 855,2745 L 995,2745" stroke="#E07A3F" fill="none" stroke-width="2"/>
+<path d="M 995,2745 L 995,2885" stroke="#E07A3F" fill="none" stroke-width="2"/>
+<path d="M 995,2885 L 855,2885" stroke="#E07A3F" fill="none" stroke-width="2"/>
+<path d="M 855,2885 L 855,2745" stroke="#E07A3F" fill="none" stroke-width="2"/>
+<text x="1027" y="2771" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#A7B7CE">2D: #E07A3F 전체 채움</text>
+<text x="1027" y="2812" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">피해 +2 · 다타 주문은 타격마다 +1</text>
+<rect x="1027" y="2893" width="238" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="1041" y="2917" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O · 조각에 부착</text>
+<text x="854" y="2972" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#A0AEC3">3D: 광택 표면 · Metallic 0.35 / Smoothness 0.75</text>
+<rect x="1596" y="2665" width="742" height="340" rx="18" fill="#182235" stroke="none"/>
+<text x="1620" y="2708" font-family="Noto Sans KR" font-size="30" font-weight="700" fill="#B88C61">톱니</text>
+<polygon points="1621,2745 1761,2745 1691,2815" fill="#B88C61"/>
+<polygon points="1761,2745 1761,2885 1691,2815" fill="#B88C61"/>
+<polygon points="1761,2885 1621,2885 1691,2815" fill="#B88C61"/>
+<polygon points="1621,2885 1621,2745 1691,2815" fill="#B88C61"/>
+<path d="M 1621,2745 L 1761,2745" stroke="#B88C61" fill="none" stroke-width="2"/>
+<path d="M 1761,2745 L 1761,2885" stroke="#B88C61" fill="none" stroke-width="2"/>
+<path d="M 1761,2885 L 1621,2885" stroke="#B88C61" fill="none" stroke-width="2"/>
+<path d="M 1621,2885 L 1621,2745" stroke="#B88C61" fill="none" stroke-width="2"/>
+<text x="1793" y="2771" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#A7B7CE">2D: #B88C61 전체 채움</text>
+<text x="1793" y="2812" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">변을 맞댄 조각 1장당 피해 +1 (최대 +3</text>
+<text x="1793" y="2845" font-family="Noto Sans KR" font-size="21" font-weight="400" fill="#E1E7F2">)</text>
+<rect x="1793" y="2893" width="238" height="34" rx="17" fill="#193E38" stroke="none"/>
+<text x="1807" y="2917" font-family="Noto Sans KR" font-size="17" font-weight="600" fill="#97E0C7">보상 O · 조각에 부착</text>
+<text x="1620" y="2972" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#A0AEC3">3D: 금속 표면 · Metallic 0.95 / Smoothness 0.42</text>
+<text x="64" y="3070" font-family="Noto Sans KR" font-size="22" font-weight="400" fill="#C7D1E1">랜덤 조각: 점토가 아니면 씰링 1개 또는 코팅 1개를 50:50으로 부착. 점토는 후보 3개 중 최대 1개.</text>
+<text x="64" y="3120" font-family="Noto Sans KR" font-size="20" font-weight="400" fill="#9EABC0">현재 보상 제외 효과  ·  마침표: 도안을 완성시킨 마지막 조각이면 수치 +3  /  공명: 3장 이상 함께 소모되면 수치 +3</text>
+<text x="64" y="3185" font-family="Noto Sans KR" font-size="17" font-weight="400" fill="#72859F">SOURCE  patterns.json · pieces.json · SpellGame.PatternDescription · SpellGameUI 씰링/코팅 설명 · EnterReward / RandomRewardPiece</text>
+<text x="64" y="3230" font-family="Noto Sans KR" font-size="18" font-weight="400" fill="#72859F">도형은 현재 cells/mask를 직접 도식화. 점토만 인게임의 둥근 고유 외형으로 표시. 3D 재질은 2D 색 견본과 수치로 병기.</text>
+</svg>

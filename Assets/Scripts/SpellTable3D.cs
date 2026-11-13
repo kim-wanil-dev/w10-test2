@@ -550,12 +550,28 @@ public sealed class SpellTable3D : MonoBehaviour
             return;
         }
         if (IsOverControl(pointer) || _screen.Board.IsDraggingPattern) { HideHover(pointer); return; }
+        if (Mouse.current.rightButton.wasPressedThisFrame && !_ui.IsRightClickReserved && TryRecallAt(pointer)) return;
         Ray ray = _camera.ScreenPointToRay(pointer);
         SpellPiece3D hovered = Physics.Raycast(ray, out RaycastHit hit, 50f, 1 << TABLE_LAYER) ? hit.collider.GetComponent<SpellPiece3D>() : null;
         if (hovered != null && hovered.IsHand) { _ui.ShowPieceTooltip(hovered.Card, pointer); _hadTableHover = true; }
         else if (ScreenToGrid(pointer, out Vector2 grid) && OnGrid(grid) && _layout.TryFindTarget((int)grid.x, (int)grid.y, Sector(grid), _game.Spells, out int spell))
-        { _ui.ShowPatternTooltip(spell, pointer, hovered == null ? null : hovered.Card); _hadTableHover = true; }
+        {
+            bool canRecall = hovered != null && !hovered.IsHand && _game.CanMovePiece(hovered.Placement);
+            _ui.ShowPatternTooltip(spell, pointer, hovered == null ? null : hovered.Card, canRecall); _hadTableHover = true;
+        }
         else HideHover(pointer);
+    }
+
+    /// <summary>포인터 아래 판 위 조각을 손패로 회수한다. 드래그로 손패에 돌려놓을 수 있는 조각(이번 턴에 놓은 환불 가능 조각)만 회수하며, 회수하면 true를 반환한다.</summary>
+    private bool TryRecallAt(Vector2 pointer)
+    {
+        Ray ray = _camera.ScreenPointToRay(pointer);
+        if (!Physics.Raycast(ray, out RaycastHit hit, 50f, 1 << TABLE_LAYER)) return false;
+        SpellPiece3D piece = hit.collider.GetComponent<SpellPiece3D>();
+        if (piece == null || piece.IsHand || !_game.CanMovePiece(piece.Placement)) return false;
+        if (!_game.Recall(piece.Board, piece.Placement)) return false;
+        HideHover(pointer); _ui.TableChanged();
+        return true;
     }
 
     /// <summary>격자와 배치된 조각을 방향키 입력만큼 이동하고 화면의 도안 조작 위치를 갱신한다.</summary>
@@ -708,9 +724,11 @@ public sealed class SpellTable3D : MonoBehaviour
                 _destination = spell; _local = local; _localRotation = localRotation; break;
             }
             _picked.transform.position = PiecePosition(_anchor, cells, 0.045f) + Vector3.up * 0.22f;
+            if (_picked.Card.IsUnique) PreviewClay();
         }
         else
         {
+            if (_picked.Card.IsUnique) _picked.ShowClay(null);
             // 판 밖에서는 피벗 점이 커서와 고정 차이를 유지하는 연속 위치에 둔다.
             Vector2 center = grid + _pivotOffset - _pivot + SpellPiece3D.CellBounds(cells) / 2;
             _picked.transform.position = _boardRoot.TransformPoint(GridLocal(center, 0.42f));
@@ -719,13 +737,24 @@ public sealed class SpellTable3D : MonoBehaviour
         _picked.SetTint(_destination >= 0 ? new Color(0.55f, 0.95f, 0.68f) : new Color(1f, 0.5f, 0.4f));
     }
 
+    /// <summary>집은 점토를 놓을 수 있는 도안이 있으면 실제로 변할 모양으로 그 자리에 보여 주고, 없으면 원판으로 둔다.</summary>
+    private void PreviewClay()
+    {
+        int[] mask = _destination < 0 ? null : _game.PreviewMask(_destination, _picked.Card, _local.x, _local.y, _localRotation, _picked.Board == _destination ? _picked.Placement : null);
+        if (mask == null) { _picked.ShowClay(null); return; }
+        List<SpellGame.ShapeCell> cells = _layout.MaskGridCells(_destination, mask, out Vector2Int anchor);
+        _picked.ShowClay(cells);
+        _picked.transform.position = PiecePosition(anchor, cells, 0.045f) + Vector3.up * 0.22f;
+    }
+
     /// <summary>집은 조각의 방향을 목표 방향으로 바꾸고, 피벗 점을 새 방향 좌표계로 옮긴 뒤 메시를 다시 만든다.</summary>
     private void SetPickRotation(int rotation)
     {
         int target = (rotation % 4 + 4) % 4;
         _pivot = RotatedPivot(target);
         _rotation = target;
-        _picked.SetCells(HeldCells(), HeldSeals());
+        // 점토는 회전이 없고 PreviewPick이 놓일 모양으로 메시를 바꾼다.
+        if (!_picked.Card.IsUnique) _picked.SetCells(HeldCells(), HeldSeals());
     }
 
     /// <summary>현재 방향의 피벗 점을 목표 방향 좌표계로 옮긴 값을 반환한다. 상태는 바꾸지 않는다.</summary>

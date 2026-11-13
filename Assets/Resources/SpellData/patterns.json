@@ -6,7 +6,10 @@
       "name": "불씨",
       "kind": "Single",
       "baseValue": 6,
+      "hits": 1,
       "keyword": "None",
+      "keywordBonus": "Damage",
+      "keywordBonusValue": 6,
       "cells": [
         {
           "x": 0,
@@ -19,18 +22,23 @@
           "mask": 15
         }
       ],
-      "layoutX": 2,
-      "layoutY": 0,
+      "layoutX": 1,
+      "layoutY": 1,
       "layoutRotation": 0,
-      "color": "#F4C95D",
-      "isStarter": true
+      "color": "#CD6625",
+      "effect": "Ember",
+      "isStarter": true,
+      "isInRewardPool": true
     },
     {
       "id": "barrier",
       "name": "방벽",
       "kind": "Block",
-      "baseValue": 7,
+      "baseValue": 5,
+      "hits": 1,
       "keyword": "None",
+      "keywordBonus": "Damage",
+      "keywordBonusValue": 6,
       "cells": [
         {
           "x": 0,
@@ -39,27 +47,27 @@
         }
       ],
       "layoutX": 2,
-      "layoutY": 3,
+      "layoutY": 1,
       "layoutRotation": 0,
-      "color": "#E6EBF0",
-      "isStarter": true
+      "color": "#97B7D7",
+      "effect": "Barrier",
+      "isStarter": true,
+      "isInRewardPool": true
     },
     {
       "id": "lightning",
       "name": "번개",
       "kind": "Single",
-      "baseValue": 14,
-      "keyword": "None",
+      "baseValue": 4,
+      "hits": 1,
+      "keyword": "Mosaic",
+      "keywordBonus": "RandomDamage",
+      "keywordBonusValue": 3,
       "cells": [
         {
           "x": 1,
           "y": 0,
-          "mask": 15
-        },
-        {
-          "x": 2,
-          "y": 0,
-          "mask": 9
+          "mask": 12
         },
         {
           "x": 0,
@@ -69,75 +77,158 @@
         {
           "x": 1,
           "y": 1,
-          "mask": 15
+          "mask": 9
+        },
+        {
+          "x": 0,
+          "y": 2,
+          "mask": 3
         }
       ],
-      "layoutX": 0,
+      "layoutX": 1,
       "layoutY": 0,
       "layoutRotation": 0,
-      "color": "#B9E36B",
-      "isStarter": false
+      "color": "#FFFF00",
+      "effect": "Lightning",
+      "isStarter": false,
+      "isInRewardPool": true
+    },
+    {
+      "id": "lightning_1",
+      "name": "방패 밀치기",
+      "kind": "Block",
+      "baseValue": 9,
+      "hits": 1,
+      "keyword": "Purity",
+      "keywordBonus": "RandomDamage",
+      "keywordBonusValue": 6,
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 0,
+          "mask": 15
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "mask": 12
+        }
+      ],
+      "layoutX": 1,
+      "layoutY": 0,
+      "layoutRotation": 0,
+      "color": "#46AF3D",
+      "effect": "ShieldBash",
+      "isStarter": false,
+      "isInRewardPool": true
+    },
+    {
+      "id": "lightning_1_1",
+      "name": "방패 강타",
+      "kind": "Single",
+      "baseValue": 12,
+      "hits": 1,
+      "keyword": "Purity",
+      "keywordBonus": "Block",
+      "keywordBonusValue": 9,
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 1,
+          "mask": 15
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "mask": 12
+        },
+        {
+          "x": 0,
+          "y": 2,
+          "mask": 3
+        },
+        {
+          "x": 1,
+          "y": 2,
+          "mask": 9
+        }
+      ],
+      "layoutX": 1,
+      "layoutY": 0,
+      "layoutRotation": 0,
+      "color": "#749588",
+      "effect": "ShieldBash",
+      "isStarter": false,
+      "isInRewardPool": true
     },
     {
       "id": "meteor",
       "name": "유성",
       "kind": "All",
       "baseValue": 10,
-      "keyword": "None",
+      "hits": 1,
+      "keyword": "OneStroke",
+      "keywordBonus": "Damage",
+      "keywordBonusValue": 10,
       "cells": [
         {
-          "x": 0,
+          "x": 1,
           "y": 0,
           "mask": 6
         },
         {
+          "x": 0,
+          "y": 1,
+          "mask": 6
+        },
+        {
           "x": 1,
-          "y": 0,
+          "y": 1,
           "mask": 15
         },
         {
           "x": 2,
-          "y": 0,
-          "mask": 15
-        },
-        {
-          "x": 3,
-          "y": 0,
-          "mask": 12
+          "y": 1,
+          "mask": 9
         },
         {
           "x": 0,
-          "y": 1,
+          "y": 2,
           "mask": 3
         },
         {
           "x": 1,
-          "y": 1,
-          "mask": 15
-        },
-        {
-          "x": 2,
-          "y": 1,
-          "mask": 15
-        },
-        {
-          "x": 3,
-          "y": 1,
+          "y": 2,
           "mask": 9
         }
       ],
-      "layoutX": 0,
+      "layoutX": 1,
       "layoutY": 0,
       "layoutRotation": 0,
-      "color": "#F28DB2",
-      "isStarter": false
+      "color": "#B50400",
+      "effect": "Meteor",
+      "isStarter": false,
+      "isInRewardPool": true
     },
     {
       "id": "flash",
-      "name": "섬광",
+      "name": "참격",
       "kind": "Single",
-      "baseValue": 8,
+      "baseValue": 12,
+      "hits": 1,
       "keyword": "OneStroke",
+      "keywordBonus": "Damage",
+      "keywordBonusValue": 6,
       "cells": [
         {
           "x": 1,
@@ -145,38 +236,38 @@
           "mask": 6
         },
         {
-          "x": 2,
-          "y": 0,
-          "mask": 12
-        },
-        {
           "x": 0,
-          "y": 1,
-          "mask": 6
-        },
-        {
-          "x": 1,
           "y": 1,
           "mask": 15
         },
         {
-          "x": 2,
+          "x": 1,
           "y": 1,
+          "mask": 9
+        },
+        {
+          "x": 0,
+          "y": 2,
           "mask": 9
         }
       ],
-      "layoutX": 0,
-      "layoutY": 0,
+      "layoutX": 1,
+      "layoutY": 1,
       "layoutRotation": 0,
-      "color": "#8CD9F2",
-      "isStarter": false
+      "color": "#ABEAFF",
+      "effect": "Slash",
+      "isStarter": false,
+      "isInRewardPool": true
     },
     {
       "id": "buckshot",
       "name": "산탄",
       "kind": "Scatter",
-      "baseValue": 3,
+      "baseValue": 9,
+      "hits": 1,
       "keyword": "Mosaic",
+      "keywordBonus": "RandomDamage",
+      "keywordBonusValue": 4,
       "cells": [
         {
           "x": 0,
@@ -213,14 +304,19 @@
       "layoutY": 0,
       "layoutRotation": 0,
       "color": "#F59959",
-      "isStarter": false
+      "effect": "Buckshot",
+      "isStarter": false,
+      "isInRewardPool": true
     },
     {
       "id": "kaleidoscope",
-      "name": "만화경",
-      "kind": "All",
-      "baseValue": 6,
-      "keyword": "Purity",
+      "name": "철벽",
+      "kind": "Block",
+      "baseValue": 10,
+      "hits": 1,
+      "keyword": "Mosaic",
+      "keywordBonus": "Block",
+      "keywordBonusValue": 3,
       "cells": [
         {
           "x": 0,
@@ -235,7 +331,7 @@
         {
           "x": 0,
           "y": 1,
-          "mask": 15
+          "mask": 3
         },
         {
           "x": 1,
@@ -247,14 +343,19 @@
       "layoutY": 1,
       "layoutRotation": 0,
       "color": "#B89EFA",
-      "isStarter": false
+      "effect": "IronWall",
+      "isStarter": false,
+      "isInRewardPool": true
     },
     {
       "id": "smash",
       "name": "강타",
       "kind": "Single",
       "baseValue": 9,
-      "keyword": "None",
+      "hits": 1,
+      "keyword": "OneStroke",
+      "keywordBonus": "Damage",
+      "keywordBonusValue": 4,
       "cells": [
         {
           "x": 0,
@@ -277,11 +378,13 @@
           "mask": 9
         }
       ],
-      "layoutX": 0,
+      "layoutX": 1,
       "layoutY": 1,
       "layoutRotation": 0,
-      "color": "#E65959",
-      "isStarter": true
+      "color": "#E97171",
+      "effect": "Strike",
+      "isStarter": false,
+      "isInRewardPool": true
     }
   ]
 }
