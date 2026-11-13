@@ -146,6 +146,8 @@ public sealed class SpellGameUI : MonoBehaviour
 
     private bool _showHelp;
     private int _openPile = -1;
+    private RectTransform _rewardDeckButton;
+    private SpellPileView _rewardDeckView;
     private bool _showPauseMenu;
     private int _pendingCast = -1;
     private int _rightClickUsedFrame = -1;
@@ -280,6 +282,11 @@ public sealed class SpellGameUI : MonoBehaviour
         if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote) return;
+        if (_openPile >= 0)
+        {
+            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) { _openPile = -1; Render(); }
+            return;
+        }
         if (_game.CurrentPhase == SpellGame.Phase.Reward || (_game.IsSealEvent && _game.ActiveReward == SpellGame.RewardKind.Seal))
         {
             if (_game.ActiveReward != SpellGame.RewardKind.None && Keyboard.current != null
@@ -539,6 +546,18 @@ public sealed class SpellGameUI : MonoBehaviour
         _titleScreen.StartButton.SetAction(StartNewGame);
         _resultScreen.Restart.SetAction(() => StartRun(_isSealerRun, _isThiefRun, _isCurserRun, _isContaminatorRun));
         _rewardScreen.Skip.SetAction(LeaveRewardSelection);
+        _rewardDeckView = Instantiate(_combatScreen.DrawPile, _content);
+        _rewardDeckView.name = "Reward Deck";
+        _rewardDeckButton = (RectTransform)_rewardDeckView.transform;
+        _rewardDeckView.Setup("덱 보기",
+            () =>
+            {
+                if (_game.CurrentPhase != SpellGame.Phase.Reward || _openPile >= 0 || _showDebugRemote) return;
+                _openPile = 2; Render();
+            });
+        _rewardDeckButton.anchorMin = _rewardDeckButton.anchorMax = new Vector2(0, 0);
+        _rewardDeckButton.pivot = new Vector2(0, 0);
+        _rewardDeckButton.anchoredPosition = new Vector2(40, 35);
         _loadoutScreen.Setup(_game, _layout, PatternColor, ShapeTint, card => HasTraits(card) ? AccentColor(card) : _subColor, TraitDescriptionText, SealColor,
             () => { ClearSelection(); _message = ""; Render(); }, ContinueFromLoadout);
     }
@@ -863,8 +882,20 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         _helpPanel.gameObject.SetActive(_showHelp);
         _pauseMenu.gameObject.SetActive(_showPauseMenu);
+        _rewardDeckView.Bind(_game.OwnedCards.Count);
+        _rewardDeckButton.gameObject.SetActive(_game.CurrentPhase == SpellGame.Phase.Reward && _game.ActiveReward != SpellGame.RewardKind.Seal);
+        if (_rewardDeckButton.gameObject.activeSelf) _rewardDeckButton.SetAsLastSibling();
+        _loadoutScreen.InputBlocked = _openPile >= 0;
         _pileViewer.gameObject.SetActive(_openPile >= 0);
         if (_openPile < 0) return;
+        if (_openPile == 2)
+        {
+            List<SpellGame.Card> deck = new List<SpellGame.Card>(_game.OwnedCards);
+            deck.Sort((a, b) => string.CompareOrdinal(CardName(a), CardName(b)));
+            _pileViewer.transform.SetAsLastSibling();
+            _pileViewer.Bind(this, "전체 덱", deck, () => { _openPile = -1; Render(); });
+            return;
+        }
         List<KeyValuePair<SpellGame.Card, int>> summary = new List<KeyValuePair<SpellGame.Card, int>>(_game.GetPileSummary(_openPile == 0));
         summary.Sort((a, b) => string.CompareOrdinal(
             CardName(a.Key).Replace("\n", " · "),
