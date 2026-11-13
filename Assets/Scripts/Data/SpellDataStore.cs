@@ -138,7 +138,7 @@ public static class SpellDataStore
         {
             case SpellGame.Keyword.OneStroke: return "<b>한 방</b>\n조각 1장으로 도안을 완성해 시전하면 보상을 받습니다.";
             case SpellGame.Keyword.Mosaic: return "<b>모자이크</b>\n도안에 놓인 조각 수만큼 보상을 받습니다. 조각 1장이어도 발동합니다.";
-            case SpellGame.Keyword.Purity: return "<b>순수</b>\n한 가지 도형으로만 도안을 완성해 시전하면 보상을 받습니다. 접착 조각은 순수로 치지 않습니다.";
+            case SpellGame.Keyword.Purity: return "<b>순수</b>\n같은 모양의 조각만으로 도안을 완성해 시전하면 보너스를 받습니다. 접착 조각도 완성된 전체 모양으로 비교합니다. 회전·좌우 반전은 같은 모양으로 보며, 씰과 덧칠은 영향을 주지 않습니다.";
             default: return "";
         }
     }

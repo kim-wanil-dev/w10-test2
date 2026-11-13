@@ -862,7 +862,7 @@ public sealed class SpellTable3D : MonoBehaviour
         {
             // 시계 방향 한 단계는 회전 전 범위 높이 H에서 점 (x, y)를 (H - y, x)로 옮긴다.
             float height = SpellPiece3D.CellBounds(CellsAt((_rotation + i) % 4)).y;
-            pivot = new Vector2(height - pivot.y, pivot.x);
+            pivot = SpellPatternLayout.RotatePiecePivot(pivot, height);
         }
         return pivot;
     }
@@ -882,8 +882,7 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>피벗 점이 커서 위치와 고정 차이만큼 떨어진 격자 지점에 오도록 지정 피벗의 정수 앵커를 반환한다.</summary>
     private Vector2Int PivotAnchor(Vector2 grid, Vector2 pivot)
     {
-        Vector2 anchor = grid + _pivotOffset - pivot;
-        return new Vector2Int(Mathf.RoundToInt(anchor.x), Mathf.RoundToInt(anchor.y));
+        return SpellPatternLayout.PieceAnchor(grid, pivot, _pivotOffset);
     }
 
     /// <summary>집기 시작 방향이 정해진 뒤 피벗 점과 커서·피벗 차이를 정한다. 판 위 조각은 집는 순간 위치가 바뀌지 않게 차이를 보존하고, 손패 조각은 피벗이 커서에 오게 한다.</summary>
