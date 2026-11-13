@@ -116,6 +116,27 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
         HideGhost();
     }
 
+    /// <summary>누르기를 받을지 거르는 함수다. 온보딩이 강조 영역 밖의 누르기를 막는 데 쓴다. null이면 모두 받는다.</summary>
+    public Func<Vector2, bool> PressFilter { get; set; }
+    public RectTransform GridFrame { get { return _gridFrame; } }
+    public RectTransform StorageFrame { get { return _storageFrame; } }
+    public RectTransform DecideButton { get { return _decide; } }
+    public SpellGame.RewardKind Tab { get { return _tab; } }
+    public bool HasTrialPattern { get { return _trialPattern >= 0; } }
+    public bool HasTrialPiece { get { return _trialPiece != null; } }
+
+    /// <summary>지금 탭에서 보상 번호 rewardIndex를 보여 주는 카드가 있으면 그 범위를 돌려준다.</summary>
+    public bool TryCardRect(int rewardIndex, out RectTransform rect)
+    {
+        rect = null;
+        for (int i = 0; i < _cards.Count && i < _cardIndices.Count; i++)
+        {
+            if (_cardIndices[i] != rewardIndex || !_cards[i].gameObject.activeInHierarchy) continue;
+            rect = (RectTransform)_cards[i].transform; return true;
+        }
+        return false;
+    }
+
     /// <summary>계속 버튼 문구를 바꾼다.</summary>
     public void SetContinueLabel(string label) { _start.SetLabel(label); }
 
@@ -144,7 +165,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
         }
         // 들고 있지 않을 때 R은 시험으로 놓은 조각을 제자리에서 돌린다.
         if (keyboard != null && keyboard.rKey.wasPressedThisFrame && _trialPiece != null) RotateTrialPiece();
-        if (mouse.leftButton.wasPressedThisFrame) BeginPress(pointer);
+        if (mouse.leftButton.wasPressedThisFrame && (PressFilter == null || PressFilter(pointer))) BeginPress(pointer);
         if (_pressed && mouse.leftButton.isPressed && (pointer - _pressPosition).sqrMagnitude >= DRAG_THRESHOLD * DRAG_THRESHOLD) { StartHold(false); UpdateHover(pointer); return; }
         if (_pressed && mouse.leftButton.wasReleasedThisFrame) ReleaseClick();
     }

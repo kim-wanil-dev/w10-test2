@@ -42,6 +42,8 @@ public sealed class SpellGame
     private const int REWARD_PIECE_COUNT = 3;
     private const int REWARD_PATTERN_COUNT = 3;
     private const double REWARD_SEAL_CHANCE = 0.5;
+    // 첫 전투 첫 손패(뽑는 순서). 정사각형+1/4 삼각형 → 불씨, 정사각형 → 방벽, 1/4 삼각형 → 도안에 남겨 고정 체험, 평행사변형 → 손패에 남아 버려짐 체험.
+    private static readonly Shape[] OPENING_HAND = { Shape.Diamond, Shape.QuarterTriangle, Shape.Diamond, Shape.QuarterTriangle, Shape.Parallelogram };
     private const int PERIOD_BONUS = 3;
     private const int RESONANCE_BONUS = 3;
     private const int RESONANCE_COUNT = 3;
@@ -344,6 +346,8 @@ public sealed class SpellGame
     public int Health { get; private set; }
     public int MaxHealth { get; private set; } = START_HEALTH;
     public bool IsDeveloperMode { get; private set; }
+    /// <summary>온보딩을 진행하는 판인지다. 첫 전투 첫 손패와 첫 조각 보상을 시나리오에 맞춰 고정한다.</summary>
+    public bool IsOnboarding { get; private set; }
     public int Block { get; private set; }
     public int Battle { get; private set; }
     public int Turn { get; private set; }
@@ -673,8 +677,9 @@ public sealed class SpellGame
     }
 
     /// <summary>개발자 모드와 테스트 적 선택으로 새 게임의 체력·덱·도안을 초기화하고 첫 전투를 시작한다.</summary>
-    public void StartGame(bool isDeveloperMode = false, bool withSealer = false, bool withThief = false, bool withCurser = false, bool withContaminator = false)
+    public void StartGame(bool isDeveloperMode = false, bool withSealer = false, bool withThief = false, bool withCurser = false, bool withContaminator = false, bool isOnboarding = false)
     {
+        IsOnboarding = isOnboarding && !isDeveloperMode;
         _hasSealerEncounter = withSealer;
         _hasThiefEncounter = withThief;
         _hasCurserEncounter = withCurser;
@@ -805,7 +810,12 @@ public sealed class SpellGame
         Battle++; Turn = 0; Block = 0; Target = 0; _enemies.Clear(); _hand.Clear(); _discard.Clear(); _draw.Clear();
         foreach (Board board in Boards) { board.MutablePieces.Clear(); board.Completer = null; }
         _draw.AddRange(_owned); Shuffle(_draw);
-        GuaranteeOpeningShape(Shape.Square, _draw.Count - 1); GuaranteeOpeningShape(Shape.QuarterTriangle, _draw.Count - 2);
+        if (Battle == 1 && IsOnboarding)
+        {
+            // 온보딩 중 첫 전투 첫 손패는 온보딩 시나리오에 맞춰 고정한다. 뒤에서부터 뽑으므로 맨 뒤가 첫 장이다.
+            for (int i = 0; i < OPENING_HAND.Length; i++) GuaranteeOpeningShape(OPENING_HAND[i], _draw.Count - 1 - i);
+        }
+        else { GuaranteeOpeningShape(Shape.Square, _draw.Count - 1); GuaranteeOpeningShape(Shape.QuarterTriangle, _draw.Count - 2); }
         if (IsDeveloperMode)
         {
             for (int i = 0; i < 3; i++) _enemies.Add(new Enemy("잉크 하수인", DEVELOPER_HEALTH, new[] { 4 }));
@@ -1774,7 +1784,9 @@ public sealed class SpellGame
         bool hasClay = false;
         for (int i = 0; i < REWARD_PIECE_COUNT; i++)
         {
-            Card piece = RandomRewardPiece(!hasClay);
+            // 온보딩 중 첫 조각 보상은 씰링·코팅 안내를 위해 씰링만 붙은 조각과 코팅만 붙은 조각을 하나씩 보장한다.
+            RewardExtra extra = Battle != 1 || !IsOnboarding ? RewardExtra.Random : i == 0 ? RewardExtra.Seal : i == 1 ? RewardExtra.Coating : RewardExtra.Random;
+            Card piece = RandomRewardPiece(!hasClay && extra == RewardExtra.Random, extra);
             hasClay |= piece.IsUnique;
             _rewards.Add(new Reward { Pattern = -1, Piece = piece });
         }
@@ -1792,8 +1804,11 @@ public sealed class SpellGame
         CurrentPhase = Phase.Reward;
     }
 
-    /// <summary>보상용 랜덤 조각을 만든다. 도형을 고른 뒤 반반 확률로 무작위 1/4 구역에 씰링 1개 또는 코팅 1개를 붙인다. 고유 조각 점토는 아무것도 붙이지 않는다.</summary>
-    private Card RandomRewardPiece(bool canBeClay)
+    /// <summary>보상 조각에 붙일 것. Random은 씰링·코팅 중 반반, Seal·Coating은 해당 종류만 붙인다.</summary>
+    private enum RewardExtra { Random, Seal, Coating }
+
+    /// <summary>보상용 랜덤 조각을 만든다. 도형을 고른 뒤 extra에 따라 무작위 1/4 구역에 씰링 1개 또는 코팅 1개를 붙인다. 고유 조각 점토는 아무것도 붙이지 않는다.</summary>
+    private Card RandomRewardPiece(bool canBeClay, RewardExtra extra = RewardExtra.Random)
     {
         // 점토를 뺄 때는 보상 도형 목록에서 점토를 제외한 칸 중에서 뽑는다.
         int clayIndex = canBeClay ? -1 : Array.IndexOf(REWARD_SHAPES, Shape.Clay);
@@ -1802,7 +1817,7 @@ public sealed class SpellGame
         Shape shape = REWARD_SHAPES[pick];
         Card card = new Card { Shape = shape };
         if (card.IsUnique) return card;
-        if (_random.NextDouble() < REWARD_SEAL_CHANCE)
+        if (extra == RewardExtra.Seal || (extra == RewardExtra.Random && _random.NextDouble() < REWARD_SEAL_CHANCE))
         {
             List<SealSpot> sectors = new List<SealSpot>();
             foreach (ShapeCell cell in ShapeCells(shape, 0))

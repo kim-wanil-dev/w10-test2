@@ -219,6 +219,9 @@ public sealed class SpellGameUI : MonoBehaviour
     private Vector2 _theftPosition;
     private RectTransform _theftHand;
 
+    private SpellOnboarding _onboarding;
+    /// <summary>첫 실행 온보딩이다. 전투 판·보상 화면이 입력을 거를 때 묻는다.</summary>
+    public SpellOnboarding Onboarding { get { return _onboarding; } }
     public SpellGame.Card SelectedCard { get { return _selectedCard; } }
     public int Rotation { get { return _rotation; } }
     public bool IsTableActive { get { return _table != null; } }
@@ -246,6 +249,10 @@ public sealed class SpellGameUI : MonoBehaviour
         _table.Setup(this, _game, _layout, _combatScreen);
         SetupOtherScreens();
         SetupOverlays();
+        _onboarding = SpellOnboarding.Create(_game, _table, _combatScreen, _loadoutScreen, _font,
+            () => _showPauseMenu || _showHelp || _openPile >= 0 || _showDebugRemote || _glueOverlay != null || _hammerPhase != HammerPhase.None || _sealWorkbench != null,
+            Render);
+        SetupReplayTutorialButton();
         SetupDebugRemote();
         SetupCastEffects();
         SpellTagTooltip.Create(_content, _font);
@@ -327,6 +334,25 @@ public sealed class SpellGameUI : MonoBehaviour
             }
         }
         else if (rightClick && _pendingCast >= 0) { _pendingCast = -1; Render(); }
+    }
+
+    /// <summary>일시정지 메뉴의 게임 종료 버튼 아래에 「튜토리얼 다시 보기」 버튼을 복제해 넣고, 패널을 그만큼 늘린다.</summary>
+    private void SetupReplayTutorialButton()
+    {
+        const float STEP = 100f;
+        RectTransform quit = (RectTransform)_pauseMenu.Quit.transform, panel = (RectTransform)quit.parent;
+        SpellButtonView replay = Instantiate(_pauseMenu.Quit, panel);
+        replay.name = "Replay Tutorial";
+        ((RectTransform)replay.transform).anchoredPosition = quit.anchoredPosition + Vector2.down * STEP;
+        Transform hint = panel.Find("Hint");
+        if (hint != null) ((RectTransform)hint).anchoredPosition += Vector2.down * STEP;
+        panel.sizeDelta += Vector2.up * STEP; panel.anchoredPosition += Vector2.up * STEP / 2;
+        replay.SetLabel(_onboarding.Ui("replay"));
+        replay.SetAction(() =>
+        {
+            SpellOnboarding.ResetProgress();
+            replay.SetLabel(_onboarding.Ui("replayDone"));
+        });
     }
 
     /// <summary>일시정지 메뉴를 열면서 조준·선택·드래그를 정리한다.</summary>
@@ -595,14 +621,15 @@ public sealed class SpellGameUI : MonoBehaviour
     private void StartNewGame()
     {
         ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = _isContaminatorRun = false;
-        _game.StartGame(); ResetPatterns(); ClearSelection(); Render();
+        _game.StartGame(isOnboarding: SpellOnboarding.ShouldRun); ResetPatterns(); ClearSelection();
+        _onboarding.Begin(_game.IsOnboarding); Render();
     }
 
     /// <summary>개발자 전투를 시작하고 판에 들어가는 만큼 모든 도안을 배치한다.</summary>
     private void StartDeveloperGame()
     {
         ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = _isContaminatorRun = false;
-        _game.StartGame(true); ResetPatterns();
+        _game.StartGame(true); ResetPatterns(); _onboarding.Begin(false);
         _layout.EnsurePlaced(_game.Spells); ClearSelection(); Render();
     }
 
@@ -1105,7 +1132,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>도안 탭의 더보기 메뉴를 탭 오른쪽 아래에 연다.</summary>
     private void OpenPatternMenu(int spell)
     {
-        if (!CanInteract) return;
+        if (!CanInteract || !_onboarding.AllowsPatternEdit) return;
         Vector3[] corners = new Vector3[4];
         _combatScreen.Tabs[spell].Rect.GetWorldCorners(corners);
         // 탭의 오른쪽 아래 모서리에 메뉴의 오른쪽 위를 맞춘다.
@@ -1281,6 +1308,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>적 행동 전후 체력과 방어 차이를 안내하고 다음 화면을 표시한다.</summary>
     private void EndPlayerTurn()
     {
+        if (!_onboarding.AllowsEndTurn) return;
         int healthBefore = _game.Health;
         int incoming = 0;
         foreach (SpellGame.Enemy enemy in _game.Enemies) if (enemy.Health > 0) incoming += enemy.Intent;
@@ -1297,6 +1325,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>완성된 주문의 시전을 시작하고 단일 대상 주문은 적 선택을 기다린다.</summary>
     private void BeginCast(int board)
     {
+        if (!_onboarding.AllowsCast(board)) return;
         if (_game.IsSealed(board)) { _pendingCast = -1; _message = "봉인된 주문 도안은 시전할 수 없습니다"; Render(); return; }
         if (!_game.IsComplete(board)) { _message = "도안을 먼저 완성하세요"; Render(); return; }
         ClearSelection();
@@ -1320,6 +1349,7 @@ public sealed class SpellGameUI : MonoBehaviour
         int guards = 0;
         foreach (SpellGame.Placement piece in _game.Boards[board].Pieces) if (piece.Card.Coating == SpellGame.Coating.Guard) guards++;
         if (!_game.Cast(board, target)) { _message = "살아 있는 대상을 선택하세요"; Render(); return; }
+        _onboarding.NotifyCast(board);
         float attackDelay = PlayCastEffect(board, evaluation, guards);
         _impactStart = Time.unscaledTime + attackDelay + HIT_IMPACT_SECONDS;
         _onboardingComplete = true;
@@ -1651,6 +1681,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>도안에 고정된 이전 턴 조각이 없는지 확인한다.</summary>
     public bool CanMovePattern(int spell)
     {
+        if (!_onboarding.AllowsPatternEdit) return false;
         foreach (SpellGame.Placement piece in _game.Boards[spell].Pieces) if (!_game.CanMovePiece(piece)) return false;
         return true;
     }
@@ -2231,7 +2262,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         ResetTheft(); _isSealerRun = withSealer; _isThiefRun = withThief; _isCurserRun = withCurser;
         _isContaminatorRun = withContaminator;
-        _game.StartGame(false, withSealer, withThief, withCurser, withContaminator); ResetPatterns(); ClearSelection();
+        _game.StartGame(false, withSealer, withThief, withCurser, withContaminator); ResetPatterns(); ClearSelection(); _onboarding.Begin(false);
         if (withSealer || withThief || withCurser || withContaminator) _onboardingComplete = true;
         _message = _game.SealNotice; _feedbackUntil = 0; Render();
     }
