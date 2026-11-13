@@ -146,6 +146,11 @@ public sealed class SpellGameUI : MonoBehaviour
 
     private bool _showHelp;
     private int _openPile = -1;
+    private RectTransform _rewardDeckButton;
+    private const int GLUE_CARDS_PER_PAGE = 6;
+    private int _glueDeckPage;
+    private RectTransform _glueDeckArea;
+    private SpellPileView _rewardDeckView;
     private bool _showPauseMenu;
     private int _pendingCast = -1;
     private int _rightClickUsedFrame = -1;
@@ -280,6 +285,11 @@ public sealed class SpellGameUI : MonoBehaviour
         if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote) return;
+        if (_openPile >= 0)
+        {
+            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) { _openPile = -1; Render(); }
+            return;
+        }
         if (_game.CurrentPhase == SpellGame.Phase.Reward || (_game.IsSealEvent && _game.ActiveReward == SpellGame.RewardKind.Seal))
         {
             if (_game.ActiveReward != SpellGame.RewardKind.None && Keyboard.current != null
@@ -539,6 +549,18 @@ public sealed class SpellGameUI : MonoBehaviour
         _titleScreen.StartButton.SetAction(StartNewGame);
         _resultScreen.Restart.SetAction(() => StartRun(_isSealerRun, _isThiefRun, _isCurserRun, _isContaminatorRun));
         _rewardScreen.Skip.SetAction(LeaveRewardSelection);
+        _rewardDeckView = Instantiate(_combatScreen.DrawPile, _content);
+        _rewardDeckView.name = "Reward Deck";
+        _rewardDeckButton = (RectTransform)_rewardDeckView.transform;
+        _rewardDeckView.Setup("덱 보기",
+            () =>
+            {
+                if (_game.CurrentPhase != SpellGame.Phase.Reward || _openPile >= 0 || _showDebugRemote) return;
+                _openPile = 2; Render();
+            });
+        _rewardDeckButton.anchorMin = _rewardDeckButton.anchorMax = new Vector2(0, 0);
+        _rewardDeckButton.pivot = new Vector2(0, 0);
+        _rewardDeckButton.anchoredPosition = new Vector2(40, 35);
         _loadoutScreen.Setup(_game, _layout, PatternColor, ShapeTint, card => HasTraits(card) ? AccentColor(card) : _subColor, TraitDescriptionText, SealColor,
             () => { ClearSelection(); _message = ""; Render(); }, ContinueFromLoadout);
     }
@@ -863,8 +885,20 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         _helpPanel.gameObject.SetActive(_showHelp);
         _pauseMenu.gameObject.SetActive(_showPauseMenu);
+        _rewardDeckView.Bind(_game.OwnedCards.Count);
+        _rewardDeckButton.gameObject.SetActive(_game.CurrentPhase == SpellGame.Phase.Reward && _game.ActiveReward != SpellGame.RewardKind.Seal);
+        if (_rewardDeckButton.gameObject.activeSelf) _rewardDeckButton.SetAsLastSibling();
+        _loadoutScreen.InputBlocked = _openPile >= 0;
         _pileViewer.gameObject.SetActive(_openPile >= 0);
         if (_openPile < 0) return;
+        if (_openPile == 2)
+        {
+            List<SpellGame.Card> deck = new List<SpellGame.Card>(_game.OwnedCards);
+            deck.Sort((a, b) => string.CompareOrdinal(CardName(a), CardName(b)));
+            _pileViewer.transform.SetAsLastSibling();
+            _pileViewer.Bind(this, "전체 덱", deck, () => { _openPile = -1; Render(); });
+            return;
+        }
         List<KeyValuePair<SpellGame.Card, int>> summary = new List<KeyValuePair<SpellGame.Card, int>>(_game.GetPileSummary(_openPile == 0));
         summary.Sort((a, b) => string.CompareOrdinal(
             CardName(a.Key).Replace("\n", " · "),
@@ -2633,6 +2667,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>접착 미리 보기와 선택을 삭제한다. 확인 전에는 카드나 사용 횟수를 변경하지 않는다.</summary>
     private void CloseGlue()
     {
+        _glueDeckPage = 0;
         if (_glueOverlay != null || _glueDragCard != null) HideDragGhost();
         _glueDragCard = null;
         _glueDragRotation = 0;
@@ -2743,8 +2778,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         if (_glueOverlay == null) return;
         string issue = GluePlacementIssue();
-        _glueHint.text = (_glueMessage.Length > 0 ? _glueMessage : issue ?? "접착 가능 · 확인하면 카드 한 장으로 합쳐집니다")
-            + $"\n선택 조각 {_glueSelected + 1} · R / 우클릭 회전";
+        _glueHint.text = (_glueMessage.Length > 0 ? _glueMessage : issue ?? "접착 가능 · 확인하면 카드 한 장으로 합쳐집니다");
         _glueHint.color = issue == null ? new Color(0.55f, 1f, 0.7f) : new Color(1f, 0.55f, 0.5f);
         _glueConfirm.interactable = issue == null && !_glueGraphic.IsDragging && _glueDragCard == null;
         _glueGraphic.SetVerticesDirty();
@@ -2811,6 +2845,13 @@ public sealed class SpellGameUI : MonoBehaviour
         bool escape = Keyboard.current != null && (Keyboard.current.escapeKey.wasPressedThisFrame || Keyboard.current.qKey.wasPressedThisFrame);
         if (!invalid && _glueCoatingChoice != null) { if (escape) HideGlueCoatingChoice(); return; }
         if (invalid || escape) { CloseGlue(); Render(); return; }
+        if (Mouse.current != null && _glueDeckArea != null
+            && RectTransformUtility.RectangleContainsScreenPoint(_glueDeckArea, Mouse.current.position.ReadValue(), null))
+        {
+            Vector2 scroll = Mouse.current.scroll.ReadValue();
+            float delta = Mathf.Abs(scroll.y) >= Mathf.Abs(scroll.x) ? -scroll.y : scroll.x;
+            if (Mathf.Abs(delta) > 0.01f) ChangeGlueDeckPage(delta > 0 ? 1 : -1);
+        }
         bool rotate = (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             || (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame);
         if (rotate) RotateGluePart();
@@ -2862,7 +2903,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_glueOverlay != null) { _glueOverlay.gameObject.SetActive(false); Destroy(_glueOverlay.gameObject); }
         _glueOverlay = Panel(_root, 0, 0, 1280, 720, Color.black);
         Label(_glueOverlay, "접착 작업대", 350, 25, 580, 45, 30);
-        Label(_glueOverlay, "일반·특수 조각 2장 선택 → 드래그·R로 변 맞추기 → 접착 확인", 140, 85, 1000, 35, 19);
+        Label(_glueOverlay, "조각 2장 선택 → 드래그·R로 모양 맞추기 → 접착 확인", 140, 85, 1000, 35, 19);
         RectTransform board = Element("Glue Workbench", _glueOverlay, 200, 170, 576, 288);
         board.gameObject.AddComponent<CanvasRenderer>();
         _glueGraphic = board.gameObject.AddComponent<SpellGlueGraphic>();
@@ -2871,17 +2912,21 @@ public sealed class SpellGameUI : MonoBehaviour
         RectTransform hint = Element("Glue Status", _glueOverlay, 825, 175, 400, 110);
         _glueHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
         _glueHint.font = _font; _glueHint.fontSize = 20; _glueHint.color = Color.white; _glueHint.raycastTarget = false;
-        GlueButton(_glueOverlay, "회전 · R", 850, 295, 280, 45, RotateGluePart);
         _glueConfirm = GlueButton(_glueOverlay, "접착 확인", 850, 360, 280, 55, ConfirmGlue);
         GlueButton(_glueOverlay, "취소 · Esc", 850, 435, 280, 45, () => { CloseGlue(); Render(); });
-        GlueButton(_glueOverlay, "선택 조각 중앙으로", 850, 505, 280, 40, CenterGluePart);
-        Label(_glueOverlay, "덱의 조각 2장 → 1장 · 모양과 효과 영구 유지\n드래그 또는 빈 칸 클릭으로 이동 · 덱 조각 재클릭으로 선택 해제", 100, 490, 660, 65, 17);
-        RectTransform cards = CreateWorkshopDeck(_glueOverlay);
-        for (int i = 0; i < _game.OwnedCards.Count; i++)
+        Label(_glueOverlay, "씰링: 접착 후에도 모든 효과 유지\n코팅: 서로 다른 효과가 있으면 하나만 선택\n한쪽에만 코팅이 있으면 접착 조각 전체에 적용", 100, 490, 680, 85, 17);
+        int lastPage = Mathf.Max(0, (_game.OwnedCards.Count - 1) / GLUE_CARDS_PER_PAGE);
+        _glueDeckPage = Mathf.Clamp(_glueDeckPage, 0, lastPage);
+        GlueButton(_glueOverlay, "<", 65, 620, 65, 65, () => ChangeGlueDeckPage(-1)).interactable = _glueDeckPage > 0;
+        GlueButton(_glueOverlay, ">", 1150, 620, 65, 65, () => ChangeGlueDeckPage(1)).interactable = _glueDeckPage < lastPage;
+        RectTransform cards = Panel(_glueOverlay, 145, 590, 990, 125, new Color(0.06f, 0.08f, 0.12f));
+        _glueDeckArea = cards;
+        int firstCard = _glueDeckPage * GLUE_CARDS_PER_PAGE;
+        for (int i = firstCard; i < Mathf.Min(firstCard + GLUE_CARDS_PER_PAGE, _game.OwnedCards.Count); i++)
         {
             SpellGame.Card card = _game.OwnedCards[i];
             bool selected = _glueCards[0] == card || _glueCards[1] == card;
-            UnityEngine.UI.Button button = GlueButton(cards, "", i * 165, 0, 155, 120, () => SelectGlueCard(card));
+            UnityEngine.UI.Button button = GlueButton(cards, "", (i - firstCard) * 165, 0, 155, 120, () => SelectGlueCard(card));
             button.interactable = _game.GlueCardIssue(card) == null;
             button.GetComponent<UnityEngine.UI.Image>().color = CardColor(card, selected);
             button.gameObject.AddComponent<SpellCardDrag>().Setup(this, card);
@@ -2891,6 +2936,14 @@ public sealed class SpellGameUI : MonoBehaviour
             Label((RectTransform)button.transform, CardName(card), 3, 70, 149, 45, 13);
         }
         RefreshGlue();
+    }
+
+    private void ChangeGlueDeckPage(int direction)
+    {
+        if (_glueOverlay == null || _glueDragCard != null || _glueGraphic.IsDragging) return;
+        int lastPage = Mathf.Max(0, (_game.OwnedCards.Count - 1) / GLUE_CARDS_PER_PAGE);
+        _glueDeckPage = Mathf.Clamp(_glueDeckPage + direction, 0, lastPage);
+        RenderGlue();
     }
 
 
