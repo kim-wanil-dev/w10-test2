@@ -7,8 +7,8 @@ public sealed class SpellGame
 {
     private const float MAX_DECOMPOSITION_CHANCE = 0.9f;
     private const int CURSE_FAILURE_AMOUNT = 10;
-    private const int WEAK_CONTAMINATION_COUNT = 3;
-    private const int STRONG_CONTAMINATION_COUNT = 5;
+    private const int WEAK_CONTAMINATION_COUNT = 2;
+    private const int STRONG_CONTAMINATION_COUNT = 3;
     public const int CONTAMINATION_PENALTY = 2;
 
     public enum Shape { Square, Triangle, Rectangle, QuarterTriangle, Diamond, Parallelogram, MediumTriangle, House, LargeTriangle, LShape, Clay }
