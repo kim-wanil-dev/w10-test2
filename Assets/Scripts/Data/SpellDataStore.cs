@@ -152,7 +152,7 @@ public static class SpellDataStore
             case SpellGame.SpellKind.Single: return $"단일 피해 {value}";
             case SpellGame.SpellKind.Block: return $"방어 {value}";
             case SpellGame.SpellKind.All: return $"전체 피해 {value}";
-            case SpellGame.SpellKind.Scatter: return $"무작위 피해 {value} × {Math.Max(1, data.Hits)}타";
+            case SpellGame.SpellKind.Scatter: return data.Hits <= 1 ? $"무작위 적 피해 {value}" : $"무작위 적 피해 {value} × {data.Hits}회";
             default: return "";
         }
     }
