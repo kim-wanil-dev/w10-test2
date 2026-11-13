@@ -13,9 +13,15 @@ public sealed class SpellCastEffectGraphic : MaskableGraphic
     private static readonly Color HOT_COLOR = new Color(1f, 0.62f, 0.25f);
     private static readonly Color BOLT_COLOR = new Color(0.75f, 0.9f, 1f);
 
-    /// <summary>연출 하나의 종류, 시작 시각, 길이, 시전자·대상 위치(로컬), 색과 무작위 씨앗이다.</summary>
+    private const float TRAIT_DURATION = 0.85f;
+
+    /// <summary>코팅·씰링이 발동할 때 그리는 연출 종류다. AmplifyHit·CogHit은 강화된 타격을 맞은 적 위에 그린다.</summary>
+    public enum Trait { None, Guard, Amplify, AmplifyHit, Cog, CogHit, Shard, Refill, Recall, Overpaint }
+
+    /// <summary>연출 하나의 종류, 시작 시각, 길이, 시전자·대상 위치(로컬), 색과 무작위 씨앗이다. TraitKind가 None이 아니면 코팅·씰링 연출이다.</summary>
     private struct Burst
     {
+        public Trait TraitKind;
         public SpellGame.CastEffect Kind;
         public float Start;
         public float Duration;
@@ -61,6 +67,16 @@ public sealed class SpellCastEffectGraphic : MaskableGraphic
         SetVerticesDirty();
     }
 
+    /// <summary>코팅·씰링 연출 하나를 delay초 뒤에 시작한다. from에서 to로 향하며, to가 없으면 from 자리에서 재생하고 handFallback이면 화면 아래 손패 쪽을 향한다.</summary>
+    public void PlayTrait(Trait kind, RectTransform from, RectTransform to, float delay, Color color, bool handFallback = false)
+    {
+        if (kind == Trait.None || from == null) return;
+        Vector2 start = LocalCenter(from);
+        Vector2 end = to != null ? LocalCenter(to) : handFallback ? new Vector2(rectTransform.rect.center.x, rectTransform.rect.yMin + 110f) : start;
+        _bursts.Add(new Burst { TraitKind = kind, Start = Time.unscaledTime + delay, Duration = TRAIT_DURATION, From = start, To = end, Color = color, Seed = _nextSeed++ });
+        SetVerticesDirty();
+    }
+
     /// <summary>진행 중인 연출을 모두 지운다.</summary>
     public void Clear() { _bursts.Clear(); SetVerticesDirty(); }
 
@@ -86,6 +102,7 @@ public sealed class SpellCastEffectGraphic : MaskableGraphic
         {
             float t = (now - burst.Start) / burst.Duration;
             if (t < 0 || t > 1) continue;
+            if (burst.TraitKind != Trait.None) { DrawTrait(vh, burst, t); continue; }
             switch (burst.Kind)
             {
                 case SpellGame.CastEffect.Ember: DrawEmber(vh, burst, t); break;
@@ -264,6 +281,184 @@ public sealed class SpellCastEffectGraphic : MaskableGraphic
                 Rect(vh, center + new Vector2(0, brick.y * 0.3f), new Vector2(brick.x, 3f), Alpha(Color.white, 0.4f * rise * fade));
             }
         }
+    }
+
+    /// <summary>코팅·씰링 연출을 종류별로 그린다.</summary>
+    private static void DrawTrait(VertexHelper vh, Burst b, float t)
+    {
+        switch (b.TraitKind)
+        {
+            case Trait.Guard: DrawGuard(vh, b, t); break;
+            case Trait.Amplify: DrawAmplify(vh, b, t); break;
+            case Trait.AmplifyHit: DrawAmplifyHit(vh, b, t); break;
+            case Trait.Cog: DrawCog(vh, b.From, b.Color, t, 34f, 1f); break;
+            case Trait.CogHit: DrawCog(vh, b.To + new Vector2(38f, 38f), b.Color, t, 20f, -1.6f); break;
+            case Trait.Shard: DrawShard(vh, b, t); break;
+            case Trait.Refill: DrawFlyingCard(vh, b, t, false); break;
+            case Trait.Recall: DrawFlyingCard(vh, b, t, true); break;
+            case Trait.Overpaint: DrawOverpaint(vh, b, t); break;
+        }
+    }
+
+    /// <summary>수호 코팅: 작은 방패가 도안에서 시전자에게 날아가 붙으며 반짝인다.</summary>
+    private static void DrawGuard(VertexHelper vh, Burst b, float t)
+    {
+        Vector2 target = b.To + new Vector2(-40f, 30f);
+        if (t < 0.45f)
+        {
+            float u = EaseOut(t / 0.45f);
+            Vector2 p = Vector2.Lerp(b.From, target, u) + Vector2.up * Mathf.Sin(u * Mathf.PI) * 70f;
+            Shield(vh, p, 20f, Alpha(b.Color, 0.8f), Alpha(Color.white, 0.95f));
+            return;
+        }
+        float v = (t - 0.45f) / 0.55f;
+        Shield(vh, target, 20f + 12f * EaseOut(v), Alpha(b.Color, 0.6f * (1 - v)), Alpha(Color.white, 1 - v));
+        Ring(vh, target, 24f + 50f * v, 5f * (1 - v) + 0.5f, Alpha(b.Color, 1 - v));
+    }
+
+    /// <summary>증폭 코팅: 도안 자리에서 위쪽 화살 무늬가 겹겹이 솟고 고리가 퍼진다.</summary>
+    private static void DrawAmplify(VertexHelper vh, Burst b, float t)
+    {
+        float fade = 1 - Mathf.Clamp01((t - 0.55f) / 0.45f);
+        Ring(vh, b.From, 26f + 60f * EaseOut(t), 6f * (1 - t) + 0.5f, Alpha(b.Color, 0.9f * (1 - t)));
+        for (int i = 0; i < 3; i++)
+        {
+            float u = Mathf.Clamp01((t - i * 0.12f) / 0.6f);
+            if (u <= 0) continue;
+            Vector2 tip = b.From + new Vector2(0, 10f + 70f * EaseOut(u) + i * 4f);
+            float alpha = fade * (1 - u * 0.5f);
+            Line(vh, tip + new Vector2(-24f, -16f), tip, 7f, Alpha(b.Color, alpha));
+            Line(vh, tip, tip + new Vector2(24f, -16f), 7f, Alpha(b.Color, alpha));
+            Line(vh, tip + new Vector2(-18f, -12f), tip, 2.5f, Alpha(Color.white, alpha));
+            Line(vh, tip, tip + new Vector2(18f, -12f), 2.5f, Alpha(Color.white, alpha));
+        }
+    }
+
+    /// <summary>증폭 타격: 맞은 적 위에 마름모 테두리와 십자 섬광이 커지며 강화된 피해를 보여 준다.</summary>
+    private static void DrawAmplifyHit(VertexHelper vh, Burst b, float t)
+    {
+        float v = EaseOut(t);
+        Outline(vh, b.To, 40f + 50f * v, 4, 0, 5f * (1 - t) + 0.5f, Alpha(b.Color, 1 - t));
+        float arm = 30f + 40f * v;
+        Line(vh, b.To + Vector2.left * arm, b.To + Vector2.right * arm, 4f * (1 - t) + 0.5f, Alpha(Color.white, 0.9f * (1 - t)));
+        Line(vh, b.To + Vector2.down * arm, b.To + Vector2.up * arm, 4f * (1 - t) + 0.5f, Alpha(Color.white, 0.9f * (1 - t)));
+    }
+
+    /// <summary>톱니 코팅: 톱니바퀴가 커지며 돈다. spin이 음수면 반대로 돈다.</summary>
+    private static void DrawCog(VertexHelper vh, Vector2 at, Color color, float t, float radius, float spin)
+    {
+        float scale = EaseOut(Mathf.Clamp01(t * 2.5f)), fade = 1 - Mathf.Clamp01((t - 0.6f) / 0.4f);
+        float r = radius * scale, angle = t * Mathf.PI * 2.2f * spin;
+        Color body = Alpha(Color.Lerp(color, new Color(0.55f, 0.55f, 0.6f), 0.35f), 0.9f * fade);
+        Circle(vh, at, r, body);
+        for (int i = 0; i < 8; i++)
+        {
+            Vector2 dir = Direction(angle + i * Mathf.PI / 4);
+            Line(vh, at + dir * r * 0.8f, at + dir * r * 1.35f, r * 0.42f, body);
+        }
+        Circle(vh, at, r * 0.42f, Alpha(new Color(0.08f, 0.09f, 0.12f), 0.9f * fade));
+        Ring(vh, at, r * 0.42f, 2.5f, Alpha(Color.white, 0.7f * fade));
+    }
+
+    /// <summary>파편 씰링: 길쭉한 수정 조각이 도안에서 적에게 날아가 산산이 부서진다.</summary>
+    private static void DrawShard(VertexHelper vh, Burst b, float t)
+    {
+        Vector2 target = b.To + new Vector2((Hash(b.Seed, 1) - 0.5f) * 40f, (Hash(b.Seed, 2) - 0.5f) * 40f);
+        Vector2 dir = (target - b.From).sqrMagnitude > 1 ? (target - b.From).normalized : Vector2.right;
+        if (t < 0.4f)
+        {
+            float u = EaseIn(t / 0.4f);
+            Vector2 p = Vector2.Lerp(b.From, target, u);
+            Line(vh, Vector2.Lerp(b.From, target, Mathf.Max(0, u - 0.18f)), p, 5f, Alpha(b.Color, 0.45f));
+            Crystal(vh, p, dir, 22f, 8f, Alpha(Color.Lerp(b.Color, Color.white, 0.35f), 1f));
+            return;
+        }
+        float v = (t - 0.4f) / 0.6f;
+        Circle(vh, target, 26f * (1 - v), Alpha(Color.white, 0.6f * (1 - v)));
+        for (int i = 0; i < 7; i++)
+        {
+            Vector2 out_ = Direction(Hash(b.Seed, i + 20) * Mathf.PI * 2);
+            Crystal(vh, target + out_ * (12f + 70f * EaseOut(v)) - new Vector2(0, 30f * v * v), out_, 10f * (1 - v * 0.5f), 4f, Alpha(b.Color, 1 - v));
+        }
+    }
+
+    /// <summary>보충·회수 씰링: 카드가 호를 그리며 손패 쪽으로 날아간다. 회수는 출발점에 되돌림 고리를 함께 그린다.</summary>
+    private static void DrawFlyingCard(VertexHelper vh, Burst b, float t, bool isRecall)
+    {
+        if (isRecall)
+        {
+            float spin = t * Mathf.PI * 3;
+            float fade = 1 - Mathf.Clamp01(t / 0.6f);
+            for (int i = 0; i < 12; i++)
+            {
+                float a0 = spin + i * Mathf.PI * 1.5f / 12, a1 = spin + (i + 1) * Mathf.PI * 1.5f / 12;
+                Line(vh, b.From + Direction(a0) * 40f, b.From + Direction(a1) * 40f, 5f, Alpha(b.Color, fade));
+            }
+            Vector2 head = b.From + Direction(spin + Mathf.PI * 1.5f) * 40f, tangent = Direction(spin + Mathf.PI * 2f);
+            Polygon(vh, head + tangent * 6f, 11f, 3, spin + Mathf.PI * 2f, Alpha(b.Color, fade));
+        }
+        float u = EaseOut(Mathf.Clamp01((t - (isRecall ? 0.15f : 0f)) / 0.7f));
+        if (u <= 0) return;
+        Vector2 control = (b.From + b.To) / 2 + Vector2.up * 160f;
+        Vector2 p = Vector2.Lerp(Vector2.Lerp(b.From, control, u), Vector2.Lerp(control, b.To, u), u);
+        float alpha = 1 - Mathf.Clamp01((u - 0.8f) / 0.2f);
+        for (int i = 1; i <= 4; i++)
+        {
+            float w = Mathf.Max(0, u - i * 0.06f);
+            Vector2 trail = Vector2.Lerp(Vector2.Lerp(b.From, control, w), Vector2.Lerp(control, b.To, w), w);
+            Circle(vh, trail, 6f - i, Alpha(b.Color, 0.5f * alpha * (1 - i * 0.2f)));
+        }
+        float tilt = (1 - u) * 0.6f * (b.To.x >= b.From.x ? -1 : 1);
+        Quad(vh, p, new Vector2(34f, 46f), tilt, Alpha(isRecall ? Color.Lerp(b.Color, Color.white, 0.2f) : b.Color, 0.9f * alpha));
+        Quad(vh, p, new Vector2(24f, 36f), tilt, Alpha(new Color(0.1f, 0.11f, 0.15f), 0.85f * alpha));
+        if (u > 0.85f) Ring(vh, b.To, 20f + 120f * (u - 0.85f), 3f, Alpha(b.Color, (1 - u) * 5f));
+    }
+
+    /// <summary>덧칠 씰링: 굵은 붓질 세 줄이 도안 자리를 가로질러 칠해지고 물감 방울이 떨어진다.</summary>
+    private static void DrawOverpaint(VertexHelper vh, Burst b, float t)
+    {
+        float fade = 1 - Mathf.Clamp01((t - 0.6f) / 0.4f);
+        for (int stroke = 0; stroke < 3; stroke++)
+        {
+            float u = Mathf.Clamp01((t - stroke * 0.1f) / 0.4f);
+            if (u <= 0) continue;
+            float y = (stroke - 1) * 22f, segments = 10;
+            Vector2 previous = b.From + new Vector2(-70f, y);
+            for (int i = 1; i <= segments * u; i++)
+            {
+                float x = -70f + 140f * i / segments;
+                Vector2 point = b.From + new Vector2(x, y + Mathf.Sin(i * 0.9f + stroke) * 6f);
+                Line(vh, previous, point, 16f - stroke * 2f, Alpha(b.Color, 0.75f * fade));
+                previous = point;
+            }
+        }
+        for (int i = 0; i < 4; i++)
+        {
+            float drop = Mathf.Clamp01((t - 0.35f - i * 0.05f) / 0.5f);
+            if (drop <= 0) continue;
+            Vector2 at = b.From + new Vector2(-50f + 33f * i + (Hash(b.Seed, i) - 0.5f) * 14f, -30f - 50f * EaseIn(drop));
+            Circle(vh, at, 5f * (1 - drop * 0.4f), Alpha(b.Color, fade));
+        }
+    }
+
+    /// <summary>방향 dir로 길쭉한 마름모(수정) 모양을 채운다.</summary>
+    private static void Crystal(VertexHelper vh, Vector2 at, Vector2 dir, float length, float width, Color color)
+    {
+        if (color.a <= 0.003f) return;
+        Vector2 n = new Vector2(-dir.y, dir.x) * width;
+        int start = vh.currentVertCount;
+        AddVert(vh, at + dir * length, color); AddVert(vh, at + n, color); AddVert(vh, at - dir * length * 0.6f, color); AddVert(vh, at - n, color);
+        vh.AddTriangle(start, start + 1, start + 2); vh.AddTriangle(start, start + 2, start + 3);
+    }
+
+    /// <summary>중심·크기·회전(라디안)으로 돌린 사각형을 채운다.</summary>
+    private static void Quad(VertexHelper vh, Vector2 center, Vector2 size, float angle, Color color)
+    {
+        if (color.a <= 0.003f) return;
+        Vector2 x = Direction(angle) * size.x / 2, y = Direction(angle + Mathf.PI / 2) * size.y / 2;
+        int start = vh.currentVertCount;
+        AddVert(vh, center - x - y, color); AddVert(vh, center - x + y, color); AddVert(vh, center + x + y, color); AddVert(vh, center + x - y, color);
+        vh.AddTriangle(start, start + 1, start + 2); vh.AddTriangle(start, start + 2, start + 3);
     }
 
     /// <summary>위가 평평하고 아래가 뾰족한 방패 모양을 채우고 테두리를 그린다.</summary>

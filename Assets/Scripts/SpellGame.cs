@@ -15,6 +15,8 @@ public sealed class SpellGame
     public enum Effect { None, Period, Resonance }
     public enum Seal { None, Recall, Shard, Refill, Overpaint }
     public enum Coating { None, Guard, Amplify, Cog }
+    // 시전 중 피해가 어디서 왔는지다. 연출이 도안 타격과 파편 씰링 타격을 구분해 그리는 데 쓴다.
+    public enum HitSource { Spell, Shard, Keyword }
     public enum RewardKind { None, Piece, Pattern, Seal }
     public enum Phase { Title, Combat, Reward, Loadout, Victory, Defeat, Event, Rest }
     // None은 기본 효과가 없고 키워드·씰링·코팅 효과만 쓰는 도안이다. JSON은 이름으로 저장하므로 끝에 추가했다.
@@ -293,7 +295,9 @@ public sealed class SpellGame
     private readonly List<Card> _owned = new List<Card>();
     // 마지막 시전에서 실제로 피해를 준 적 번호를 타격 순서대로 기록한다. 연출이 죽은 적을 치지 않도록 쓴다.
     private readonly List<int> _lastCastHits = new List<int>();
+    private readonly List<HitSource> _lastCastHitSources = new List<HitSource>();
     private bool _isRecordingHits;
+    private HitSource _hitSource;
     private readonly List<Card> _draw = new List<Card>();
     private readonly List<Card> _discard = new List<Card>();
     private int _nextId;
@@ -328,6 +332,8 @@ public sealed class SpellGame
     public ReadOnlyCollection<Card> Hand { get; }
     public IReadOnlyList<Card> OwnedCards { get { return _owned; } }
     public IReadOnlyList<int> LastCastHits { get { return _lastCastHits; } }
+    // LastCastHits와 같은 순서로 각 타격의 출처를 담는다.
+    public IReadOnlyList<HitSource> LastCastHitSources { get { return _lastCastHitSources; } }
     public static IReadOnlyList<Card> DebugPieces { get { return Array.AsReadOnly(DEBUG_PIECES); } }
     public ReadOnlyCollection<Enemy> Enemies { get; }
     public ReadOnlyCollection<int> Spells { get; }
@@ -1210,7 +1216,7 @@ public sealed class SpellGame
     private void DamageEnemy(Enemy enemy, int damage)
     {
         if (enemy.Health <= 0 || damage <= 0) return;
-        if (_isRecordingHits) _lastCastHits.Add(_enemies.IndexOf(enemy));
+        if (_isRecordingHits) { _lastCastHits.Add(_enemies.IndexOf(enemy)); _lastCastHitSources.Add(_hitSource); }
         int absorbed = Math.Min(enemy.Block, damage);
         enemy.Block -= absorbed; damage -= absorbed;
         int before = enemy.Health;
@@ -1589,12 +1595,14 @@ public sealed class SpellGame
         Board board = Boards[boardIndex];
         SpellEvaluation e = Evaluate(boardIndex);
         Block += e.Block;
-        _lastCastHits.Clear(); _isRecordingHits = true;
+        _lastCastHits.Clear(); _lastCastHitSources.Clear(); _isRecordingHits = true; _hitSource = HitSource.Spell;
         if (e.Kind == SpellKind.Single) DamageEnemy(Enemies[Target], e.Value);
         else if (e.Kind == SpellKind.All) { foreach (Enemy enemy in Enemies) if (enemy.Health > 0) DamageEnemy(enemy, e.Value); }
         // 산탄 타격은 매번 그 순간 살아 있는 적 중에서 고르므로, 앞 타격으로 쓰러진 적은 다음 타격 대상이 아니다.
         else if (e.Kind == SpellKind.Scatter) for (int i = 0; i < e.Hits; i++) HitRandom(e.Value);
+        _hitSource = HitSource.Shard;
         for (int i = 0; i < e.ShardHits; i++) HitRandom(SHARD_DAMAGE);
+        _hitSource = HitSource.Keyword;
         for (int i = 0; i < e.KeywordRandomHits && e.KeywordRandomDamage > 0; i++) HitRandom(e.KeywordRandomDamage);
         _isRecordingHits = false;
         bool alive = false; for (int i = 0; i < Enemies.Count; i++) if (Enemies[i].Health > 0) { if (!alive && Enemies[Target].Health <= 0) Target = i; alive = true; }

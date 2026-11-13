@@ -610,13 +610,46 @@ public sealed class SpellGameUI : MonoBehaviour
     }
 
     /// <summary>방금 시전한 도안의 연출을 실제로 맞은 적과 시전자 위치에 재생한다.</summary>
-    private void PlayCastEffect(int board, bool gainedBlock)
+    private void PlayCastEffect(int board, SpellGame.SpellEvaluation evaluation, int guards)
     {
         if (_castEffects == null) return;
-        List<RectTransform> hits = new List<RectTransform>();
-        foreach (int hit in _game.LastCastHits)
-            if (hit >= 0 && hit < _combatScreen.Enemies.Length) hits.Add(_combatScreen.Enemies[hit].EffectAnchor);
-        _castEffects.Play(SpellGame.PatternCastEffect(board), (RectTransform)_combatScreen.PlayerStatus.transform, hits, gainedBlock, PatternColor(board));
+        // 파편 씰링 타격은 도안 연출 대신 파편 연출로 따로 그린다.
+        List<RectTransform> hits = new List<RectTransform>(), shards = new List<RectTransform>();
+        for (int i = 0; i < _game.LastCastHits.Count; i++)
+        {
+            int hit = _game.LastCastHits[i];
+            if (hit < 0 || hit >= _combatScreen.Enemies.Length) continue;
+            if (_game.LastCastHitSources[i] == SpellGame.HitSource.Shard) shards.Add(_combatScreen.Enemies[hit].EffectAnchor);
+            else hits.Add(_combatScreen.Enemies[hit].EffectAnchor);
+        }
+        RectTransform player = (RectTransform)_combatScreen.PlayerStatus.transform;
+        _castEffects.Play(SpellGame.PatternCastEffect(board), player, hits, evaluation.Block > 0, PatternColor(board));
+        PlayTraitEffects(board, evaluation, guards, hits, shards, player);
+    }
+
+    /// <summary>시전에서 실제로 발동한 코팅·씰링 효과마다 도안 자리에서 시작하는 연출을 재생한다.</summary>
+    private void PlayTraitEffects(int board, SpellGame.SpellEvaluation e, int guards, List<RectTransform> hits, List<RectTransform> shards, RectTransform player)
+    {
+        RectTransform origin = _combatScreen.CastButtons[board].Rect;
+        bool HasTerm(string name) { foreach (string term in e.Terms) if (term.StartsWith(name)) return true; return false; }
+        if (HasTerm("증폭"))
+        {
+            _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Amplify, origin, null, 0, CoatingColor(SpellGame.Coating.Amplify));
+            for (int i = 0; i < hits.Count; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.AmplifyHit, origin, hits[i], 0.32f + i * 0.09f, CoatingColor(SpellGame.Coating.Amplify));
+        }
+        if (HasTerm("톱니"))
+        {
+            _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Cog, origin, null, 0.05f, CoatingColor(SpellGame.Coating.Cog));
+            for (int i = 0; i < hits.Count; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.CogHit, origin, hits[i], 0.3f + i * 0.09f, CoatingColor(SpellGame.Coating.Cog));
+        }
+        if (HasTerm("덧칠")) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Overpaint, origin, null, 0, SealColor(SpellGame.Seal.Overpaint));
+        for (int i = 0; i < guards; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Guard, origin, player, 0.05f + i * 0.12f, CoatingColor(SpellGame.Coating.Guard));
+        for (int i = 0; i < shards.Count; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Shard, origin, shards[i], 0.2f + i * 0.12f, SealColor(SpellGame.Seal.Shard));
+        // 보충·회수는 전투가 이어질 때만 실제로 손패에 카드가 들어온다.
+        if (_game.CurrentPhase != SpellGame.Phase.Combat) return;
+        RectTransform hand = _combatScreen.HandDropArea;
+        for (int i = 0; i < e.Recalls; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Recall, origin, hand, 0.3f + i * 0.15f, SealColor(SpellGame.Seal.Recall), true);
+        for (int i = 0; i < e.Draws; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Refill, (RectTransform)_combatScreen.DrawPile.transform, hand, 0.35f + i * 0.15f, SealColor(SpellGame.Seal.Refill), true);
     }
 
     /// <summary>리모콘을 전환하고 진행 중인 선택과 조준을 취소한다.</summary>
@@ -1214,9 +1247,12 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         if (_game.IsSealed(board)) { _pendingCast = -1; _message = "봉인된 주문 도안은 시전할 수 없습니다"; Render(); return; }
         string result = $"{SpellGame.PatternName(board)} 시전  ·  {FormulaText(board)}";
-        bool gainsBlock = _game.Evaluate(board).Block > 0;
+        // 시전하면 판의 조각이 비워지므로 연출에 쓸 계산 결과와 수호 코팅 수를 미리 구한다.
+        SpellGame.SpellEvaluation evaluation = _game.Evaluate(board);
+        int guards = 0;
+        foreach (SpellGame.Placement piece in _game.Boards[board].Pieces) if (piece.Card.Coating == SpellGame.Coating.Guard) guards++;
         if (!_game.Cast(board, target)) { _message = "살아 있는 대상을 선택하세요"; Render(); return; }
-        PlayCastEffect(board, gainsBlock);
+        PlayCastEffect(board, evaluation, guards);
         _onboardingComplete = true;
         _pendingCast = -1; ClearSelection();
         _impactHits = new bool[_game.Enemies.Count];
