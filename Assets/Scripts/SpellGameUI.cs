@@ -2774,8 +2774,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         if (_glueOverlay == null) return;
         string issue = GluePlacementIssue();
-        _glueHint.text = (_glueMessage.Length > 0 ? _glueMessage : issue ?? "접착 가능 · 확인하면 카드 한 장으로 합쳐집니다")
-            + $"\n선택 조각 {_glueSelected + 1} · R / 우클릭 회전";
+        _glueHint.text = (_glueMessage.Length > 0 ? _glueMessage : issue ?? "접착 가능 · 확인하면 카드 한 장으로 합쳐집니다");
         _glueHint.color = issue == null ? new Color(0.55f, 1f, 0.7f) : new Color(1f, 0.55f, 0.5f);
         _glueConfirm.interactable = issue == null && !_glueGraphic.IsDragging && _glueDragCard == null;
         _glueGraphic.SetVerticesDirty();
@@ -2893,7 +2892,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_glueOverlay != null) { _glueOverlay.gameObject.SetActive(false); Destroy(_glueOverlay.gameObject); }
         _glueOverlay = Panel(_root, 0, 0, 1280, 720, Color.black);
         Label(_glueOverlay, "접착 작업대", 350, 25, 580, 45, 30);
-        Label(_glueOverlay, "일반·특수 조각 2장 선택 → 드래그·R로 변 맞추기 → 접착 확인", 140, 85, 1000, 35, 19);
+        Label(_glueOverlay, "조각 2장 선택 → 드래그·R로 모양 맞추기 → 접착 확인", 140, 85, 1000, 35, 19);
         RectTransform board = Element("Glue Workbench", _glueOverlay, 200, 170, 576, 288);
         board.gameObject.AddComponent<CanvasRenderer>();
         _glueGraphic = board.gameObject.AddComponent<SpellGlueGraphic>();
@@ -2902,11 +2901,9 @@ public sealed class SpellGameUI : MonoBehaviour
         RectTransform hint = Element("Glue Status", _glueOverlay, 825, 175, 400, 110);
         _glueHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
         _glueHint.font = _font; _glueHint.fontSize = 20; _glueHint.color = Color.white; _glueHint.raycastTarget = false;
-        GlueButton(_glueOverlay, "회전 · R", 850, 295, 280, 45, RotateGluePart);
         _glueConfirm = GlueButton(_glueOverlay, "접착 확인", 850, 360, 280, 55, ConfirmGlue);
         GlueButton(_glueOverlay, "취소 · Esc", 850, 435, 280, 45, () => { CloseGlue(); Render(); });
-        GlueButton(_glueOverlay, "선택 조각 중앙으로", 850, 505, 280, 40, CenterGluePart);
-        Label(_glueOverlay, "덱의 조각 2장 → 1장 · 모양과 효과 영구 유지\n드래그 또는 빈 칸 클릭으로 이동 · 덱 조각 재클릭으로 선택 해제", 100, 490, 660, 65, 17);
+        Label(_glueOverlay, "씰링: 접착 후에도 모든 효과 유지\n코팅: 서로 다른 효과가 있으면 하나만 선택\n한쪽에만 코팅이 있으면 접착 조각 전체에 적용", 100, 490, 680, 85, 17);
         RectTransform cards = CreateWorkshopDeck(_glueOverlay);
         for (int i = 0; i < _game.OwnedCards.Count; i++)
         {
