@@ -358,8 +358,8 @@ public sealed class SpellGameUI : MonoBehaviour
         for (int i = 0; i < screen.Enemies.Length; i++) _enemyPositions[i] = ((RectTransform)screen.Enemies[i].transform).anchoredPosition;
         screen.Help.SetAction(() => { if (!CanInteract) return; _showHelp = true; Render(); });
         screen.Menu.SetAction(() => { OpenPauseState(); Render(); });
-        screen.DrawPile.Setup("드로우 덱", () => OpenPile(0));
-        screen.DiscardPile.Setup("묘지", () => OpenPile(1));
+        screen.DrawPile.Setup("뽑을 더미", () => OpenPile(0));
+        screen.DiscardPile.Setup("버린 더미", () => OpenPile(1));
         screen.EndTurn.SetAction(() => { if (CanInteract) EndPlayerTurn(); });
         for (int i = 0; i < screen.Tabs.Length; i++) { int index = i; screen.Tabs[i].Setup(this, i, () => OpenPatternMenu(index)); }
         for (int i = 0; i < screen.CastButtons.Length; i++) screen.CastButtons[i].Setup(this, i);
@@ -475,18 +475,18 @@ public sealed class SpellGameUI : MonoBehaviour
         if (encounter)
         {
             bool rest = phase == SpellGame.Phase.Rest;
-            _encounterTitle.text = rest ? "휴식" : _game.IsSealEvent ? "인장 장인의 작업실" : "조각 장인의 작업실";
+            _encounterTitle.text = rest ? "휴식" : _game.IsSealEvent ? "씰링 장인의 작업실" : "조각 장인의 작업실";
             _encounterDescription.text = rest
                 ? $"체력 {_game.Health}/{_game.MaxHealth}\n"
-                    + (_game.CanRest ? $"휴식 선택 시 최대 체력의 30% 회복 (+{Math.Min(_game.RestHealAmount, _game.MaxHealth - _game.Health)})" : "휴식을 마쳤습니다.")
-                    + (_game.CanUseWorkshop ? "\n\n분해 또는 접착 중 하나를 1회 사용할 수 있습니다." : "\n\n작업을 마쳤습니다. 변경된 조각이 덱에 저장되었습니다.")
+                    + (_game.CanRest ? $"휴식하면 최대 체력의 30%를 회복합니다 (+{Math.Min(_game.RestHealAmount, _game.MaxHealth - _game.Health)})" : "휴식을 마쳤습니다.")
+                    + (_game.CanUseWorkshop ? "\n\n분해와 접착 중 하나를 한 번 쓸 수 있습니다." : "\n\n작업을 마쳤습니다. 바뀐 조각이 덱에 반영되었습니다.")
                 : _game.IsWorkshopEvent
                     ? _game.CanUseWorkshop
-                        ? "낡은 작업대 위에 망치와 접착제가 놓여 있습니다.\n장인은 당신의 조각을 새롭게 다듬어 주겠다고 합니다.\n\n분해 또는 접착 중 하나를 1회 선택하세요.\n변경한 조각은 이번 런의 덱에 영구히 남습니다."
-                        : "작업을 마쳤습니다.\n변경된 조각이 덱에 저장되었습니다."
+                        ? "낡은 작업대 위에 망치와 접착제가 놓여 있습니다.\n장인이 당신의 조각을 새로 다듬어 주겠다고 합니다.\n\n분해와 접착 중 하나를 골라 한 번 쓸 수 있습니다.\n바꾼 조각은 이번 게임이 끝날 때까지 덱에 남습니다."
+                        : "작업을 마쳤습니다.\n바뀐 조각이 덱에 반영되었습니다."
                     : _game.HasSealReward
-                        ? $"장인이 빛나는 인장 하나를 건넵니다.\n\n이번 인장: {SealName(_game.RewardSeal)}\n{SealDescription(_game.RewardSeal)}\n\n덱의 원하는 조각에 붙일 수 있습니다."
-                        : "인장을 붙였습니다.\n변경된 조각이 덱에 저장되었습니다.";
+                        ? $"장인이 빛나는 씰링 하나를 건넵니다.\n\n받은 씰링: {SealName(_game.RewardSeal)}\n{SealDescription(_game.RewardSeal)}\n\n덱에서 원하는 조각에 붙일 수 있습니다."
+                        : "씰링을 붙였습니다.\n바뀐 조각이 덱에 반영되었습니다.";
             _encounterDescription.rectTransform.anchoredPosition = new Vector2(140, -270);
             _encounterDescription.rectTransform.sizeDelta = new Vector2(480, 260);
             _encounterDescription.alignment = TextAnchor.UpperLeft;
@@ -502,7 +502,7 @@ public sealed class SpellGameUI : MonoBehaviour
             _restChoice.gameObject.SetActive(rest);
             SetEncounterOption(_restChoice, _game.CanRest);
             SetEncounterOption(_sealEventChoice, _game.HasSealReward);
-            _sealEventChoice.GetComponentInChildren<UnityEngine.UI.Text>().text = $"씰 부착 · {SealName(_game.RewardSeal)}\n덱의 조각과 빈 영역을 선택합니다";
+            _sealEventChoice.GetComponentInChildren<UnityEngine.UI.Text>().text = $"씰링 붙이기 · {SealName(_game.RewardSeal)}\n덱의 조각과 빈 구역을 고릅니다";
         }
         bool combat = phase == SpellGame.Phase.Combat;
         _background.SetActive(!combat);
@@ -535,13 +535,13 @@ public sealed class SpellGameUI : MonoBehaviour
         Label(_encounterScreen, "", 240, 285, 800, 100, 24);
         _encounterDescription = _encounterScreen.GetChild(1).GetComponent<UnityEngine.UI.Text>();
         _workshopChoices = Element("Workshop Choices", _encounterScreen, 700, 270, 440, 278);
-        _workshopHammer = Button(_workshopChoices, "[E] 분해\n덱의 조각 1개를 여러 조각으로 나눕니다", 0, 98, 440, 82, BeginHammer, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
-        _workshopGlue = Button(_workshopChoices, "[Q] 접착\n덱의 조각 2개를 하나로 붙입니다", 0, 0, 440, 82, BeginGlue, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        _workshopHammer = Button(_workshopChoices, "[E] 분해\n덱의 조각 1장을 여러 조각으로 나눕니다", 0, 98, 440, 82, BeginHammer, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        _workshopGlue = Button(_workshopChoices, "[Q] 접착\n덱의 조각 2장을 하나로 붙입니다", 0, 0, 440, 82, BeginGlue, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
         _restChoice = Button(_workshopChoices, "휴식\n최대 체력의 30% 회복", 0, 196, 440, 82, () => { if (_game.TryRest()) Render(); }, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
         _workshopHammer.gameObject.AddComponent<CanvasGroup>();
         _workshopGlue.gameObject.AddComponent<CanvasGroup>();
         _restChoice.gameObject.AddComponent<CanvasGroup>();
-        _sealEventChoice = Button(_encounterScreen, "씰 부착", 700, 270, 440, 100, () => OpenCombatReward(SpellGame.RewardKind.Seal), fontSize: 20).GetComponent<UnityEngine.UI.Button>();
+        _sealEventChoice = Button(_encounterScreen, "씰링 붙이기", 700, 270, 440, 100, () => OpenCombatReward(SpellGame.RewardKind.Seal), fontSize: 20).GetComponent<UnityEngine.UI.Button>();
         _sealEventChoice.gameObject.AddComponent<CanvasGroup>();
         DisableNavigation((RectTransform)_sealEventChoice.transform);
         DisableNavigation((RectTransform)_restChoice.transform);
@@ -628,7 +628,7 @@ public sealed class SpellGameUI : MonoBehaviour
         Button(combat, "리모콘 (F2)", 20, 20, 180, 44, ToggleDebugRemote);
         Button(combat, "◀ 손패", 20, 75, 120, 40, () => { if (CanInteract) _table.ChangeHandPage(-1); });
         Button(combat, "손패 ▶", 145, 75, 120, 40, () => { if (CanInteract) _table.ChangeHandPage(1); });
-        Label(combat, "방향키: 판 이동", 20, 120, 245, 30, 16, TextAnchor.MiddleLeft);
+        Label(combat, "방향키: 격자 이동", 20, 120, 245, 30, 16, TextAnchor.MiddleLeft);
         _debugRemote = Panel(_content, 0, 0, 1920, 1080, new Color(0, 0, 0, 0.55f));
         _debugRemote.SetAsLastSibling();
         _debugContents = Panel(_debugRemote, 220, 120, 1480, 850, new Color(0.05f, 0.07f, 0.12f, 0.97f));
@@ -773,7 +773,7 @@ public sealed class SpellGameUI : MonoBehaviour
                 () => JumpToDebugRoom(SpellGame.Phase.Combat, battle));
         }
         Button(box, "이벤트 1 · 접착 / 분해", 400, 85, 360, 58, () => JumpToDebugRoom(SpellGame.Phase.Event, 2));
-        Button(box, "이벤트 2 · 씰 부착", 400, 160, 360, 58, () => JumpToDebugRoom(SpellGame.Phase.Event, 3));
+        Button(box, "이벤트 2 · 씰링 붙이기", 400, 160, 360, 58, () => JumpToDebugRoom(SpellGame.Phase.Event, 3));
         Button(box, "휴식", 400, 235, 360, 58, () => JumpToDebugRoom(SpellGame.Phase.Rest, 4));
         Label(box, "현재 덱·장착 도안·체력을 유지합니다.", 40, 420, 720, 55, 19);
         Button(box, "취소", 250, 530, 300, 55, RefreshDebugRemote);
@@ -879,7 +879,7 @@ public sealed class SpellGameUI : MonoBehaviour
         List<SpellGame.Card> cards = new List<SpellGame.Card>();
         foreach (KeyValuePair<SpellGame.Card, int> entry in summary)
             for (int i = 0; i < entry.Value; i++) cards.Add(entry.Key);
-        _pileViewer.Bind(this, _openPile == 0 ? "드로우 덱" : "묘지", cards, () => { _openPile = -1; Render(); });
+        _pileViewer.Bind(this, _openPile == 0 ? "뽑을 더미" : "버린 더미", cards, () => { _openPile = -1; Render(); });
     }
 
     /// <summary>전투 화면의 모든 뷰에 현재 상태를 넣는다.</summary>
@@ -1049,15 +1049,15 @@ public sealed class SpellGameUI : MonoBehaviour
         foreach (string term in e.Terms) terms += term.StartsWith("오염 -", StringComparison.Ordinal) ? " − " + term.Substring(4) : " + " + term.Replace(" +", " ");
         string main;
         if (e.Kind == SpellGame.SpellKind.None) main = "기본 효과 없음";
-        else if (e.Kind == SpellGame.SpellKind.Scatter) main = e.Terms.Count > 0 ? $"{e.Hits}타 × ({e.Base}{terms}) = 무작위 {e.Total}" : $"{e.Hits}타 × {e.Base} = 무작위 {e.Total}";
+        else if (e.Kind == SpellGame.SpellKind.Scatter) main = e.Terms.Count > 0 ? $"{e.Hits}타 × ({e.Base}{terms}) = 무작위 피해 {e.Total}" : $"{e.Hits}타 × {e.Base} = 무작위 피해 {e.Total}";
         else
         {
-            string word = e.Kind == SpellGame.SpellKind.Block ? "방어" : e.Kind == SpellGame.SpellKind.All ? "전체" : "피해";
+            string word = e.Kind == SpellGame.SpellKind.Block ? "방어도" : e.Kind == SpellGame.SpellKind.All ? "전체 피해" : "피해";
             main = e.Terms.Count > 0 ? $"{word} {e.Base}{terms} = {e.Value}" : $"{word} {e.Value}";
         }
         List<string> extras = new List<string>();
         int guard = e.Block - (e.Kind == SpellGame.SpellKind.Block ? e.Value : 0);
-        if (guard > 0) extras.Add($"방어 +{guard}");
+        if (guard > 0) extras.Add($"방어도 +{guard}");
         if (e.ShardHits > 0) extras.Add($"파편 {e.ShardHits}타");
         if (e.KeywordRandomDamage > 0 && e.KeywordRandomHits > 0) extras.Add(e.KeywordRandomHits > 1 ? $"무작위 적 피해 {e.KeywordRandomDamage}×{e.KeywordRandomHits}" : $"무작위 적 피해 {e.KeywordRandomDamage}");
         if (e.Draws > 0) extras.Add($"보충 {e.Draws}장");
@@ -1085,7 +1085,7 @@ public sealed class SpellGameUI : MonoBehaviour
             bool boss = enemy.MaxHealth >= 60, large = enemy.MaxHealth >= 26;
             Vector2 size = boss ? BOSS_SIZE : large ? LARGE_ENEMY_SIZE : NORMAL_ENEMY_SIZE;
             Color color = _enemyColors[boss ? 2 : large ? 1 : 0];
-            string pattern = enemy.Pattern.Count > 1 ? "패턴 " + string.Join(" · ", enemy.Pattern) + " 반복" : "";
+            string pattern = enemy.Pattern.Count > 1 ? "행동 순서 " + string.Join(" · ", enemy.Pattern) + " 반복" : "";
             int preview = aiming && i == _hoverEnemy && enemy.Health > 0 ? _game.GetSpellDamage(castBoard) : 0;
             views[i].Bind(enemy.Name, enemy.Health, enemy.MaxHealth, enemy.Intent, pattern, color, size, boss, i == _game.Target, aiming, preview,
                 enemy.IsSealer || enemy.IsThief || enemy.IsCurser || enemy.IsContaminator ? enemy.DescribeIntent() : null,
@@ -1123,7 +1123,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>도안을 비워 이번 턴 조각은 손패로, 이전 턴 조각은 묘지로 보낸다.</summary>
     private void AbandonPattern(int spell)
     {
-        if (!_game.Abandon(spell)) _message = "손패가 가득 차 비울 수 없습니다";
+        if (!_game.Abandon(spell)) _message = "손패가 가득 차서 도안을 비울 수 없습니다";
         else { ClearSelection(); _message = ""; }
         Render();
     }
@@ -1148,9 +1148,15 @@ public sealed class SpellGameUI : MonoBehaviour
         _pendingCast = -1; ClearSelection(); _game.EndTurn(); _message = "";
         int damage = healthBefore - _game.Health;
         _impactHits = Array.Empty<bool>();
-        ShowFeedback($"턴 종료 · 저주 HP -{_game.LastCurseDamage} · 방어 {(_game.LastCurseDamage >= healthBefore ? 0 : absorbed)} · 총 HP -{damage}", _dangerColor);
+        // 0인 항목은 빼고 일어난 일만 알린다.
+        List<string> parts = new List<string> { "턴 종료" };
+        if (_game.LastCurseDamage > 0) parts.Add($"저주 피해 {_game.LastCurseDamage}");
+        int blocked = _game.LastCurseDamage >= healthBefore ? 0 : absorbed;
+        if (blocked > 0) parts.Add($"방어도로 {blocked} 막음");
+        parts.Add(damage > 0 ? $"받은 피해 {damage}" : "피해 없음");
+        ShowFeedback(string.Join(" · ", parts), _dangerColor);
         if (_game.LastContaminationAdded > 0)
-            ShowFeedback($"총 HP -{damage} · 오염술사가 드로우 더미에 오염 조각 {_game.LastContaminationAdded}장을 섞었습니다!", AccentColorForContamination());
+            ShowFeedback($"받은 피해 {damage} · 오염술사가 뽑을 더미에 오염 조각 {_game.LastContaminationAdded}장을 섞었습니다!", AccentColorForContamination());
         Render();
     }
 
@@ -1158,7 +1164,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private void BeginCast(int board)
     {
         if (!_onboarding.AllowsCast(board)) return;
-        if (_game.IsSealed(board)) { _pendingCast = -1; _message = "봉인된 주문 도안은 시전할 수 없습니다"; Render(); return; }
+        if (_game.IsSealed(board)) { _pendingCast = -1; _message = "봉인된 도안은 시전할 수 없습니다"; Render(); return; }
         if (!_game.IsComplete(board)) { _message = "도안을 먼저 완성하세요"; Render(); return; }
         ClearSelection();
         if (SpellGame.NeedsTarget(board))
@@ -1166,7 +1172,7 @@ public sealed class SpellGameUI : MonoBehaviour
             int count = 0, onlyTarget = -1;
             for (int i = 0; i < _game.Enemies.Count; i++) if (_game.Enemies[i].Health > 0) { count++; onlyTarget = i; }
             if (count == 1) CastSpell(board, onlyTarget);
-            else { _pendingCast = board; Render(); _hintText = "적을 클릭해 시전 · 우클릭·Esc 취소"; }
+            else { _pendingCast = board; Render(); _hintText = "적을 클릭해 시전 · 우클릭·Esc로 취소"; }
         }
         else CastSpell(board, _game.Target);
     }
@@ -1174,13 +1180,13 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>완성된 도안과 선택한 적으로 주문을 시전하고 결과를 표시한다.</summary>
     private void CastSpell(int board, int target)
     {
-        if (_game.IsSealed(board)) { _pendingCast = -1; _message = "봉인된 주문 도안은 시전할 수 없습니다"; Render(); return; }
+        if (_game.IsSealed(board)) { _pendingCast = -1; _message = "봉인된 도안은 시전할 수 없습니다"; Render(); return; }
         string result = $"{SpellGame.PatternName(board)} 시전  ·  {FormulaText(board)}";
         // 시전하면 판의 조각이 비워지므로 연출에 쓸 계산 결과와 수호 코팅 수를 미리 구한다.
         SpellGame.SpellEvaluation evaluation = _game.Evaluate(board);
         int guards = 0;
         foreach (SpellGame.Placement piece in _game.Boards[board].Pieces) if (piece.Card.Coating == SpellGame.Coating.Guard) guards++;
-        if (!_game.Cast(board, target)) { _message = "살아 있는 대상을 선택하세요"; Render(); return; }
+        if (!_game.Cast(board, target)) { _message = "살아 있는 적을 고르세요"; Render(); return; }
         _onboarding.NotifyCast(board);
         float attackDelay = PlayCastEffect(board, evaluation, guards);
         _impactStart = Time.unscaledTime + attackDelay + HIT_IMPACT_SECONDS;
@@ -1276,7 +1282,7 @@ public sealed class SpellGameUI : MonoBehaviour
         List<SpellPatternTooltipView.Entry> entries = new List<SpellPatternTooltipView.Entry>();
         void Add(string title, string body, Color color) { entries.Add(new SpellPatternTooltipView.Entry { Title = title, Body = body, Color = color }); }
         if (card.IsUnique) Add("고유", UniqueDescription(card), _subColor);
-        if (card.IsContaminated) Add("오염 · 공격·방어 -2", "시전에 사용한 오염 조각마다 감소 · 최소 0 · 이번 전투 한정 · 접착 불가", AccentColorForContamination());
+        if (card.IsContaminated) Add("오염 · 피해·방어도 -2", "이 조각을 넣어 시전하면 조각마다 피해·방어도 -2 (최소 0) · 이번 전투에만 있음 · 접착 불가", AccentColorForContamination());
         if (card.Coating != SpellGame.Coating.None) Add($"코팅 · {CoatingName(card.Coating)}", CoatingDescription(card.Coating), CoatingColor(card.Coating));
         if (card.IsRecallCopy) Add("소멸", "회수로 만든 임시 조각 · 시전에 쓰거나 턴이 끝나면 사라짐", VANISH_COLOR);
         foreach (SpellGame.Seal seal in Enum.GetValues(typeof(SpellGame.Seal)))
@@ -1298,7 +1304,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_game.IsCursed(card))
         {
             c.Status = "저주받은 조각";
-            c.StatusDetail = $"이번 턴에 이 조각으로 시전하면 풀립니다 · 못 하면 턴 종료 시 HP -{_game.Curse.Amount}";
+            c.StatusDetail = $"이번 턴에 이 조각으로 시전하면 풀림 · 못 하면 턴이 끝날 때 체력 -{_game.Curse.Amount}";
             c.StatusColor = CURSED_COLOR;
         }
         return c;
@@ -1321,13 +1327,13 @@ public sealed class SpellGameUI : MonoBehaviour
         {
             case SpellGame.SpellKind.Single: c.KindLabel = "단일 공격"; c.ValueLabel = "예상 피해"; c.Value = e.Value.ToString(); c.ValueColor = DAMAGE_VALUE_COLOR; break;
             case SpellGame.SpellKind.All: c.KindLabel = "전체 공격"; c.ValueLabel = "예상 피해 · 적 전체"; c.Value = e.Value.ToString(); c.ValueColor = DAMAGE_VALUE_COLOR; break;
-            case SpellGame.SpellKind.Scatter: c.KindLabel = "무작위 다타"; c.ValueLabel = $"예상 피해 · {e.Hits}타 합계"; c.Value = e.Total.ToString(); c.ValueColor = DAMAGE_VALUE_COLOR; break;
-            case SpellGame.SpellKind.Block: c.KindLabel = "방어"; c.ValueLabel = "예상 방어"; c.Value = e.Block.ToString(); c.ValueColor = BLOCK_VALUE_COLOR; break;
+            case SpellGame.SpellKind.Scatter: c.KindLabel = "무작위 연타"; c.ValueLabel = $"예상 피해 · {e.Hits}타 합계"; c.Value = e.Total.ToString(); c.ValueColor = DAMAGE_VALUE_COLOR; break;
+            case SpellGame.SpellKind.Block: c.KindLabel = "방어"; c.ValueLabel = "예상 방어도"; c.Value = e.Block.ToString(); c.ValueColor = BLOCK_VALUE_COLOR; break;
             default: c.KindLabel = "보조"; break;
         }
         List<string> extras = new List<string>();
         int guard = e.Block - (e.Kind == SpellGame.SpellKind.Block ? e.Block : 0);
-        if (guard > 0) extras.Add($"방어 +{guard}");
+        if (guard > 0) extras.Add($"방어도 +{guard}");
         if (e.ShardHits > 0) extras.Add($"파편 {SpellGame.SHARD_DAMAGE}×{e.ShardHits}");
         if (e.KeywordRandomDamage > 0 && e.KeywordRandomHits > 0) extras.Add(e.KeywordRandomHits > 1 ? $"무작위 적 피해 {e.KeywordRandomDamage}×{e.KeywordRandomHits}" : $"무작위 적 피해 {e.KeywordRandomDamage}");
         if (e.Draws > 0) extras.Add($"보충 {e.Draws}장");
@@ -1338,13 +1344,13 @@ public sealed class SpellGameUI : MonoBehaviour
             string sealer = "";
             foreach (SpellGame.Enemy enemy in _game.Enemies) if (enemy.IsSealer && enemy.Health > 0 && enemy.SealedSpell == spell) { sealer = enemy.Name; break; }
             c.Status = "봉인됨 · 시전할 수 없음";
-            c.StatusDetail = string.IsNullOrEmpty(sealer) ? "봉인한 적에게 피해를 주면 풀립니다" : $"{sealer}에게 피해를 주면 풀립니다";
+            c.StatusDetail = string.IsNullOrEmpty(sealer) ? "봉인한 적에게 피해를 주면 풀림" : $"{sealer}에게 피해를 주면 풀림";
             c.StatusColor = SEALED_COLOR; c.Disabled = true;
         }
         else if (HasCursedPiece(spell))
         {
             c.Status = "저주받은 조각이 놓여 있음";
-            c.StatusDetail = $"이번 턴에 시전하면 저주가 풀립니다 · 못 하면 턴 종료 시 HP -{_game.Curse.Amount}";
+            c.StatusDetail = $"이번 턴에 시전하면 저주가 풀림 · 못 하면 턴이 끝날 때 체력 -{_game.Curse.Amount}";
             c.StatusColor = CURSED_COLOR;
         }
         return c;
@@ -1455,7 +1461,7 @@ public sealed class SpellGameUI : MonoBehaviour
             int damage = _game.GetSpellDamage(board);
             _hintText = $"{enemy.Name} · 피해 {damage} · 체력 {enemy.Health} → {Math.Max(0, enemy.Health - damage)}";
         }
-        else _hintText = _castDragging ? "살아 있는 적에게 놓아 시전하세요" : "적을 클릭해 시전 · 우클릭·Esc 취소";
+        else _hintText = _castDragging ? "살아 있는 적에게 놓아 시전하세요" : "적을 클릭해 시전 · 우클릭·Esc로 취소";
         if (target == _hoverEnemy) return;
         _hoverEnemy = target;
         RefreshEnemies();
@@ -1624,8 +1630,8 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         switch (coating)
         {
-            case SpellGame.Coating.Guard: return "시전 시 방어 +3";
-            case SpellGame.Coating.Amplify: return "피해 +2 · 다타 주문은 타격마다 +1";
+            case SpellGame.Coating.Guard: return "시전 시 방어도 +3";
+            case SpellGame.Coating.Amplify: return "피해 +2 · 연타 주문은 타격마다 +1";
             case SpellGame.Coating.Cog: return "변을 맞댄 조각 1장당 피해 +1 (최대 +3)";
             default: return "";
         }
@@ -1638,8 +1644,8 @@ public sealed class SpellGameUI : MonoBehaviour
         {
             case SpellGame.Seal.Recall: return "시전 후 회수 씰링을 뺀 복사본 1장을 손패로 가져옴 · 복사본은 쓰거나 턴이 끝나면 사라짐";
             case SpellGame.Seal.Shard: return $"시전 시 무작위 적에게 {SpellGame.SHARD_DAMAGE} 피해";
-            case SpellGame.Seal.Refill: return "시전 시 조각 1장 뽑기";
-            case SpellGame.Seal.Overpaint: return "조각 전체를 놓인 조각 위에 한 겹 겹쳐 놓을 수 있음 · 수치 +2";
+            case SpellGame.Seal.Refill: return "시전 시 조각 1장을 뽑음";
+            case SpellGame.Seal.Overpaint: return "다른 조각 위에 한 겹 겹쳐 놓을 수 있음 · 주문 수치 +2";
             default: return "";
         }
     }
@@ -1649,8 +1655,8 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         switch (effect)
         {
-            case SpellGame.Effect.Period: return "도안을 완성시킨 마지막 조각이면 수치 +3";
-            case SpellGame.Effect.Resonance: return "3장 이상 함께 소모되면 수치 +3";
+            case SpellGame.Effect.Period: return "도안을 완성한 마지막 조각이면 주문 수치 +3";
+            case SpellGame.Effect.Resonance: return "조각 3장 이상으로 시전하면 주문 수치 +3";
             default: return "";
         }
     }
@@ -1658,14 +1664,14 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>고유 조각의 설명을 반환한다.</summary>
     public static string UniqueDescription(SpellGame.Card card)
     {
-        return card.IsUnique ? "놓은 자리 빈 곳에 맞춰 1칸 넓이의 정사각형·삼각형·직사각형·평행사변형으로 변함 · 씰링·코팅·붙이기·쪼개기 불가" : "";
+        return card.IsUnique ? "놓은 자리의 빈 곳에 맞춰 한 칸 넓이의 모양으로 변함 · 씰링·코팅·접착·분해 불가" : "";
     }
 
     /// <summary>카드의 고유·코팅·씰링·이전 효과를 한 줄로 요약한다. 씰링은 종류별 개수로 묶는다. 아무것도 없으면 빈 문자열이다.</summary>
     public static string TraitText(SpellGame.Card card)
     {
         List<string> parts = new List<string>();
-        if (card.IsContaminated) parts.Add("오염 · 공격·방어 -2");
+        if (card.IsContaminated) parts.Add("오염 · 피해·방어도 -2");
         if (card.IsUnique) parts.Add("고유");
         if (card.Coating != SpellGame.Coating.None) parts.Add("코팅 " + CoatingName(card.Coating));
         List<string> seals = new List<string>();
@@ -1684,7 +1690,7 @@ public sealed class SpellGameUI : MonoBehaviour
     public static string TraitDescriptionText(SpellGame.Card card)
     {
         List<string> lines = new List<string>();
-        if (card.IsContaminated) lines.Add("오염 · 실제 시전마다 공격·방어 -2 (중첩, 최소 0) · 이번 전투 한정 · 접착 불가");
+        if (card.IsContaminated) lines.Add("오염 · 이 조각을 넣어 시전하면 조각마다 피해·방어도 -2 (최소 0) · 이번 전투에만 있음 · 접착 불가");
         if (card.IsUnique) lines.Add("고유 · " + UniqueDescription(card));
         if (card.Coating != SpellGame.Coating.None) lines.Add($"코팅 {CoatingName(card.Coating)} · {CoatingDescription(card.Coating)}");
         foreach (SpellGame.Seal seal in Enum.GetValues(typeof(SpellGame.Seal)))
@@ -1739,8 +1745,8 @@ public sealed class SpellGameUI : MonoBehaviour
     private void RenderSealWorkbench()
     {
         _sealWorkbench = Panel(_root, 0, 0, 1280, 720, Color.black);
-        Label(_sealWorkbench, "씰 부착 작업대", 300, 30, 680, 50, 30);
-        Label(_sealWorkbench, "조각 선택 → 씰을 원하는 영역에 드래그 · 초록: 부착 가능 / 빨강: 부착 불가", 100, 90, 1080, 35, 19);
+        Label(_sealWorkbench, "씰링 작업대", 300, 30, 680, 50, 30);
+        Label(_sealWorkbench, "조각을 고른 뒤 씰링을 원하는 구역으로 끌어 놓으세요 · 초록: 붙일 수 있음 / 빨강: 붙일 수 없음", 100, 90, 1080, 35, 19);
         RectTransform board = Panel(_sealWorkbench, 160, 145, 660, 400, new Color(0.07f, 0.09f, 0.12f));
         if (_rewardSealCard != null)
         {
@@ -1760,7 +1766,7 @@ public sealed class SpellGameUI : MonoBehaviour
         RectTransform hint = Element("Seal Hint", _sealWorkbench, 850, 385, 360, 65);
         _sealWorkbenchHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
         _sealWorkbenchHint.font = _font; _sealWorkbenchHint.fontSize = 19; _sealWorkbenchHint.alignment = TextAnchor.MiddleCenter;
-        _sealWorkbenchHint.text = "원형 씰을 조각 위로 드래그하세요";
+        _sealWorkbenchHint.text = "씰링을 조각 위로 끌어 놓으세요";
         _sealWorkbenchHint.raycastTarget = false;
         Button(_sealWorkbench, "돌아가기 · Esc", 880, 470, 280, 55, LeaveRewardSelection);
         RectTransform cards = CreateWorkshopDeck(_sealWorkbench);
@@ -1801,7 +1807,7 @@ public sealed class SpellGameUI : MonoBehaviour
         _sealDragToken.anchoredPosition = new Vector2(local.x - _sealWorkbench.rect.xMin, local.y - _sealWorkbench.rect.yMax);
         bool valid = _sealBoard.Preview(data.position, data.pressEventCamera, true) >= 0;
         _sealDragToken.GetComponent<SpellSealWorkbenchGraphic>().color = valid ? SealColor(_game.RewardSeal) : _dangerColor;
-        _sealWorkbenchHint.text = valid ? "놓으면 이 영역에 붙습니다" : "붙일 수 없는 영역입니다";
+        _sealWorkbenchHint.text = valid ? "놓으면 이 구역에 붙습니다" : "붙일 수 없는 구역입니다";
         _sealWorkbenchHint.color = valid ? new Color(0.3f, 1f, 0.5f) : _dangerColor;
     }
 
@@ -1813,7 +1819,7 @@ public sealed class SpellGameUI : MonoBehaviour
         Destroy(_sealDragToken.gameObject); _sealDragToken = null;
         _sealBoard.Preview(data.position, data.pressEventCamera, false);
         if (target >= 0) ClaimCombatRewardSeal(target);
-        else { _sealWorkbenchHint.text = "부착하지 않았습니다. 빈 영역에 놓아 주세요"; _sealWorkbenchHint.color = _dangerColor; }
+        else { _sealWorkbenchHint.text = "붙이지 않았습니다. 빈 구역에 놓아 주세요"; _sealWorkbenchHint.color = _dangerColor; }
     }
 
     /// <summary>선택한 영역에 인장을 붙이고 수령 목록을 갱신한다.</summary>
@@ -1830,7 +1836,7 @@ public sealed class SpellGameUI : MonoBehaviour
     public void SelectPiece(int board, SpellGame.Placement piece)
     {
         if (!_game.CanMovePiece(piece)) { _message = "이전 턴에 놓은 조각은 이동할 수 없습니다"; Render(); return; }
-        _pendingCast = -1; _selectedPiece = piece; _selectedCard = piece.Card; _selectedBoard = board; _message = ""; SetNotice("판을 클릭해 이동하거나 손패로 드래그하세요", _textColor);
+        _pendingCast = -1; _selectedPiece = piece; _selectedCard = piece.Card; _selectedBoard = board; _message = ""; SetNotice("격자를 클릭해 옮기거나 손패로 끌어 놓으세요", _textColor);
         Vector2Int anchor;
         _layout.PieceToGrid(board, piece, out anchor, out _rotation);
         Render();
@@ -1847,7 +1853,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>격자 앵커 칸에 선택한 카드를 놓거나 기존 조각을 이동한다.</summary>
     public void ClickGrid(int board, Vector2Int anchor)
     {
-        if (_selectedCard == null) { _message = "먼저 손패 또는 배치된 조각을 선택하세요"; Render(); return; }
+        if (_selectedCard == null) { _message = "먼저 손패나 격자 위의 조각을 고르세요"; Render(); return; }
         int x, y, rotation;
         ToLocalPlacement(board, anchor, out x, out y, out rotation);
         SpellGame.Placement ignored = _selectedBoard == board ? _selectedPiece : null;
@@ -1885,7 +1891,7 @@ public sealed class SpellGameUI : MonoBehaviour
             ToLocalPlacement(board, anchor, out x, out y, out rotation);
             bool valid = CanPreviewGrid(board, anchor);
             bool complete = valid && _game.WouldComplete(board, _selectedCard, x, y, rotation, _selectedBoard == board ? _selectedPiece : null);
-            hint = complete ? $"놓으면 {SpellGame.PatternName(board)} 완성" : valid ? $"배치 가능  ·  {RemainingText(board)}" : PlacementIssue(board, anchor);
+            hint = complete ? $"놓으면 {SpellGame.PatternName(board)} 완성" : valid ? $"놓을 수 있음  ·  {RemainingText(board)}" : PlacementIssue(board, anchor);
         }
         _hintText = hint;
     }
@@ -1993,7 +1999,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (onHand)
         {
             if (_game.Recall(_selectedBoard, _selectedPiece)) { ClearSelection(); _message = ""; SetNotice("조각을 손패로 되돌렸습니다", _textColor); }
-            else { ClearSelection(); _message = "손패가 가득 차 회수할 수 없습니다"; }
+            else { ClearSelection(); _message = "손패가 가득 차서 되돌릴 수 없습니다"; }
             Render();
         }
         else if (hasDestination) ClickGrid(board, anchor);
@@ -2174,7 +2180,7 @@ public sealed class SpellGameUI : MonoBehaviour
         ClearTheftApproach();
         if (!stolen) return;
         if (_selectedCard == targetCard) ClearSelection();
-        _message = "도둑손이 조각을 훔쳤습니다 · 전투 종료 후 복구됩니다";
+        _message = "도둑손이 조각을 훔쳤습니다 · 전투가 끝나면 돌아옵니다";
         ShowFeedback("조각을 빼앗겼습니다!", new Color(0.95f, 0.48f, 0.35f)); Render();
     }
 
@@ -2262,7 +2268,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_hammerPhase != HammerPhase.Selecting && _hammerPhase != HammerPhase.Timing) return;
         string issue = _game.HammerIssue(card);
         _hammerCard = issue == null ? card : null;
-        _hammerMessage = issue ?? "높은 게이지에서 Space를 누르세요";
+        _hammerMessage = issue ?? "게이지가 높을 때 Space를 누르세요";
         _hammerPhase = issue == null ? HammerPhase.Timing : HammerPhase.Selecting;
         _hammerTimingStart = Time.unscaledTime;
         RenderHammer();
@@ -2272,13 +2278,13 @@ public sealed class SpellGameUI : MonoBehaviour
     private string HammerOdds(float strength)
     {
         float chance = SpellGame.DecompositionChance(strength);
-        return $"강도 {strength:P0}\n기본 분해 보장\n각 자식은 {chance:P0}로 추가 분해\n최대 {_game.HammerMaxPieces(_hammerCard)}장 · 혼합 결과 가능";
+        return $"강도 {strength:P0}\n기본 분해는 항상 성공\n나뉜 조각마다 {chance:P0} 확률로 한 번 더 분해\n최대 {_game.HammerMaxPieces(_hammerCard)}장 · 여러 모양이 섞일 수 있음";
     }
 
     /// <summary>확정된 혼합 도형을 종류별 장수로 묶어 결과 안내를 반환한다.</summary>
     private string HammerResultMessage()
     {
-        if (_hammerResultShapes.Length == 1) return "추가 분해 불가 · 원본 유지";
+        if (_hammerResultShapes.Length == 1) return "더 나눌 수 없음 · 원래 조각 유지";
         string message = "분해 결과: ";
         foreach (SpellGame.Shape shape in Enum.GetValues(typeof(SpellGame.Shape)))
         {
@@ -2331,7 +2337,7 @@ public sealed class SpellGameUI : MonoBehaviour
         RectTransform board = Element("Hammer Workbench", _hammerOverlay, 350, 130, 420, 420);
         board.gameObject.AddComponent<CanvasRenderer>();
         board.gameObject.AddComponent<SpellHammerGraphic>().raycastTarget = false;
-        Label(_hammerOverlay, _hammerPhase == HammerPhase.Selecting ? "조각을 클릭하거나 작업대로 드래그하세요" : "Space: 타격   ·   Esc: 타격 전 취소", 260, 550, 600, 32, 19);
+        Label(_hammerOverlay, _hammerPhase == HammerPhase.Selecting ? "조각을 클릭하거나 작업대로 끌어 놓으세요" : "Space: 타격   ·   Esc: 타격 전 취소", 260, 550, 600, 32, 19);
 
         _hammerSource = _hammerCard == null ? null : HammerCardShape(_hammerOverlay, _hammerCard, 560, 340, 144);
         Panel(_hammerOverlay, 886, 181, 66, 278, new Color(0.40f, 0.34f, 0.27f));
@@ -2343,7 +2349,7 @@ public sealed class SpellGameUI : MonoBehaviour
         _hammerMarker = Panel(_hammerOverlay, 880, 446, 80, 6, Color.white);
         Label(_hammerOverlay, "강한 타격", 856, 140, 130, 30, 17);
         Label(_hammerOverlay, "약한 타격", 856, 460, 130, 30, 17);
-        Label(_hammerOverlay, "기본 분해는 항상 성공\n강할수록 추가 분해 확률 증가\n최소 1/4 · 결과는 덱에 저장", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
+        Label(_hammerOverlay, "기본 분해는 항상 성공\n세게 칠수록 한 번 더 나뉠 확률 증가\n가장 작은 조각은 반 칸 삼각형 · 결과는 덱에 반영", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
         Label(_hammerOverlay, _hammerMessage, 800, 495, 440, 75, 17);
         RectTransform hint = Element("Hammer Preview", _hammerOverlay, 980, 360, 240, 120);
         _hammerHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
@@ -2599,7 +2605,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         if (_glueOverlay == null) return;
         string issue = GluePlacementIssue();
-        _glueHint.text = (_glueMessage.Length > 0 ? _glueMessage : issue ?? "접착 가능 · 확인하면 카드 한 장으로 합쳐집니다")
+        _glueHint.text = (_glueMessage.Length > 0 ? _glueMessage : issue ?? "접착할 수 있음 · 확인하면 조각 한 장으로 합쳐집니다")
             + $"\n선택 조각 {_glueSelected + 1} · R / 우클릭 회전";
         _glueHint.color = issue == null ? new Color(0.55f, 1f, 0.7f) : new Color(1f, 0.55f, 0.5f);
         _glueConfirm.interactable = issue == null && !_glueGraphic.IsDragging && _glueDragCard == null;
@@ -2622,9 +2628,9 @@ public sealed class SpellGameUI : MonoBehaviour
         Vector2Int relative = _gluePositions[1] - _gluePositions[0];
         if (!_game.TryGlue(_glueCards[0], _glueRotations[0], _glueCards[1], _glueRotations[1], relative.x, relative.y, keptCoating))
         {
-            _glueMessage = "카드 상태가 바뀌어 접착하지 못했습니다"; RefreshGlue(); return;
+            _glueMessage = "조각 상태가 바뀌어 접착하지 못했습니다"; RefreshGlue(); return;
         }
-        _message = "접착 완료 · 새로운 모양이 덱에 영구 저장되었습니다";
+        _message = "접착 완료 · 새 모양이 덱에 반영되었습니다";
         CloseGlue(); Render();
     }
 
@@ -2718,7 +2724,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_glueOverlay != null) { _glueOverlay.gameObject.SetActive(false); Destroy(_glueOverlay.gameObject); }
         _glueOverlay = Panel(_root, 0, 0, 1280, 720, Color.black);
         Label(_glueOverlay, "접착 작업대", 350, 25, 580, 45, 30);
-        Label(_glueOverlay, "일반·특수 조각 2장 선택 → 드래그·R로 변 맞추기 → 접착 확인", 140, 85, 1000, 35, 19);
+        Label(_glueOverlay, "조각 2장 고르기 → 끌거나 R로 돌려 변 맞추기 → 접착 확인", 140, 85, 1000, 35, 19);
         RectTransform board = Element("Glue Workbench", _glueOverlay, 200, 170, 576, 288);
         board.gameObject.AddComponent<CanvasRenderer>();
         _glueGraphic = board.gameObject.AddComponent<SpellGlueGraphic>();
@@ -2731,7 +2737,7 @@ public sealed class SpellGameUI : MonoBehaviour
         _glueConfirm = GlueButton(_glueOverlay, "접착 확인", 850, 360, 280, 55, ConfirmGlue);
         GlueButton(_glueOverlay, "취소 · Esc", 850, 435, 280, 45, () => { CloseGlue(); Render(); });
         GlueButton(_glueOverlay, "선택 조각 중앙으로", 850, 505, 280, 40, CenterGluePart);
-        Label(_glueOverlay, "덱의 조각 2장 → 1장 · 모양과 효과 영구 유지\n드래그 또는 빈 칸 클릭으로 이동 · 덱 조각 재클릭으로 선택 해제", 100, 490, 660, 65, 17);
+        Label(_glueOverlay, "덱의 조각 2장을 1장으로 합침 · 모양과 효과는 그대로 유지\n끌거나 빈 칸을 클릭해 이동 · 덱의 조각을 다시 클릭하면 선택 해제", 100, 490, 660, 65, 17);
         RectTransform cards = CreateWorkshopDeck(_glueOverlay);
         for (int i = 0; i < _game.OwnedCards.Count; i++)
         {
@@ -2822,7 +2828,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (!combat) { ClearTheftApproach(); return; }
         RenderSeals(_sealLayer); RenderTheftHand();
         if (_game.Curse != null && !_game.Curse.IsResolved)
-            Label(_sealLayer, $"[저주] 카드 #{_game.Curse.Target.Id} · 시전으로 해제 · 미해결 HP -{_game.Curse.Amount}", 60, 300, 860, 35, 16);
+            Label(_sealLayer, $"[저주] 조각 #{_game.Curse.Target.Id} · 이번 턴에 시전하면 풀림 · 못 하면 체력 -{_game.Curse.Amount}", 60, 300, 860, 35, 16);
     }
 
     /// <summary>현재 저주 대상의 실제 3D 조각 색상을 갱신한다.</summary>

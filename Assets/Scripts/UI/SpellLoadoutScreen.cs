@@ -562,7 +562,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
             TopLeft((RectTransform)_tabs[i].transform, 960 - total / 2 + i * (width + gap), 0, width, 46);
             _tabs[i].GetComponent<Image>().color = active ? new Color(0.22f, 0.2f, 0.12f, 1f) : PANEL_COLOR;
             Text label = _tabs[i].GetComponentInChildren<Text>();
-            label.text = kind == SpellGame.RewardKind.Piece ? "조각 보상" : kind == SpellGame.RewardKind.Pattern ? "도안 보상" : "인장 보상 · 작업대";
+            label.text = kind == SpellGame.RewardKind.Piece ? "조각 보상" : kind == SpellGame.RewardKind.Pattern ? "도안 보상" : "씰링 보상 · 작업대";
             label.color = active ? ACCENT_COLOR : TEXT_COLOR;
         }
     }

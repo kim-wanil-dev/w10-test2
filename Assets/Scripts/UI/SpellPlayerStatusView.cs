@@ -18,7 +18,7 @@ public sealed class SpellPlayerStatusView : MonoBehaviour
     {
         _health.Bind(health, maxHealth, incomingDamage, $"체력 {health} / {maxHealth}");
         _health.BindDefense(defense, maxHealth);
-        _defense.text = $"방어 {defense}";
+        _defense.text = $"방어도 {defense}";
         _incoming.text = incomingDamage > 0 ? $"받을 피해 {incomingDamage}" : "받을 피해 없음";
         _incoming.color = incomingDamage > 0 ? _dangerColor : _safeColor;
     }

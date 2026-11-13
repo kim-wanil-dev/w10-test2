@@ -250,18 +250,18 @@ public sealed class SpellGame
             string text;
             switch (NextAction)
             {
-                case EnemyAction.Defend: text = $"방어 쌓기 · 방어 {ActionAmount} 획득"; break;
-                case EnemyAction.Curse: text = $"조각 저주 · 다음 손패 1장 / 미해결 HP -{CURSE_FAILURE_AMOUNT}"; break;
-                case EnemyAction.Charge: text = $"힘 모으기 · 다음 공격 +{ActionAmount}"; break;
+                case EnemyAction.Defend: text = $"방어 · 방어도 {ActionAmount} 획득"; break;
+                case EnemyAction.Curse: text = $"조각 저주 · 다음 턴 손패 1장 저주 / 못 풀면 체력 -{CURSE_FAILURE_AMOUNT}"; break;
+                case EnemyAction.Charge: text = $"충전 · 다음 공격 +{ActionAmount}"; break;
                 default:
                     string strength = IsThief || IsContaminator ? (ActionCount % _pattern.Length == 0 ? "약한 " : "강한 ") : IsCurser ? "강한 " : "";
                     text = $"{strength}{(IsContaminator ? "오염 공격" : "공격")} · 피해 {Intent}";
                     if (ContaminationCount > 0) text += $" / 오염 {ContaminationCount}장";
                     break;
             }
-            if (Block > 0) text += $"\n현재 방어 {Block}";
+            if (Block > 0) text += $"\n현재 방어도 {Block}";
             if (Charge > 0) text += $"\n충전 +{Charge}";
-            if (IsThief) text += "\n패시브 · 약 15초마다 조각 절도";
+            if (IsThief) text += "\n상시 · 약 15초마다 조각을 훔침";
             return text;
         }
     }
@@ -919,9 +919,9 @@ public sealed class SpellGame
         if (!IsWorkshopEvent) return "이벤트 또는 휴식에서만 분해할 수 있습니다";
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 분해할 조각 하나를 선택하세요";
-        if (card.IsUnique) return "고유 조각은 쪼갤 수 없습니다";
+        if (card.IsUnique) return "고유 조각은 분해할 수 없습니다";
         int firstSplit = card.Glued != null ? 2 : SplitOnce(new Fragment(card.Shape, 0, 0, 0)).Length;
-        if (firstSplit == 0) return "현재 도형으로 빈틈없이 나눌 수 없는 최소 조각입니다";
+        if (firstSplit == 0) return "더 작게 나눌 수 없는 조각입니다";
         return null;
     }
 
@@ -1118,7 +1118,7 @@ public sealed class SpellGame
         if (!IsWorkshopEvent) return "이벤트 또는 휴식에서만 접착할 수 있습니다";
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 조각을 선택하세요";
-        if (card.IsContaminated) return "오염 조각은 이번 프로토타입에서 접착할 수 없습니다";
+        if (card.IsContaminated) return "오염 조각은 접착할 수 없습니다";
         if (card.IsUnique) return "고유 조각은 접착할 수 없습니다";
         return null;
     }
@@ -1147,7 +1147,7 @@ public sealed class SpellGame
                 if ((CellMask(second, secondRotation, nx - relativeX, ny - relativeY) & (1 << ((side + 2) % 4))) != 0) touching = true;
             }
         }
-        return touching ? null : "실제 도형의 변을 맞대세요. 꼭짓점만 닿으면 접착할 수 없습니다";
+        return touching ? null : "두 조각의 변을 맞대세요. 꼭짓점만 닿으면 접착할 수 없습니다";
     }
 
     /// <summary>두 조각에 서로 다른 코팅이 있어 붙이기 전에 유지할 코팅을 골라야 하는지 반환한다.</summary>
@@ -1270,7 +1270,7 @@ public sealed class SpellGame
             int index = _random.Next(Spells.Count - (Spells.Count > 1 && previousIndex >= 0 ? 1 : 0));
             if (Spells.Count > 1 && previousIndex >= 0 && index >= previousIndex) index++;
             enemy.SealedSpell = Spells[index]; enemy.PreviousSealedSpell = enemy.SealedSpell;
-            SealNotice = "형상 봉인자가 주문 도안을 봉인했습니다. 피해를 주면 해제됩니다";
+            SealNotice = "형상 봉인자가 도안을 봉인했습니다. 봉인자에게 피해를 주면 풀립니다";
         }
     }
 
@@ -1288,7 +1288,7 @@ public sealed class SpellGame
         if (enemy.IsSealer && enemy.Health < before && enemy.SealedSpell >= 0)
         {
             enemy.SealedSpell = -1;
-            SealNotice = "형상 봉인자가 피해를 받아 봉인이 해제되었습니다!";
+            SealNotice = "형상 봉인자가 피해를 입어 봉인이 풀렸습니다!";
         }
     }
 
@@ -1466,9 +1466,9 @@ public sealed class SpellGame
         if (!Spells.Contains(Boards[boardIndex].Spell)) return "장착하지 않은 도안입니다";
         if (IsSealed(Boards[boardIndex].Spell)) return "봉인된 도안에는 조각을 놓을 수 없습니다";
         Board board = Boards[boardIndex]; int[] candidate = CandidateMask(board, card, x, y, rotation, ignored);
-        if (candidate == null) return card.Glued == null && card.Shape == Shape.Clay ? "점토가 채울 빈 구역이 없습니다" : "도형이 도안 범위를 벗어납니다";
+        if (candidate == null) return card.Glued == null && card.Shape == Shape.Clay ? "점토가 채울 빈 구역이 없습니다" : "조각이 도안 밖으로 나갑니다";
         int[] allowed = SPELL_MASKS[board.Spell];
-        for (int i = 0; i < CELL_COUNT; i++) if ((candidate[i] & ~allowed[i]) != 0) return "도안 밖으로 벗어납니다";
+        for (int i = 0; i < CELL_COUNT; i++) if ((candidate[i] & ~allowed[i]) != 0) return "조각이 도안 밖으로 나갑니다";
         int[] coverage = Coverage(board, ignored);
         bool overpaint = SealCount(card, Seal.Overpaint) > 0;
         for (int i = 0; i < CELL_COUNT; i++) for (int s = 0; s < 4; s++)
@@ -1710,7 +1710,7 @@ public sealed class SpellGame
         {
             e.Value = Math.Max(0, e.Value - contamination);
             e.Block = Math.Max(0, e.Block - contamination);
-            e.Terms.Add($"오염 -{contamination} (하한 0)");
+            e.Terms.Add($"오염 -{contamination} (최소 0)");
         }
         return e;
     }
