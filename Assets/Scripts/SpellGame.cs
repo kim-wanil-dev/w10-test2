@@ -1158,10 +1158,9 @@ public sealed class SpellGame
         }
     }
 
-    /// <summary>카드를 버림 더미로 보낸다. 절도 대상이었다면 절도를 취소한다.</summary>
+    /// <summary>카드를 버림 더미로 보낸다. 절도 목표 소멸은 다음 목표 조회에서 처리한다.</summary>
     private void Discard(Card card)
     {
-        if (TheftTarget == card) CancelTheft();
         _discard.Add(card);
     }
 
@@ -1237,12 +1236,12 @@ public sealed class SpellGame
     private void DamageEnemy(Enemy enemy, int damage)
     {
         if (enemy.Health <= 0 || damage <= 0) return;
-        if (enemy == _theftOwner) CancelTheft();
         if (_isRecordingHits) { _lastCastHits.Add(_enemies.IndexOf(enemy)); _lastCastHitSources.Add(_hitSource); }
         int absorbed = Math.Min(enemy.Block, damage);
         enemy.Block -= absorbed; damage -= absorbed;
         int before = enemy.Health;
         enemy.Health -= damage;
+        if (enemy == _theftOwner && enemy.Health < before) CancelTheft();
         if (enemy.Health <= 0) { enemy.Block = 0; enemy.Charge = 0; }
         if (enemy.IsSealer && enemy.Health < before && enemy.SealedSpell >= 0)
         {
@@ -1421,7 +1420,6 @@ public sealed class SpellGame
     public bool Recall(int board, Placement piece)
     {
         if (CurrentPhase != Phase.Combat || board < 0 || board >= Boards.Count || !CanMovePiece(piece) || Hand.Count >= MAX_HAND || !Boards[board].MutablePieces.Remove(piece)) return false;
-        if (TheftTarget == piece.Card) CancelTheft();
         _hand.Add(piece.Card); UpdateCompleter(Boards[board], null); return true;
     }
 
@@ -1433,7 +1431,6 @@ public sealed class SpellGame
         if (Hand.Count + current > MAX_HAND) return false;
         foreach (Placement p in b.Pieces)
         {
-            if (TheftTarget == p.Card) CancelTheft();
             if (CanMovePiece(p)) { _hand.Add(p.Card); }
             else Discard(p.Card);
         }
@@ -1459,17 +1456,28 @@ public sealed class SpellGame
         return false;
     }
 
-    /// <summary>현재 절도 대상이 여전히 배치되어 있는지 확인해 해당 도안 ID와 현재 배치 정보를 반환한다.</summary>
+    public bool HasActiveTheft { get { return CurrentPhase == Phase.Combat && _theftOwner != null && _theftOwner.Health > 0; } }
+
+    /// <summary>현재 배치를 반환한다. 목표 소멸 시 다른 배치 조각을 고르고, 조각이 없으면 접근을 취소한다.</summary>
     public bool TryGetTheftPlacement(out int boardIndex, out Placement placement)
     {
         boardIndex = -1; placement = null;
-        if (CurrentPhase != Phase.Combat || TheftTarget == null || _theftOwner == null || _theftOwner.Health <= 0) return false;
+        if (!HasActiveTheft) return false;
         for (int i = 0; i < Boards.Count; i++) foreach (Placement piece in Boards[i].Pieces)
         {
             if (piece.Card != TheftTarget) continue;
             boardIndex = i; placement = piece; return true;
         }
-        return false;
+        if (CraftCount > 0)
+        {
+            int index = _random.Next(CraftCount);
+            for (int i = 0; i < Boards.Count; i++) foreach (Placement piece in Boards[i].Pieces)
+            {
+                if (index-- != 0) continue;
+                TheftTarget = piece.Card; boardIndex = i; placement = piece; return true;
+            }
+        }
+        CancelTheft(); return false;
     }
 
     /// <summary>절도 시도를 취소하며 대상 카드와 배치 횟수는 변경하지 않는다.</summary>
