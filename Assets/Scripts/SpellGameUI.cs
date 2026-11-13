@@ -14,7 +14,6 @@ public sealed class SpellGameUI : MonoBehaviour
     private const float THEFT_ARRIVAL_RADIUS = 12;
     private enum HammerPhase { None, Selecting, Timing, Striking, Result }
     private const float LEGACY_SCALE = 1.5f;
-    private const float LEGACY_CELL = 84f;
     private const float TOAST_SECONDS = 2.2f;
     private const float CURSOR_HINT_OFFSET = 24f;
     private const float CURSOR_HINT_PADDING = 24f;
@@ -28,7 +27,6 @@ public sealed class SpellGameUI : MonoBehaviour
     private const float TOOLTIP_STACK_GAP = 6f;
     private const float TOOLTIP_TAG_ROOM = 258f;
     private static readonly Vector2[] THEFT_START_POINTS = { new Vector2(1180, 130), new Vector2(1180, 430), new Vector2(640, 65), new Vector2(80, 65) };
-    private static readonly bool ONBOARDING_ENABLED = false;
     private static readonly Vector2 MESSAGE_POSITION = new Vector2(705, -480);
     private static readonly Vector2 FEEDBACK_POSITION = new Vector2(960, -100);
     private static readonly Vector2 NORMAL_ENEMY_SIZE = new Vector2(150, 190);
@@ -153,16 +151,6 @@ public sealed class SpellGameUI : MonoBehaviour
     private int _castDragBoard = -1;
     private int _hoverEnemy = -1;
 
-    private bool _onboardingComplete;
-    private bool _onboardingPlacementExplained;
-    private string _onboardingStep = "";
-    private float _onboardingActivity;
-    private RectTransform _onboardingGhost;
-    private CanvasGroup _onboardingGhostGroup;
-    private RectTransform _onboardingGhostIcon;
-    private int _onboardingGhostRotation;
-    private Vector2 _onboardingGhostStart;
-    private Vector2 _onboardingGhostEnd;
 
     [Header("망치 프로토타입")]
     [SerializeField, Min(0.1f)] private float _hammerGaugeSeconds = 0.25f;
@@ -237,8 +225,8 @@ public sealed class SpellGameUI : MonoBehaviour
         _patternColorValues = new Color[SpellGame.PatternCount];
         for (int i = 0; i < _patternColorValues.Length; i++) SpellDataStore.ParseColor(SpellGame.PatternColorCode(i), out _patternColorValues[i]);
         _font = Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 24);
-        // 꺼 둔 첫 주문 온보딩만 기존 1280×720 좌표로 그린다. 전투 화면 바로 위, 오버레이 아래에 둔다. 새 화면 연결은 다음 작업이다.
-        _root = Element("Onboarding Layer", _content, 0, 0, 1280, 720);
+        // 작업대·도둑손·봉인 표시처럼 기존 1280×720 좌표로 그리는 요소의 층이다. 전투 화면 바로 위, 오버레이 아래에 둔다.
+        _root = Element("Legacy Layer", _content, 0, 0, 1280, 720);
         _root.anchorMin = _root.anchorMax = _root.pivot = new Vector2(0.5f, 0.5f);
         _root.anchoredPosition = Vector2.zero;
         _root.localScale = Vector3.one * LEGACY_SCALE;
@@ -264,7 +252,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         if (_canvas != null && !_canvas.activeSelf)
         {
-            _canvas.SetActive(true); _onboardingActivity = Time.unscaledTime; Render();
+            _canvas.SetActive(true); Render();
         }
     }
 
@@ -300,14 +288,13 @@ public sealed class SpellGameUI : MonoBehaviour
         UpdateFeedback();
         UpdateCursorHint();
         if (_game.CurrentPhase == SpellGame.Phase.Combat && _game.Curse != null) RefreshCurseTint();
-        if (ONBOARDING_ENABLED) UpdateOnboarding();
         if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
         {
             if (_combatScreen.MoreMenu.IsOpen) { _combatScreen.MoreMenu.Close(); return; }
             if (_openPile >= 0) _openPile = -1;
             else if (_showPauseMenu) _showPauseMenu = false;
             else OpenPauseState();
-            _onboardingActivity = Time.unscaledTime; Render(); return;
+            Render(); return;
         }
         if (_showPauseMenu || _openPile >= 0 || _showHelp) return;
         if (_game.CanUseWorkshop)
@@ -384,7 +371,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>일시정지·도움말·더미 열람 오버레이의 버튼 동작을 연결한다.</summary>
     private void SetupOverlays()
     {
-        _pauseMenu.Continue.SetAction(() => { _showPauseMenu = false; _onboardingActivity = Time.unscaledTime; Render(); });
+        _pauseMenu.Continue.SetAction(() => { _showPauseMenu = false; Render(); });
         _pauseMenu.Title.SetAction(() => { _game.ReturnToTitle(); _showPauseMenu = false; _showHelp = false; _pendingCast = -1; _feedbackUntil = 0; ClearSelection(); Render(); });
         _pauseMenu.Quit.SetAction(Application.Quit);
         _helpPanel.Close.SetAction(() => { _showHelp = false; Render(); });
@@ -533,7 +520,6 @@ public sealed class SpellGameUI : MonoBehaviour
         else if (sealWorkbench) RenderSealWorkbench();
         else if (loadout) RefreshLoadout();
         else if (result) _resultScreen.Bind(phase == SpellGame.Phase.Victory ? "승리" : "패배");
-        RenderOnboardingLayer(combat);
         RefreshFeatureControls();
         RefreshOverlays();
         _renderedPhase = phase;
@@ -879,12 +865,6 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_game.ChooseReward(reward)) { ClearSelection(); _message = ""; Render(); }
     }
 
-    /// <summary>꺼 둔 첫 주문 온보딩 층을 비우고, 켜져 있으면 전투 중에만 다시 그린다.</summary>
-    private void RenderOnboardingLayer(bool combat)
-    {
-        _root.gameObject.SetActive(true);
-    }
-
     /// <summary>일시정지·도움말·더미 열람 오버레이를 상태에 맞게 켜고 내용을 갱신한다.</summary>
     private void RefreshOverlays()
     {
@@ -1157,154 +1137,6 @@ public sealed class SpellGameUI : MonoBehaviour
         return new Vector2(local.x - layer.rect.xMin, local.y - layer.rect.yMax);
     }
 
-    /// <summary>첫 주문까지 현재 가능한 조작을 강조하고 설명과 고스트를 준비한다. 기존 좌표를 쓰며 새 화면 연결은 다음 작업이다.</summary>
-    private void RenderOnboarding()
-    {
-        List<Rect> holes = new List<Rect>(); string step; string message; SpellGame.Card ghostCard = null; int ghostRotation = 0; bool showContinue = false;
-        Vector2 start, end;
-        int complete = -1;
-        foreach (int spell in _game.Spells) if (_game.IsComplete(spell)) { complete = spell; break; }
-        if (_pendingCast >= 0)
-        {
-            int target = 0;
-            while (target < _game.Enemies.Count && _game.Enemies[target].Health <= 0) target++;
-            float x = 640 - _game.Enemies.Count * 125 + target * 250;
-            holes.Add(new Rect(x, 15, 235, 230)); start = end = new Vector2(x + 117, 125);
-            step = "target"; message = "이 주문은 선택한 적 하나에게 효과를 적용합니다.\n공격할 적을 선택하세요.";
-        }
-        else if (!_onboardingPlacementExplained && _game.CraftCount > 0)
-        {
-            holes.Add(new Rect(30, 570, 190, 30)); start = end = Vector2.zero;
-            step = "placements"; showContinue = true;
-            message = "한 턴에 기본 3회 조각을 배치할 수 있습니다.\n시전하지 않은 조각은 다음 턴에도 도안에 남습니다.";
-        }
-        else if (complete >= 0)
-        {
-            float x = _layout.Origin(complete).x < 3 ? 230 : 900;
-            float y = 280 + complete * 32;
-            holes.Add(new Rect(x, y, 150, 28)); start = end = new Vector2(x + 75, y + 14);
-            step = "cast" + complete; message = "도안이 완성되어 주문이 준비됐습니다.\n시전 버튼을 눌러 주문을 사용하세요.";
-        }
-        else
-        {
-            int cardIndex = -1, board = -1, cellX = 0, cellY = 0, rotation = 0;
-            if (_game.Hand.Count > 0)
-            {
-                for (int pass = 0; pass < 2 && cardIndex < 0; pass++)
-                    for (int i = 0; i < _game.Hand.Count && cardIndex < 0; i++)
-                    {
-                        SpellGame.Card candidate = _game.Hand[i];
-                        if (_selectedCard != null && _selectedPiece == null && candidate != _selectedCard) continue;
-                        SpellGame.Shape preferred = _game.CraftCount == 0 ? SpellGame.Shape.Square : SpellGame.Shape.QuarterTriangle;
-                        if (pass == 0 && candidate.Shape != preferred) continue;
-                        foreach (int spell in _game.Spells)
-                        {
-                            if (!_layout.IsPlaced(spell)) continue;
-                            for (int y = 0; y < SpellGame.LOCAL_SIZE && cardIndex < 0; y++) for (int x = 0; x < SpellGame.LOCAL_SIZE && cardIndex < 0; x++) for (int r = 0; r < 4; r++)
-                                if (_game.CanPlace(spell, candidate, x, y, r)) { cardIndex = i; board = spell; cellX = x; cellY = y; rotation = r; break; }
-                            if (cardIndex >= 0) break;
-                        }
-                    }
-            }
-            if (cardIndex < 0)
-            {
-                holes.Add(new Rect(1080, 635, 160, 65)); start = end = new Vector2(1160, 667);
-                step = "turn"; message = "턴을 종료하면 적이 공격하고 새 턴에 조각을 뽑습니다.\n주문을 이어서 완성하세요.";
-            }
-            else
-            {
-                ghostCard = _game.Hand[cardIndex]; ghostRotation = rotation;
-                float cardX = 350 + (7 - _game.Hand.Count) * 25 + cardIndex * 85;
-                Vector2Int gridCell = _layout.LocalToGrid(board, new Vector2Int(cellX, cellY));
-                float gridX = 390 + gridCell.x * LEGACY_CELL, gridY = 280 + gridCell.y * LEGACY_CELL;
-                holes.Add(new Rect(cardX, 565, 81, 115)); holes.Add(new Rect(gridX, gridY, LEGACY_CELL, LEGACY_CELL));
-                start = new Vector2(cardX + 40, 622); end = new Vector2(gridX + 42, gridY + 42);
-                step = "place" + ghostCard.Id + ":" + board + ":" + cellX + ":" + cellY + ":" + rotation;
-                message = "도안에 조각을 채우면 주문을 시전할 수 있습니다.\n손패에서 조각을 선택해 도안의 빈칸으로 드래그하세요." + ((_selectedCard == ghostCard ? _rotation : 0) != rotation ? "\nR 또는 우클릭으로 회전해 빈 영역에 맞추세요." : "");
-            }
-        }
-        if (_onboardingStep != step) { _onboardingStep = step; _onboardingActivity = Time.unscaledTime; }
-        List<float> xs = new List<float> { 0, 1280 }, ys = new List<float> { 0, 720 };
-        foreach (Rect hole in holes) { xs.Add(hole.xMin); xs.Add(hole.xMax); ys.Add(hole.yMin); ys.Add(hole.yMax); }
-        xs.Sort(); ys.Sort();
-        for (int y = 0; y < ys.Count - 1; y++) for (int x = 0; x < xs.Count - 1; x++)
-        {
-            float width = xs[x + 1] - xs[x], height = ys[y + 1] - ys[y];
-            if (width <= 0 || height <= 0) continue;
-            Vector2 center = new Vector2(xs[x] + width / 2, ys[y] + height / 2);
-            bool exposed = false; foreach (Rect hole in holes) if (hole.Contains(center)) { exposed = true; break; }
-            if (!exposed) Panel(_root, xs[x], ys[y], width, height, new Color(0, 0, 0, 0.76f)).GetComponent<UnityEngine.UI.Image>().raycastTarget = showContinue;
-        }
-        const float popupWidth = 460, popupHeight = 132;
-        Vector2 popupPosition = OnboardingPopupPosition(holes, popupWidth, popupHeight);
-        RectTransform popup = Panel(_root, popupPosition.x, popupPosition.y, popupWidth, popupHeight, new Color(0.12f, 0.19f, 0.25f, 0.98f));
-        popup.GetComponent<UnityEngine.UI.Image>().raycastTarget = showContinue;
-        Label(popup, "주문 시전 안내", 16, 6, popupWidth - 32, 25, 17, TextAnchor.MiddleLeft);
-        Label(popup, message, 16, 31, popupWidth - 32, showContinue ? 58 : 94, 16, TextAnchor.MiddleLeft);
-        if (showContinue)
-        {
-            Button(popup, "확인", popupWidth - 110, 96, 94, 30, () => { _onboardingPlacementExplained = true; Render(); }, null, 15);
-            start = end = new Vector2(popupPosition.x + popupWidth - 63, popupPosition.y + 111);
-        }
-        _onboardingGhostStart = start; _onboardingGhostEnd = end;
-        _onboardingGhostRotation = ghostRotation;
-        _onboardingGhost = Element("Onboarding Ghost", _root, start.x, start.y, 48, 48);
-        _onboardingGhost.pivot = new Vector2(0.5f, 0.5f);
-        _onboardingGhostGroup = _onboardingGhost.gameObject.AddComponent<CanvasGroup>();
-        _onboardingGhostGroup.blocksRaycasts = false; _onboardingGhostGroup.interactable = false; _onboardingGhostGroup.alpha = 0;
-        if (ghostCard != null)
-        {
-            float width = ghostCard.Shape == SpellGame.Shape.Rectangle ? 72 : 36;
-            RectTransform iconRect = Element("Ghost Shape", _onboardingGhost, 0, 0, width, 36);
-            iconRect.gameObject.AddComponent<CanvasRenderer>();
-            SpellShapeGraphic icon = iconRect.gameObject.AddComponent<SpellShapeGraphic>();
-            icon.Shape = ghostCard.Shape; icon.color = new Color(0.6f, 1f, 0.85f, 0.75f); icon.raycastTarget = false;
-            iconRect.anchorMin = iconRect.anchorMax = iconRect.pivot = new Vector2(0.5f, 0.5f);
-            iconRect.anchoredPosition = Vector2.zero;
-            _onboardingGhostIcon = iconRect;
-        }
-        Label(_onboardingGhost, "☛", 20, 17, 28, 30, 24);
-    }
-
-    /// <summary>강조 영역들을 가리지 않고 화면 안에서 첫 강조 영역에 가까운 팝업 좌표를 반환한다.</summary>
-    private Vector2 OnboardingPopupPosition(List<Rect> holes, float width, float height)
-    {
-        Rect focus = holes[0];
-        Vector2[] candidates = {
-            new Vector2(focus.center.x - width / 2, focus.yMin - height - 12),
-            new Vector2(focus.center.x - width / 2, focus.yMax + 12),
-            new Vector2(focus.xMin - width - 12, focus.center.y - height / 2),
-            new Vector2(focus.xMax + 12, focus.center.y - height / 2)
-        };
-        Vector2 best = candidates[0]; float bestScore = float.MaxValue;
-        foreach (Vector2 candidate in candidates)
-        {
-            Vector2 position = new Vector2(Mathf.Clamp(candidate.x, 12, 1280 - width - 12), Mathf.Clamp(candidate.y, 12, 720 - height - 12));
-            Rect popup = new Rect(position.x, position.y, width, height);
-            float score = Vector2.Distance(popup.center, focus.center);
-            foreach (Rect hole in holes) if (popup.Overlaps(hole)) score += 10000;
-            if (score < bestScore) { bestScore = score; best = position; }
-        }
-        return best;
-    }
-
-    /// <summary>입력 후 대기 시간을 초기화하고 일정 시간이 지나면 안내 동작을 반복한다.</summary>
-    private void UpdateOnboarding()
-    {
-        if (_onboardingComplete || _onboardingGhost == null || _showHelp || _showPauseMenu) return;
-        if ((Mouse.current != null && (Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.wasPressedThisFrame || Mouse.current.delta.ReadValue().sqrMagnitude > 0)) ||
-            (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame)) _onboardingActivity = Time.unscaledTime;
-        float elapsed = Time.unscaledTime - _onboardingActivity;
-        bool visible = elapsed >= 3f && _dragGhost == null;
-        _onboardingGhostGroup.alpha = visible ? 0.85f : 0f;
-        if (!visible) return;
-        float progress = Mathf.Repeat((elapsed - 3f) / 2f, 1f);
-        _onboardingGhost.localScale = Vector3.one * (_onboardingGhostStart == _onboardingGhostEnd ? 1f - 0.22f * Mathf.Pow(Mathf.Sin(progress * Mathf.PI), 4) : 1f);
-        if (_onboardingGhostIcon != null) _onboardingGhostIcon.localRotation = Quaternion.Euler(0, 0, -90 * _onboardingGhostRotation * Mathf.Clamp01(progress * 3f));
-        Vector2 point = Vector2.Lerp(_onboardingGhostStart, _onboardingGhostEnd, Mathf.SmoothStep(0, 1, Mathf.Clamp01((progress - 0.3f) * 1.7f)));
-        _onboardingGhost.anchoredPosition = new Vector2(point.x, -point.y);
-    }
-
     /// <summary>적 행동 전후 체력과 방어 차이를 안내하고 다음 화면을 표시한다.</summary>
     private void EndPlayerTurn()
     {
@@ -1352,7 +1184,6 @@ public sealed class SpellGameUI : MonoBehaviour
         _onboarding.NotifyCast(board);
         float attackDelay = PlayCastEffect(board, evaluation, guards);
         _impactStart = Time.unscaledTime + attackDelay + HIT_IMPACT_SECONDS;
-        _onboardingComplete = true;
         _pendingCast = -1; ClearSelection();
         _impactHits = new bool[_game.Enemies.Count];
         foreach (int hit in _game.LastCastHits) if (hit >= 0 && hit < _impactHits.Length) _impactHits[hit] = true;
@@ -1648,9 +1479,6 @@ public sealed class SpellGameUI : MonoBehaviour
         _feedbackUntil = 0;
         _showHelp = false;
         _showPauseMenu = false;
-        _onboardingComplete = false;
-        _onboardingPlacementExplained = true;
-        _onboardingStep = ""; _onboardingActivity = Time.unscaledTime;
         _pendingCast = -1;
         _layout.Reset();
         _loadoutScreen.ResetStorage();
@@ -2263,14 +2091,12 @@ public sealed class SpellGameUI : MonoBehaviour
         ResetTheft(); _isSealerRun = withSealer; _isThiefRun = withThief; _isCurserRun = withCurser;
         _isContaminatorRun = withContaminator;
         _game.StartGame(false, withSealer, withThief, withCurser, withContaminator); ResetPatterns(); ClearSelection(); _onboarding.Begin(false);
-        if (withSealer || withThief || withCurser || withContaminator) _onboardingComplete = true;
         _message = _game.SealNotice; _feedbackUntil = 0; Render();
     }
 
     private bool CanAdvanceTheft
     {
-        get { return CanInteract && Application.isFocused && Time.timeScale > 0
-            && !(ONBOARDING_ENABLED && !_onboardingComplete && !_onboardingPlacementExplained && _game.CraftCount > 0); }
+        get { return CanInteract && Application.isFocused && Time.timeScale > 0; }
     }
 
     /// <summary>절도 대상과 손 UI를 정리하고 다음 주기를 처음부터 시작한다.</summary>
@@ -2428,7 +2254,6 @@ public sealed class SpellGameUI : MonoBehaviour
         _hammerOverlay = null; _hammerCard = null; _hammerPhase = HammerPhase.None;
         _hammerResultShapes = Array.Empty<SpellGame.Shape>();
         _hammerHint = null; _hammerMarker = null; _hammerGaugeFill = null;
-        _onboardingActivity = Time.unscaledTime;
     }
 
     /// <summary>선택한 손패의 분해 조건을 안내하고 유효하면 타이밍 게이지를 시작한다.</summary>
@@ -2670,7 +2495,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_glueOverlay != null) { _glueOverlay.gameObject.SetActive(false); Destroy(_glueOverlay.gameObject); }
         _glueOverlay = null; _glueGraphic = null; _glueHint = null; _glueConfirm = null; _glueCoatingChoice = null;
         for (int i = 0; i < 2; i++) { _glueCards[i] = null; _gluePositions[i] = DefaultGluePosition(i); _glueRotations[i] = 0; }
-        _glueSelected = 0; _glueMessage = ""; _onboardingActivity = Time.unscaledTime;
+        _glueSelected = 0; _glueMessage = "";
     }
 
     /// <summary>손패에서 접착할 서로 다른 일반 카드 두 장을 선택하거나 선택을 해제한다.</summary>
