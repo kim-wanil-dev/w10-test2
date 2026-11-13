@@ -1351,29 +1351,27 @@ public sealed class SpellGame
         return best;
     }
 
-    /// <summary>순수 판정에 쓰는 조각의 도형이다. 점토는 놓인 모양과 같은 기본 도형(회전·뒤집기 포함)으로 보고, 맞는 도형이 없으면 점토로 둔다.</summary>
-    private static Shape PurityShape(Placement placement)
+    /// <summary>Compares complete silhouettes, including glued pieces, independent of rotation and reflection.</summary>
+    private static string PurityShape(Placement placement)
     {
-        Card card = placement.Card;
-        if (card.Glued != null || card.Shape != Shape.Clay) return card.Shape;
-        string placed = NormalizedKey(placement.Mask);
-        for (int shape = 0; shape < BASE_SHAPES.Length; shape++)
+        List<ShapeCell> occupied = new List<ShapeCell>();
+        for (int i = 0; i < placement.Mask.Length; i++)
+            if (placement.Mask[i] != 0) occupied.Add(new ShapeCell(i % LOCAL_SIZE, i / LOCAL_SIZE, placement.Mask[i]));
+        ShapeCell[] original = occupied.ToArray();
+        string best = null;
+        for (int mirror = 0; mirror < 2; mirror++) for (int rotation = 0; rotation < 4; rotation++)
         {
-            if (shape == (int)Shape.Clay || BASE_SHAPES[shape] == null) continue;
-            for (int mirror = 0; mirror < 2; mirror++) for (int rotation = 0; rotation < 4; rotation++)
-            {
-                ShapeCell[] cells = Rotate(mirror == 0 ? BASE_SHAPES[shape] : Mirror(BASE_SHAPES[shape]), rotation);
-                int minX = int.MaxValue, minY = int.MaxValue;
-                foreach (ShapeCell cell in cells) { minX = Math.Min(minX, cell.X); minY = Math.Min(minY, cell.Y); }
-                List<string> keys = new List<string>();
-                foreach (ShapeCell cell in cells) keys.Add((cell.X - minX) + "," + (cell.Y - minY) + "," + cell.Mask);
-                keys.Sort();
-                if (string.Join("|", keys) == placed) return (Shape)shape;
-            }
+            ShapeCell[] cells = Rotate(mirror == 0 ? original : Mirror(original), rotation);
+            int minX = int.MaxValue, minY = int.MaxValue;
+            foreach (ShapeCell cell in cells) { minX = Math.Min(minX, cell.X); minY = Math.Min(minY, cell.Y); }
+            List<string> keys = new List<string>();
+            foreach (ShapeCell cell in cells) keys.Add((cell.X - minX) + "," + (cell.Y - minY) + "," + cell.Mask);
+            keys.Sort(StringComparer.Ordinal);
+            string key = string.Join("|", keys);
+            if (best == null || string.CompareOrdinal(key, best) < 0) best = key;
         }
-        return Shape.Clay;
+        return best;
     }
-
     /// <summary>도안 칸 마스크를 왼쪽 위가 (0, 0)이 되도록 옮긴 "x,y,mask" 정렬 문자열로 만든다.</summary>
     private static string NormalizedKey(int[] mask)
     {
@@ -1625,11 +1623,11 @@ public sealed class SpellGame
         SpellEvaluation e = new SpellEvaluation { Kind = PATTERNS[spell].Kind, Base = PATTERNS[spell].BaseValue };
         int counted = board.Pieces.Count, amplify = 0, guard = 0, resonance = 0, overpaint = 0, cog = 0, contamination = 0;
         // 점토는 놓인 모양에 맞는 도형으로 순수를 판정한다.
-        bool pure = board.Pieces.Count > 0; Shape first = board.Pieces.Count > 0 ? PurityShape(board.Pieces[0]) : Shape.Square;
+        bool pure = board.Pieces.Count > 0; string first = board.Pieces.Count > 0 ? PurityShape(board.Pieces[0]) : null;
         foreach (Placement p in board.Pieces)
         {
             if (p.Card.IsContaminated) contamination += CONTAMINATION_PENALTY;
-            if (p.Card.Glued != null || PurityShape(p) != first) pure = false;
+            if (PurityShape(p) != first) pure = false;
             if (p.Card.Coating == Coating.Amplify) amplify++;
             else if (p.Card.Coating == Coating.Guard) guard++;
             else if (p.Card.Coating == Coating.Cog)
