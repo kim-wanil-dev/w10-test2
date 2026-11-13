@@ -122,6 +122,10 @@ public sealed class SpellGameUI : MonoBehaviour
     private int _feedbackShownVersion;
     // 마지막 시전에서 실제로 맞은 적 표시다. 죽은 적·빗나간 적은 강조하지 않는다.
     private bool[] _impactHits = Array.Empty<bool>();
+    // 공격으로 전투가 끝났을 때 시전 연출이 끝난 뒤 보상 화면을 열기까지 기다리는 시간이다.
+    private const float VICTORY_HOLD_SECONDS = 0.5f;
+    private bool _isVictoryHold;
+    private float _victoryHoldUntil = -1;
     private SpellCastEffectGraphic _castEffects;
 
     private bool _showHelp;
@@ -261,6 +265,7 @@ public sealed class SpellGameUI : MonoBehaviour
 
     void Update()
     {
+        if (_isVictoryHold) { UpdateVictoryHold(); return; }
         if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) { ToggleDebugRemote(); return; }
         if (_showDebugRemote) return;
@@ -358,7 +363,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>시전 결과의 적 강조를 시간에 따라 흐리게 한다.</summary>
     private void UpdateFeedback()
     {
-        if (_game.CurrentPhase != SpellGame.Phase.Combat) return;
+        if (_game.CurrentPhase != SpellGame.Phase.Combat && !_isVictoryHold) return;
         float remaining = _feedbackUntil - Time.unscaledTime;
         SpellEnemyView[] enemies = _combatScreen.Enemies;
         float alpha = remaining > 0 ? 0.32f * Mathf.Clamp01((remaining - 1.05f) / 0.45f) : 0;
@@ -427,6 +432,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>현재 게임 단계에 맞춰 화면을 갱신한다. 전투 화면은 다시 만들지 않고 값만 갱신한다.</summary>
     private void Render()
     {
+        _isVictoryHold = false;
         if (_pendingCast >= 0 && (_game.CurrentPhase != SpellGame.Phase.Combat || !_game.IsComplete(_pendingCast) || _game.IsSealed(_pendingCast))) _pendingCast = -1;
         CloseGlue(); CloseHammer(); CloseSealWorkbench();
         _boardGraphic.CancelDrag();
@@ -1215,7 +1221,31 @@ public sealed class SpellGameUI : MonoBehaviour
         _pendingCast = -1; ClearSelection();
         _impactHits = new bool[_game.Enemies.Count];
         foreach (int hit in _game.LastCastHits) if (hit >= 0 && hit < _impactHits.Length) _impactHits[hit] = true;
-        _message = ""; ShowFeedback(result, PatternColor(board)); Render();
+        _message = ""; ShowFeedback(result, PatternColor(board));
+        if (_game.CurrentPhase != SpellGame.Phase.Combat) { BeginVictoryHold(); return; }
+        Render();
+    }
+
+    /// <summary>시전으로 전투가 끝나면 보상 화면으로 바로 넘어가지 않고, 전투 화면에 적 상태만 갱신한 채 연출이 끝날 때까지 기다린다.</summary>
+    private void BeginVictoryHold()
+    {
+        _isVictoryHold = true; _victoryHoldUntil = -1;
+        HideTooltips(); HideAim();
+        RefreshEnemies();
+        _combatScreen.PlayerStatus.Bind(_game.Health, _game.MaxHealth, _game.Block, 0);
+        _combatScreen.Toast.Show(_feedback, FEEDBACK_POSITION, Math.Max(0.1f, _feedbackUntil - Time.unscaledTime), _feedbackColor, false);
+        _feedbackShownVersion = _feedbackVersion;
+    }
+
+    /// <summary>시전 연출이 끝나고 VICTORY_HOLD_SECONDS가 지나면 보상 화면을 연다. 그동안 입력은 받지 않는다.</summary>
+    private void UpdateVictoryHold()
+    {
+        UpdateFeedback();
+        if (_castEffects != null && _castEffects.IsPlaying) return;
+        if (_victoryHoldUntil < 0) _victoryHoldUntil = Time.unscaledTime + VICTORY_HOLD_SECONDS;
+        if (Time.unscaledTime < _victoryHoldUntil) return;
+        if (_castEffects != null) _castEffects.Clear();
+        Render();
     }
 
     /// <summary>완성된 도안 버튼 클릭으로 해당 주문의 시전을 시작한다.</summary>
