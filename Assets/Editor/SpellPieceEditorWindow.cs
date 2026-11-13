@@ -15,7 +15,7 @@ public sealed class SpellPieceEditorWindow : EditorWindow
     private const float MESSAGE_HEIGHT = 120f;
 
     // 망치 분해 형상과 점토 채우기 코드가 이 도형들의 모양을 전제하므로 칸 편집을 막는다.
-    private static readonly SpellGame.Shape[] LOCKED_SHAPES = { SpellGame.Shape.Square, SpellGame.Shape.Triangle, SpellGame.Shape.Rectangle, SpellGame.Shape.QuarterTriangle, SpellGame.Shape.Clay };
+    private static readonly SpellGame.Shape[] LOCKED_SHAPES = { SpellGame.Shape.Clay };
     private static readonly SpellGame.Shape[] SHAPES = (SpellGame.Shape[])Enum.GetValues(typeof(SpellGame.Shape));
     private static readonly string[] ROTATION_LABELS = { "0°", "90°", "180°", "270°" };
     private static readonly Color PIECE_COLOR = new Color(0.72f, 0.9f, 0.94f);
@@ -147,12 +147,13 @@ public sealed class SpellPieceEditorWindow : EditorWindow
         piece.Name = EditorGUILayout.TextField("이름", piece.Name);
         piece.Rotation = (SpellPieceData.RotationMode)EditorGUILayout.EnumPopup(new GUIContent("회전 방식", "MirrorAlternate는 2·3 방향에 좌우를 뒤집은 모양을 씁니다."), piece.Rotation);
         piece.IsInRewardPool = EditorGUILayout.Toggle("보상 후보", piece.IsInRewardPool);
+        piece.DecompositionPriority = Math.Max(0, EditorGUILayout.IntField(new GUIContent("분해 재료 우선순위", "작은 값의 도형을 분해 결과로 우선 사용합니다. 분해 위치와 개수는 실제 모양에서 자동 계산합니다."), piece.DecompositionPriority));
         DrawStarterCount(piece);
         bool isChanged = EditorGUI.EndChangeCheck();
 
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("칸 모양 (기본 방향)", EditorStyles.boldLabel);
-        if (isLocked) EditorGUILayout.HelpBox("망치 분해·점토 규칙이 이 모양을 전제하므로 칸을 편집할 수 없습니다.", MessageType.Info);
+        if (isLocked) EditorGUILayout.HelpBox("점토는 전용 변형 규칙을 사용하므로 칸을 편집할 수 없습니다.", MessageType.Info);
         Rect grid = GUILayoutUtility.GetRect(SpellGridDrawer.CELL_SIZE * SpellDataStore.GRID_SIZE, SpellGridDrawer.CELL_SIZE * SpellDataStore.GRID_SIZE, GUILayout.ExpandWidth(false));
         isChanged |= SpellGridDrawer.DrawEditable(grid, piece.Cells, PIECE_COLOR, isLocked);
         if (!isLocked) EditorGUILayout.LabelField("클릭: 가까운 꼭짓점 쪽 1/4 삼각형 · Shift+클릭: 칸 전체 · 우클릭: 칸 비우기", EditorStyles.wordWrappedMiniLabel);

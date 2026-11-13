@@ -262,19 +262,7 @@ public sealed class SpellGame
         }
     }
 
-    // 도형별 한 단계 분해 결과(도형, 방향, 원본 기본 방향 기준 왼쪽 위 칸). 빈 배열은 더 나눌 수 없는 도형이다.
-    private static readonly Fragment[][] BASE_SPLITS = {
-        new[] { new Fragment(Shape.Triangle, 0, 1, 0), new Fragment(Shape.Triangle, 2, 0, 0) },
-        new[] { new Fragment(Shape.QuarterTriangle, 0, 0, 0), new Fragment(Shape.QuarterTriangle, 1, 0, 1) },
-        new[] { new Fragment(Shape.Square, 0, 0, 0), new Fragment(Shape.Square, 0, 1, 1) },
-        new Fragment[0],
-        new[] { new Fragment(Shape.QuarterTriangle, 1, 0, 0), new Fragment(Shape.QuarterTriangle, 3, 0, 0) },
-        new[] { new Fragment(Shape.Triangle, 1, 0, 0), new Fragment(Shape.Triangle, 3, 1, 0) },
-        new[] { new Fragment(Shape.Triangle, 1, 0, 0), new Fragment(Shape.Triangle, 2, 1, 0) },
-        new[] { new Fragment(Shape.QuarterTriangle, 2, 1, 0), new Fragment(Shape.Square, 0, 0, 0) },
-        new[] { new Fragment(Shape.Square, 0, 1, 0), new Fragment(Shape.Triangle, 3, 2, 1), new Fragment(Shape.Triangle, 3, 0, 1) },
-        new[] { new Fragment(Shape.Square, 0, 1, 0), new Fragment(Shape.Rectangle, 0, 0, 1) },
-        new Fragment[0] };
+    private static readonly Dictionary<int, Fragment[]> SPLIT_CACHE = new Dictionary<int, Fragment[]>();
     private static readonly int SHAPE_KIND_COUNT = Enum.GetValues(typeof(Shape)).Length;
     private static readonly int SEAL_KIND_COUNT = Enum.GetValues(typeof(Seal)).Length - 1;
     private static readonly int COATING_KIND_COUNT = Enum.GetValues(typeof(Coating)).Length - 1;
@@ -289,6 +277,7 @@ public sealed class SpellGame
     private static readonly bool[] SHAPE_MIRRORED;
     private static readonly Shape[] REWARD_SHAPES;
     private static readonly int[] STARTER_COUNTS;
+    private static readonly int[] DECOMPOSITION_PRIORITIES;
     private static readonly ShapeCell[][][] SHAPE_ORIENTATIONS;
 
     private readonly Random _random = new Random();
@@ -383,9 +372,11 @@ public sealed class SpellGame
         SHAPE_MIRRORED = new bool[SHAPE_KIND_COUNT];
         bool[] isReward = new bool[SHAPE_KIND_COUNT];
         STARTER_COUNTS = new int[SHAPE_KIND_COUNT];
+        DECOMPOSITION_PRIORITIES = new int[SHAPE_KIND_COUNT];
         foreach (SpellPieceData piece in SpellDataStore.LoadPieces().Pieces)
         {
             STARTER_COUNTS[(int)piece.Shape] = piece.StarterCount;
+            DECOMPOSITION_PRIORITIES[(int)piece.Shape] = piece.DecompositionPriority;
             int shape = (int)piece.Shape;
             BASE_SHAPES[shape] = new ShapeCell[piece.Cells.Count];
             for (int i = 0; i < piece.Cells.Count; i++) BASE_SHAPES[shape][i] = new ShapeCell(piece.Cells[i].X, piece.Cells[i].Y, piece.Cells[i].Mask);
@@ -889,56 +880,40 @@ public sealed class SpellGame
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 분해할 조각 하나를 선택하세요";
         if (card.IsUnique) return "고유 조각은 쪼갤 수 없습니다";
-        if (card.Glued == null && card.Shape == Shape.QuarterTriangle) return "1/4 삼각형은 가장 작은 조각이라 분해할 수 없습니다";
         int firstSplit = card.Glued != null ? 2 : SplitOnce(new Fragment(card.Shape, 0, 0, 0)).Length;
-        if (firstSplit == 0) return "이 도형은 더 분해할 수 없습니다";
+        if (firstSplit == 0) return "현재 도형으로 빈틈없이 나눌 수 없는 최소 조각입니다";
         return null;
     }
 
-    /// <summary>조각을 BASE_SPLITS 규칙으로 한 단계 나누고, 원본 조각의 방향과 위치를 적용해 루트 기본 방향 기준 자식 목록을 반환한다.</summary>
+    /// <summary>등록 도형의 실제 영역에서 분해 조합을 계산·캐시하고 원본의 방향·위치를 적용한 자식 목록을 반환한다.</summary>
     private static Fragment[] SplitOnce(Fragment fragment)
     {
-        Fragment[] baseSplit = BASE_SPLITS[(int)fragment.Shape];
-        Fragment[] result = new Fragment[baseSplit.Length];
-        IReadOnlyList<ShapeCell> parentBase = ShapeCells(fragment.Shape, 0), parentCells = ShapeCells(fragment.Shape, fragment.Rotation);
-        for (int c = 0; c < baseSplit.Length; c++)
+        if (fragment.Shape == Shape.Clay) return Array.Empty<Fragment>();
+        int key = (int)fragment.Shape * 4 + fragment.Rotation;
+        if (!SPLIT_CACHE.TryGetValue(key, out Fragment[] split))
         {
-            // 자식 칸을 원본 기본 방향에서 원본의 현재 방향으로 옮긴다.
-            IReadOnlyList<ShapeCell> childBase = ShapeCells(baseSplit[c].Shape, baseSplit[c].Rotation);
-            ShapeCell[] moved = new ShapeCell[childBase.Count];
-            int minX = int.MaxValue, minY = int.MaxValue;
-            for (int i = 0; i < childBase.Count; i++)
+            ulong[][] masks = new ulong[SHAPE_KIND_COUNT][];
+            for (int shape = 0; shape < masks.Length; shape++)
             {
-                int index = 0;
-                while (parentBase[index].X != baseSplit[c].X + childBase[i].X || parentBase[index].Y != baseSplit[c].Y + childBase[i].Y) index++;
-                int mask = 0;
-                for (int sector = 0; sector < 4; sector++)
-                    if ((childBase[i].Mask & (1 << sector)) != 0) mask |= 1 << RotateSector(fragment.Shape, fragment.Rotation, sector);
-                moved[i] = new ShapeCell(parentCells[index].X, parentCells[index].Y, mask);
-                minX = Math.Min(minX, moved[i].X); minY = Math.Min(minY, moved[i].Y);
+                masks[shape] = new ulong[4];
+                for (int rotation = 0; rotation < 4; rotation++) masks[shape][rotation] = ShapeBits((Shape)shape, rotation);
             }
-            result[c] = new Fragment(baseSplit[c].Shape, MatchRotation(baseSplit[c].Shape, moved, minX, minY), fragment.X + minX, fragment.Y + minY);
+            SpellShapePartitioner.Part[] parts = SpellShapePartitioner.Split(masks[(int)fragment.Shape][fragment.Rotation], masks, LOCAL_SIZE, (int)Shape.Clay, DECOMPOSITION_PRIORITIES);
+            split = new Fragment[parts.Length];
+            for (int i = 0; i < parts.Length; i++) split[i] = new Fragment((Shape)parts[i].Shape, parts[i].Rotation, parts[i].X, parts[i].Y);
+            SPLIT_CACHE.Add(key, split);
         }
+        Fragment[] result = new Fragment[split.Length];
+        for (int i = 0; i < result.Length; i++) result[i] = new Fragment(split[i].Shape, split[i].Rotation, fragment.X + split[i].X, fragment.Y + split[i].Y);
         return result;
     }
 
-    /// <summary>왼쪽 위가 (minX, minY)인 칸 목록과 같은 모양이 되는 도형 방향을 찾아 반환한다.</summary>
-    private static int MatchRotation(Shape shape, ShapeCell[] cells, int minX, int minY)
+    /// <summary>현재 도형·방향의 점유 구역을 4×4칸 비트맵으로 반환한다.</summary>
+    private static ulong ShapeBits(Shape shape, int rotation)
     {
-        for (int rotation = 0; rotation < 4; rotation++)
-        {
-            IReadOnlyList<ShapeCell> candidate = ShapeCells(shape, rotation);
-            if (candidate.Count != cells.Length) continue;
-            bool same = true;
-            foreach (ShapeCell cell in cells)
-            {
-                bool found = false;
-                foreach (ShapeCell other in candidate) if (other.X == cell.X - minX && other.Y == cell.Y - minY && other.Mask == cell.Mask) found = true;
-                if (!found) { same = false; break; }
-            }
-            if (same) return rotation;
-        }
-        throw new InvalidOperationException($"{shape} 분해 결과의 방향을 찾지 못했습니다");
+        ulong result = 0;
+        foreach (ShapeCell cell in ShapeCells(shape, rotation)) result |= (ulong)cell.Mask << ((cell.Y * LOCAL_SIZE + cell.X) * 4);
+        return result;
     }
 
     /// <summary>강도 0~1에서 첫 분해 이후 자식의 추가 분해 확률을 반환한다.</summary>
@@ -990,7 +965,11 @@ public sealed class SpellGame
         for (int i = 0; i < cells.Count; i++)
         {
             if (fragment.X + cells[i].X != seal.X || fragment.Y + cells[i].Y != seal.Y || (cells[i].Mask & (1 << seal.Sector)) == 0) continue;
-            mapped = new SealSpot(baseCells[i].X, baseCells[i].Y, ((seal.Sector - fragment.Rotation) % 4 + 4) % 4, seal.Seal); return true;
+            for (int sector = 0; sector < 4; sector++)
+                if (RotateSector(fragment.Shape, fragment.Rotation, sector) == seal.Sector)
+                {
+                    mapped = new SealSpot(baseCells[i].X, baseCells[i].Y, sector, seal.Seal); return true;
+                }
         }
         mapped = default; return false;
     }
@@ -1004,10 +983,14 @@ public sealed class SpellGame
         return smallestPieces;
     }
 
-    /// <summary>기본 도형을 모두 1/4 삼각형까지 나눴을 때의 조각 수, 즉 도형 면적을 1/4 삼각형 면적으로 나눈 값을 반환한다.</summary>
+    /// <summary>현재 도형 데이터의 공통 분해 규칙을 끝까지 적용했을 때의 결과 장수를 반환한다.</summary>
     private static int SmallestPieceCount(Shape shape)
     {
-        return ShapeArea(shape) / ShapeArea(Shape.QuarterTriangle);
+        Fragment[] parts = SplitOnce(new Fragment(shape, 0, 0, 0));
+        if (parts.Length == 0) return 1;
+        int count = 0;
+        foreach (Fragment part in parts) count += SmallestPieceCount(part.Shape);
+        return count;
     }
 
     /// <summary>강도에 따른 분해 결과로 덱 원본을 영구 교체하고 이벤트 작업 기회를 소모한다.</summary>
@@ -1046,7 +1029,7 @@ public sealed class SpellGame
         {
             for (int i = 0; i < fragments.Count; i++)
             {
-                int area = SmallestPieceCount(fragments[i].Shape);
+                int area = ShapeArea(fragments[i].Shape);
                 if (area > largest) { largest = area; effectIndex = i; ties = 1; }
                 else if (area == largest && _random.Next(++ties) == 0) effectIndex = i;
             }

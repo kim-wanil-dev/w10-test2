@@ -3,6 +3,7 @@
   "pieces": [
     {
       "shape": "Square",
+      "decompositionPriority": 0,
       "name": "마름모",
       "cells": [
         {
@@ -32,6 +33,7 @@
     },
     {
       "shape": "Triangle",
+      "decompositionPriority": 0,
       "name": "반칸 삼각형",
       "cells": [
         {
@@ -51,6 +53,7 @@
     },
     {
       "shape": "Rectangle",
+      "decompositionPriority": 0,
       "name": "직사각형",
       "cells": [
         {
@@ -95,6 +98,7 @@
     },
     {
       "shape": "QuarterTriangle",
+      "decompositionPriority": 0,
       "name": "1/4 삼각형",
       "cells": [
         {

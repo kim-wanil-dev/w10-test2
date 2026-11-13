@@ -225,6 +225,7 @@ public static class SpellDataStore
         {
             string label = $"조각 {piece.Shape}";
             if (piece.StarterCount < 0) errors.Add($"{label}: 기본 덱 장수는 0 이상이어야 합니다");
+            if (piece.DecompositionPriority < 0) errors.Add($"{label}: 분해 후보 우선순위는 0 이상이어야 합니다");
             starterTotal += Math.Max(0, piece.StarterCount);
             // 보상은 점토를 뺀 도형을 반드시 뽑을 수 있어야 한다.
             hasNormalReward |= piece.IsInRewardPool && piece.Shape != SpellGame.Shape.Clay;
