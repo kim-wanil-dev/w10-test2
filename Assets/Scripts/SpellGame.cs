@@ -128,6 +128,8 @@ public sealed class SpellGame
         public IReadOnlyList<SealSpot> Seals { get { return SealList; } }
         public GluedShape Glued { get; internal set; }
         public bool IsContaminated { get; internal set; }
+        // 회수 씰링으로 손패에 들어온 이번 전투 임시 복사본이다. 시전에 쓰이거나 턴이 끝나 버려지면 버림 더미에 가지 않고 사라진다.
+        public bool IsRecallCopy { get; internal set; }
         public bool IsUnique { get { return Glued == null && Shape == Shape.Clay; } }
     }
 
@@ -1161,6 +1163,8 @@ public sealed class SpellGame
     /// <summary>카드를 버림 더미로 보낸다. 절도 목표 소멸은 다음 목표 조회에서 처리한다.</summary>
     private void Discard(Card card)
     {
+        // 회수 복사본은 덱에 쌓이지 않도록 버리는 순간 사라진다.
+        if (card.IsRecallCopy) return;
         _discard.Add(card);
     }
 
@@ -1305,7 +1309,80 @@ public sealed class SpellGame
                 int score = (completes ? 100 : 0) + BitCount(pivot.Mask);
                 if (score > bestScore) { best = mask; bestScore = score; }
             }
+        return best ?? ClayGapMask(allowed, coverage, x, y);
+    }
+
+    /// <summary>1칸 모양이 들어가지 않을 때, 칸 (x, y)에 닿은 빈 구역 덩어리 중 1칸(4구역) 이하인 가장 큰 덩어리를 그대로 채우는 마스크를 반환한다. 없으면 null이다.</summary>
+    private static int[] ClayGapMask(int[] allowed, int[] coverage, int x, int y)
+    {
+        bool IsEmpty(int cx, int cy, int s)
+        {
+            if (cx < 0 || cx >= LOCAL_SIZE || cy < 0 || cy >= LOCAL_SIZE) return false;
+            int index = cy * LOCAL_SIZE + cx;
+            return (allowed[index] & (1 << s)) != 0 && coverage[index * 4 + s] == 0;
+        }
+        int[] best = null; int bestCount = 0;
+        HashSet<int> visited = new HashSet<int>();
+        for (int start = 0; start < 4; start++)
+        {
+            int startKey = (y * LOCAL_SIZE + x) * 4 + start;
+            if (!IsEmpty(x, y, start) || visited.Contains(startKey)) continue;
+            // 같은 칸의 이웃 구역과 변을 맞댄 옆 칸 구역으로 이어지는 빈 구역 덩어리를 모은다.
+            List<int> component = new List<int>(); Queue<int> queue = new Queue<int>();
+            queue.Enqueue(startKey); visited.Add(startKey);
+            while (queue.Count > 0)
+            {
+                int key = queue.Dequeue(); component.Add(key);
+                int cell = key / 4, s = key % 4, cx = cell % LOCAL_SIZE, cy = cell / LOCAL_SIZE;
+                int ax = cx + (s == 1 ? 1 : s == 3 ? -1 : 0), ay = cy + (s == 2 ? 1 : s == 0 ? -1 : 0);
+                int[][] neighbors = { new[] { cx, cy, (s + 1) % 4 }, new[] { cx, cy, (s + 3) % 4 }, new[] { ax, ay, (s + 2) % 4 } };
+                foreach (int[] n in neighbors)
+                {
+                    if (!IsEmpty(n[0], n[1], n[2])) continue;
+                    int next = (n[1] * LOCAL_SIZE + n[0]) * 4 + n[2];
+                    if (visited.Add(next)) queue.Enqueue(next);
+                }
+            }
+            if (component.Count > 4 || component.Count <= bestCount) continue;
+            int[] mask = new int[CELL_COUNT];
+            foreach (int key in component) mask[key / 4] |= 1 << (key % 4);
+            best = mask; bestCount = component.Count;
+        }
         return best;
+    }
+
+    /// <summary>순수 판정에 쓰는 조각의 도형이다. 점토는 놓인 모양과 같은 기본 도형(회전·뒤집기 포함)으로 보고, 맞는 도형이 없으면 점토로 둔다.</summary>
+    private static Shape PurityShape(Placement placement)
+    {
+        Card card = placement.Card;
+        if (card.Glued != null || card.Shape != Shape.Clay) return card.Shape;
+        string placed = NormalizedKey(placement.Mask);
+        for (int shape = 0; shape < BASE_SHAPES.Length; shape++)
+        {
+            if (shape == (int)Shape.Clay || BASE_SHAPES[shape] == null) continue;
+            for (int mirror = 0; mirror < 2; mirror++) for (int rotation = 0; rotation < 4; rotation++)
+            {
+                ShapeCell[] cells = Rotate(mirror == 0 ? BASE_SHAPES[shape] : Mirror(BASE_SHAPES[shape]), rotation);
+                int minX = int.MaxValue, minY = int.MaxValue;
+                foreach (ShapeCell cell in cells) { minX = Math.Min(minX, cell.X); minY = Math.Min(minY, cell.Y); }
+                List<string> keys = new List<string>();
+                foreach (ShapeCell cell in cells) keys.Add((cell.X - minX) + "," + (cell.Y - minY) + "," + cell.Mask);
+                keys.Sort();
+                if (string.Join("|", keys) == placed) return (Shape)shape;
+            }
+        }
+        return Shape.Clay;
+    }
+
+    /// <summary>도안 칸 마스크를 왼쪽 위가 (0, 0)이 되도록 옮긴 "x,y,mask" 정렬 문자열로 만든다.</summary>
+    private static string NormalizedKey(int[] mask)
+    {
+        int minX = int.MaxValue, minY = int.MaxValue;
+        for (int i = 0; i < mask.Length; i++) if (mask[i] != 0) { minX = Math.Min(minX, i % LOCAL_SIZE); minY = Math.Min(minY, i / LOCAL_SIZE); }
+        List<string> keys = new List<string>();
+        for (int i = 0; i < mask.Length; i++) if (mask[i] != 0) keys.Add((i % LOCAL_SIZE - minX) + "," + (i / LOCAL_SIZE - minY) + "," + mask[i]);
+        keys.Sort();
+        return string.Join("|", keys);
     }
 
     /// <summary>카드를 도안 기준 앵커와 방향으로 놓았을 때의 칸별 마스크 사본을 반환한다. 점토는 실제로 변할 모양이다. 놓을 수 없으면 null이다.</summary>
@@ -1547,11 +1624,12 @@ public sealed class SpellGame
         Board board = Boards[boardIndex]; int spell = board.Spell;
         SpellEvaluation e = new SpellEvaluation { Kind = PATTERNS[spell].Kind, Base = PATTERNS[spell].BaseValue };
         int counted = board.Pieces.Count, amplify = 0, guard = 0, resonance = 0, overpaint = 0, cog = 0, contamination = 0;
-        bool pure = board.Pieces.Count > 0; Shape first = board.Pieces.Count > 0 ? board.Pieces[0].Card.Shape : Shape.Square;
+        // 점토는 놓인 모양에 맞는 도형으로 순수를 판정한다.
+        bool pure = board.Pieces.Count > 0; Shape first = board.Pieces.Count > 0 ? PurityShape(board.Pieces[0]) : Shape.Square;
         foreach (Placement p in board.Pieces)
         {
             if (p.Card.IsContaminated) contamination += CONTAMINATION_PENALTY;
-            if (p.Card.Glued != null || p.Card.Shape != first) pure = false;
+            if (p.Card.Glued != null || PurityShape(p) != first) pure = false;
             if (p.Card.Coating == Coating.Amplify) amplify++;
             else if (p.Card.Coating == Coating.Guard) guard++;
             else if (p.Card.Coating == Coating.Cog)
@@ -1641,7 +1719,7 @@ public sealed class SpellGame
             Placement piece = board.Pieces[i];
             ResolveCurse(piece.Card, CurseResolution.Spell);
             int recalls = SealCount(piece.Card, Seal.Recall);
-            for (int k = 0; k < recalls; k++) recalled.Add(CopyCard(piece.Card, false));
+            for (int k = 0; k < recalls; k++) { Card copy = CopyCard(piece.Card, false); copy.IsRecallCopy = true; recalled.Add(copy); }
             Discard(piece.Card); board.MutablePieces.RemoveAt(i);
         }
         board.Completer = null;

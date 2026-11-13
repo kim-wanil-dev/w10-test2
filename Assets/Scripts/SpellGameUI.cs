@@ -137,6 +137,8 @@ public sealed class SpellGameUI : MonoBehaviour
     private static readonly Color BLOCK_VALUE_COLOR = new Color(0.55f, 0.78f, 1f);
     private static readonly Color SEALED_COLOR = new Color(0.62f, 0.52f, 0.95f);
     private static readonly Color CURSED_COLOR = new Color(0.9f, 0.25f, 0.25f);
+    // 소멸 조각 설명 색이다.
+    private static readonly Color VANISH_COLOR = new Color(1f, 0.62f, 0.38f);
     private bool _isVictoryHold;
     private float _victoryHoldUntil = -1;
     private SpellCastEffectGraphic _castEffects;
@@ -1406,7 +1408,8 @@ public sealed class SpellGameUI : MonoBehaviour
     private void ShowTraitTooltip(SpellGame.Card card, Vector2 screenPosition)
     {
         bool cursed = card != null && _game.IsCursed(card);
-        if (card == null || !CanShowTooltip || (!HasTraits(card) && !cursed))
+        bool recallCopy = card != null && card.IsRecallCopy;
+        if (card == null || !CanShowTooltip || (!HasTraits(card) && !cursed && !recallCopy))
         {
             if (_coatingTooltip != null) { _coatingTooltip.gameObject.SetActive(false); _sealTooltip.gameObject.SetActive(false); }
             return;
@@ -1426,6 +1429,12 @@ public sealed class SpellGameUI : MonoBehaviour
             leftColor = CURSED_COLOR;
         }
         List<string> lines = new List<string>();
+        // 소멸은 씰링·코팅처럼 하나의 조각 특성으로 오른쪽 설명 맨 위에 보여 준다.
+        if (recallCopy)
+        {
+            lines.Add($"<b><color=#{ColorUtility.ToHtmlStringRGB(VANISH_COLOR)}>● 소멸</color></b>\n회수로 만든 임시 조각 · 시전에 쓰거나 턴이 끝나면 사라짐");
+            rightColor = VANISH_COLOR;
+        }
         foreach (SpellGame.Seal seal in Enum.GetValues(typeof(SpellGame.Seal)))
         {
             int count = seal == SpellGame.Seal.None ? 0 : SpellGame.SealCount(card, seal);
@@ -1738,7 +1747,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         switch (seal)
         {
-            case SpellGame.Seal.Recall: return "시전 후 회수 씰링을 뺀 복사본 1장을 손패로 가져옴 (이번 전투 동안)";
+            case SpellGame.Seal.Recall: return "시전 후 회수 씰링을 뺀 복사본 1장을 손패로 가져옴 · 복사본은 쓰거나 턴이 끝나면 사라짐";
             case SpellGame.Seal.Shard: return $"시전 시 무작위 적에게 {SpellGame.SHARD_DAMAGE} 피해";
             case SpellGame.Seal.Refill: return "시전 시 조각 1장 뽑기";
             case SpellGame.Seal.Overpaint: return "조각 전체를 놓인 조각 위에 한 겹 겹쳐 놓을 수 있음 · 수치 +2";
