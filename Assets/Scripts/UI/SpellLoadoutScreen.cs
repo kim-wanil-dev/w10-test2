@@ -163,6 +163,8 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
     }
 
     /// <summary>보관함 카드와 격자를 현재 배치로 다시 그리고 안내를 기본 문구로 되돌린다.</summary>
+    public void SetContinueLabel(string label) { _start.SetLabel(label); }
+
     public void Refresh()
     {
         List<int> stored = new List<int>();

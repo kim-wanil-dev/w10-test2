@@ -550,6 +550,7 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         if (_renderedPhase != SpellGame.Phase.Loadout && _game.LastAcquiredPattern >= 0) _layout.TryAutoPlace(_game.LastAcquiredPattern, PlacedOwned());
         _loadoutScreen.Refresh();
+        _loadoutScreen.SetContinueLabel(_game.Battle == 4 ? "휴식으로" : _game.Battle == 2 || _game.Battle == 3 ? "이벤트로" : "전투 시작");
     }
 
     /// <summary>보유 도안 중 격자에 놓인 도안 목록을 반환한다.</summary>
@@ -2860,6 +2861,7 @@ public sealed class SpellGameUI : MonoBehaviour
         board.gameObject.AddComponent<CanvasRenderer>();
         _glueGraphic = board.gameObject.AddComponent<SpellGlueGraphic>();
         _glueGraphic.Setup(this, _boardGraphic.EmptyColor, _boardGraphic.GridLineColor, _boardGraphic.CellGap);
+        _glueGraphic.SetReferencePatterns(_layout, _game.Spells, PatternColor);
         RectTransform hint = Element("Glue Status", _glueOverlay, 825, 175, 400, 110);
         _glueHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
         _glueHint.font = _font; _glueHint.fontSize = 20; _glueHint.color = Color.white; _glueHint.raycastTarget = false;
