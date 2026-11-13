@@ -39,6 +39,11 @@ public sealed class SpellPiece3D : MonoBehaviour
     private MeshRenderer _pin, _pinBase;
     private bool _isLocked;
     private Color _tint;
+    // 놓았을 때 튀는 크기와 시간이다.
+    private const float POP_AMOUNT = 0.12f;
+    private const float POP_SECONDS = 0.28f;
+    private float _popStart = -1f;
+    private Vector3 _popScale = Vector3.one;
 
     private readonly List<MeshRenderer> _sealDots = new List<MeshRenderer>();
     private MeshRenderer _crack;
@@ -377,6 +382,22 @@ public sealed class SpellPiece3D : MonoBehaviour
         if (_card.IsUnique) ShowClay(null); else SetCells(cells, seals);
         transform.localScale = Vector3.one * scale;
         transform.rotation = rotation;
+    }
+
+    /// <summary>놓인 자리에서 한 번 커졌다가 제 크기로 돌아온다. 조각을 놓았다는 손맛을 준다.</summary>
+    public void Pop()
+    {
+        _popStart = Time.unscaledTime; _popScale = transform.localScale;
+    }
+
+    void Update()
+    {
+        if (_popStart < 0) return;
+        float t = (Time.unscaledTime - _popStart) / POP_SECONDS;
+        // 놓인 상태가 아니게 됐으면(집었거나 손패로 갔으면) 다른 코드가 정한 크기를 건드리지 않는다.
+        if (_isHand || _placement == null) { _popStart = -1f; return; }
+        if (t >= 1) { transform.localScale = _popScale; _popStart = -1f; return; }
+        transform.localScale = _popScale * (1f + POP_AMOUNT * SpellEase.Punch(t) * 2f);
     }
 
     /// <summary>현재 조각의 물리 표시 색을 지정 색으로 갱신한다. 고정 조각은 어둡고 탁하게 낮춘다.</summary>

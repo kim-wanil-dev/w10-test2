@@ -18,6 +18,8 @@ public sealed class SpellTable3D : MonoBehaviour
     private static readonly Vector3 WORLD_ORIGIN = new Vector3(1000, 0, 0);
     private static readonly Color NORMAL_COLOR = new Color(0.77f, 0.82f, 0.84f);
     private static readonly Color CLAY_COLOR = new Color(0.72f, 0.56f, 0.44f);
+    private const float SHADOW_STRENGTH = 0.55f;
+    private const float CAMERA_DISTANCE = 15f;
 
     [Header("테이블 카메라")]
     [SerializeField, Range(55f, 90f)] private float _cameraAngle = 90f;
@@ -90,6 +92,7 @@ public sealed class SpellTable3D : MonoBehaviour
     private Vector2Int _autoCell;
     private bool _hasAutoCell;
     private bool _isAutoRotateLocked;
+    private Vector3 _shakeOffset;
 
     public bool IsDragging { get { return _picked != null || _castSource >= 0 || _dragTemplate >= 0; } }
 
@@ -113,6 +116,8 @@ public sealed class SpellTable3D : MonoBehaviour
         Light light = CreateRoot("Table Key Light", _world).gameObject.AddComponent<Light>();
         light.type = LightType.Directional; light.intensity = 0.8f; light.color = new Color(1f, 0.91f, 0.77f);
         light.cullingMask = 1 << TABLE_LAYER; light.transform.rotation = Quaternion.Euler(52, -25, 0);
+        // 조각이 판과 손패 받침 위에 부드러운 그림자를 드리워 떠 있는 높이가 읽히게 한다.
+        light.shadows = LightShadows.Soft; light.shadowStrength = SHADOW_STRENGTH; light.shadowBias = 0.02f; light.shadowNormalBias = 0.2f;
         _boardRoot = _world.Find("Grid 3 x 4");
         _handRoot = _world.Find("Physical Hand");
         Transform boardSurface = _boardRoot.Find("Board slab");
@@ -261,12 +266,31 @@ public sealed class SpellTable3D : MonoBehaviour
     private void ConfigureCamera()
     {
         _camera.transform.rotation = Quaternion.Euler(_cameraAngle, 0, 0);
-        _camera.transform.position = WORLD_ORIGIN - _camera.transform.forward * 15f;
+        _camera.transform.position = WORLD_ORIGIN - _camera.transform.forward * CAMERA_DISTANCE + _shakeOffset;
         _camera.orthographicSize = _cameraSize;
         _boardRoot.position = ViewportOnTable(ViewportCenter(_screen.Board.rectTransform)) + _boardPan;
         _handRoot.position = ViewportOnTable(ViewportCenter(_screen.HandDropArea));
         FitHandTray();
         _lastAngle = _cameraAngle; _lastAspect = _camera.aspect;
+    }
+
+    /// <summary>화면 흔들림(캔버스 단위)을 카메라에 반영해 3D 판과 손패가 UI와 함께 흔들리게 한다. 0이면 제자리로 돌아온다.</summary>
+    public void SetShake(Vector2 canvasOffset)
+    {
+        if (_camera == null) return;
+        // 캔버스 한 단위가 책상에서 몇 유닛인지 구한다. 화면 세로 전체가 카메라 세로 범위(2 × orthographicSize)다.
+        Canvas canvas = _screen.GetComponentInParent<Canvas>();
+        float canvasHeight = canvas != null && canvas.rootCanvas.scaleFactor > 0 ? Screen.height / canvas.rootCanvas.scaleFactor : 1080f;
+        float unitsPerCanvasUnit = _camera.orthographicSize * 2f / Mathf.Max(1f, canvasHeight);
+        // UI가 오른쪽·위로 움직이면 책상도 그렇게 보이도록 카메라는 반대로 옮긴다.
+        _shakeOffset = -(_camera.transform.right * canvasOffset.x + _camera.transform.up * canvasOffset.y) * unitsPerCanvasUnit;
+        _camera.transform.position = WORLD_ORIGIN - _camera.transform.forward * CAMERA_DISTANCE + _shakeOffset;
+    }
+
+    /// <summary>방금 놓은 조각을 살짝 튀어 오르게 한다.</summary>
+    public void PopPiece(SpellGame.Card card)
+    {
+        if (card != null && _pieces.TryGetValue(card.Id, out SpellPiece3D piece)) piece.Pop();
     }
 
     /// <summary>손패 놓기 영역의 화면 범위를 책상면에 투영해 손패 받침의 가로·세로 길이를 맞춘다.</summary>
@@ -1036,7 +1060,11 @@ public sealed class SpellTable3D : MonoBehaviour
             if (Mathf.Abs(local.x) < _handSurface.localScale.x * 0.5f && Mathf.Abs(local.z) < _handSurface.localScale.z * 0.5f) changed = _game.Recall(piece.Board, piece.Placement);
         }
         _picked = null; _isClickSelected = _isHolding = false;
+        int placedOn = changed ? _destination : -1;
+        SpellGame.Card placedCard = piece.Card;
         if (changed) _ui.TableChanged(); else RestorePiece(piece);
+        // 도안 위에 놓았으면 놓인 자리에서 반응 연출을 낸다(손패로 되돌린 경우는 제외).
+        if (placedOn >= 0) _ui.PiecePlaced(placedCard, placedOn);
     }
 
     /// <summary>취소한 조각을 모델 위치로 복원하고 손패 조각은 예약 자리에서 다시 내려놓는다.</summary>

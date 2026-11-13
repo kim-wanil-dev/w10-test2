@@ -127,8 +127,13 @@ public sealed class SpellGameUI : MonoBehaviour
     private const float TRAIT_STEP_SECONDS = 0.3f;
     private const float ATTACK_AFTER_TRAITS_SECONDS = 0.45f;
     // 공격 연출이 시작된 뒤 적에 닿을 때까지의 대략적인 시간이다. 적 피격 번쩍임과 증폭·톱니 타격 표시를 여기에 맞춘다.
-    private const float HIT_IMPACT_SECONDS = 0.3f;
     private const float IMPACT_FLASH_SECONDS = 0.45f;
+    // 적 뒤에 깔리는 타격 강조 판의 가장 짙을 때 투명도다. 적 자신이 흔들리며 번쩍이므로 옅게 둔다.
+    private const float IMPACT_FLASH_ALPHA = 0.14f;
+    // 방어 연출이 시작된 뒤 얻은 방어도 숫자가 떠오르기까지의 시간이다.
+    private const float BLOCK_FLOAT_SECONDS = 0.18f;
+    // 적들이 차례로 행동하는 간격이다.
+    private const float ENEMY_ACT_STEP_SECONDS = 0.14f;
     private float _impactStart;
     // 도안 설명 패널과 그 안의 예상 수치·상태 띠 색이다. 저주 색은 3D 판의 저주 조각 붉은 색조와 맞춘다.
     private SpellPatternTooltipView _patternTooltip;
@@ -141,6 +146,13 @@ public sealed class SpellGameUI : MonoBehaviour
     private bool _isVictoryHold;
     private float _victoryHoldUntil = -1;
     private SpellCastEffectGraphic _castEffects;
+    private SpellJuice _juice;
+    private SpellBackdropGraphic _backdrop;
+    private SpellScreenIntro _titleIntro, _resultIntro, _encounterIntro;
+    private UnityEngine.UI.Text _resultDetail, _resultTitle;
+    // 단계가 바뀔 때와 게임을 처음 켰을 때 바탕색에서 화면이 나타나는 시간이다.
+    private const float PHASE_FADE_SECONDS = 0.3f;
+    private const float STARTUP_FADE_SECONDS = 0.5f;
 
     private bool _showHelp;
     private int _openPile = -1;
@@ -224,7 +236,9 @@ public sealed class SpellGameUI : MonoBehaviour
         _layout = new SpellPatternLayout();
         _patternColorValues = new Color[SpellGame.PatternCount];
         for (int i = 0; i < _patternColorValues.Length; i++) SpellDataStore.ParseColor(SpellGame.PatternColorCode(i), out _patternColorValues[i]);
-        _font = Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 24);
+        // 코드로 만드는 요소도 프리팹 화면과 같은 글꼴·둥근 판 그림을 쓰도록 먼저 찾아 둔다. 못 찾으면 시스템 글꼴을 쓴다.
+        SpellStyle.Capture(_canvas.transform, Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 24));
+        _font = SpellStyle.Sans;
         // 작업대·도둑손·봉인 표시처럼 기존 1280×720 좌표로 그리는 요소의 층이다. 전투 화면 바로 위, 오버레이 아래에 둔다.
         _root = Element("Legacy Layer", _content, 0, 0, 1280, 720);
         _root.anchorMin = _root.anchorMax = _root.pivot = new Vector2(0.5f, 0.5f);
@@ -245,7 +259,40 @@ public sealed class SpellGameUI : MonoBehaviour
         SetupCastEffects();
         SpellTagTooltip.Create(_content, _font);
         SetupFeatureControls();
+        SetupJuice();
         Render();
+    }
+
+    /// <summary>화면 흔들림·번쩍임·떠오르는 숫자를 맡는 연출 관리자와 배경 연출, 버튼 반응, 창 나타남 연출을 붙인다.</summary>
+    private void SetupJuice()
+    {
+        _juice = SpellJuice.Create((RectTransform)_canvas.transform, _content, _table.SetShake);
+        // 전투가 아닌 화면의 바탕: 천천히 떠다니는 조각 무늬와 빛 알갱이, 가장자리 그늘.
+        _backdrop = SpellBackdropGraphic.Create((RectTransform)_background.transform, SpellBackdropGraphic.Mode.Screen);
+        // 전투 화면: 전장 위쪽에 빛 알갱이를, 책상과 전장 전체에 가장자리 그늘을 깐다. 모든 전투 요소보다 아래에 둔다.
+        RectTransform combat = (RectTransform)_combatScreen.transform;
+        SpellBackdropGraphic field = SpellBackdropGraphic.Create(combat, SpellBackdropGraphic.Mode.Field);
+        field.transform.SetSiblingIndex(Mathf.Min(3, combat.childCount - 1));
+        foreach (UnityEngine.UI.Button button in _canvas.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+        {
+            // 적 클릭 영역은 화면에 보이지 않는 넓은 영역이라 버튼 반응을 주지 않는다.
+            if (button.GetComponent<SpellEnemyHover>() != null) continue;
+            // 보상 카드는 보상 화면이 크기를 직접 정하고 끌기 입력도 따로 받으므로 건드리지 않는다.
+            if (button.GetComponentInParent<SpellRewardCardView>(true) != null) continue;
+            SpellButtonFeel.Attach(button.gameObject);
+        }
+        SpellButtonFeel.Attach(_titleScreen.StartButton.gameObject, pulse: true);
+        foreach (SpellCastButtonView cast in _combatScreen.CastButtons) SpellButtonFeel.Attach(cast.gameObject, pulse: true, popOnEnable: true);
+        // 겹쳐 뜨는 창은 켜질 때 살짝 커지며 나타난다.
+        foreach (Component overlay in new Component[] { _pauseMenu, _helpPanel, _pileViewer })
+        {
+            Transform panel = overlay.transform.Find("Panel");
+            if (panel != null) SpellPopIn.Attach(panel.gameObject, 0.94f, 0.18f);
+        }
+        SpellPopIn.Attach(_combatScreen.MoreMenu.gameObject, 0.9f, 0.12f);
+        _titleIntro = SpellScreenIntro.Attach(_titleScreen.gameObject);
+        _resultIntro = SpellScreenIntro.Attach(_resultScreen.gameObject);
+        _encounterIntro = SpellScreenIntro.Attach(_encounterScreen.gameObject);
     }
 
     void OnEnable()
@@ -391,7 +438,7 @@ public sealed class SpellGameUI : MonoBehaviour
         // 공격 연출이 적에 닿는 시각부터 잠깐 번쩍였다가 흐려진다.
         float elapsed = Time.unscaledTime - _impactStart;
         SpellEnemyView[] enemies = _combatScreen.Enemies;
-        float alpha = elapsed >= 0 ? 0.32f * Mathf.Clamp01(1 - elapsed / IMPACT_FLASH_SECONDS) : 0;
+        float alpha = elapsed >= 0 ? IMPACT_FLASH_ALPHA * Mathf.Clamp01(1 - elapsed / IMPACT_FLASH_SECONDS) : 0;
         for (int i = 0; i < enemies.Length; i++) enemies[i].SetImpact(_feedbackColor, i < _impactHits.Length && _impactHits[i] ? alpha : 0);
     }
 
@@ -441,16 +488,30 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         RectTransform rect = Element("Text", parent, x, y, width, height);
         UnityEngine.UI.Text text = rect.gameObject.AddComponent<UnityEngine.UI.Text>();
-        text.font = _font; text.text = value; text.fontSize = size; text.alignment = alignment; text.color = new Color(0.92f, 0.94f, 0.96f); text.raycastTarget = false;
+        text.font = _font; text.text = value; text.fontSize = size; text.alignment = alignment; text.color = SpellStyle.Cream; text.raycastTarget = false;
         text.horizontalOverflow = HorizontalWrapMode.Wrap; text.verticalOverflow = VerticalWrapMode.Overflow;
     }
 
-    /// <summary>텍스트와 클릭 동작을 가진 버튼을 만든다.</summary>
+    /// <summary>텍스트와 클릭 동작을 가진 버튼을 만든다. 프리팹 버튼과 같은 둥근 판·가는 테두리·굵은 글꼴을 쓰고 올림·눌림 반응을 붙인다.</summary>
     private RectTransform Button(RectTransform parent, string caption, float x, float y, float width, float height, Action action, Color? color = null, int fontSize = 18)
     {
-        RectTransform rect = Panel(parent, x, y, width, height, color ?? new Color(0.24f, 0.31f, 0.39f));
+        RectTransform rect = Panel(parent, x, y, width, height, color ?? SpellStyle.PanelRaised);
+        SpellStyle.Round(rect.GetComponent<UnityEngine.UI.Image>(), SpellStyle.Round8, color ?? SpellStyle.PanelRaised);
+        SpellStyle.AddRing(rect, SpellStyle.Ring8, SpellStyle.Line);
         UnityEngine.UI.Button button = rect.gameObject.AddComponent<UnityEngine.UI.Button>();
         button.onClick.AddListener(() => action()); Label(rect, caption, 4, 2, width - 8, height - 4, fontSize);
+        rect.GetComponentInChildren<UnityEngine.UI.Text>().font = SpellStyle.SansBold;
+        SpellButtonFeel.Attach(rect.gameObject);
+        return rect;
+    }
+
+    /// <summary>둥근 모서리와 가는 테두리를 가진 판을 만든다. 글 상자나 묶음 배경에 쓴다.</summary>
+    private RectTransform RoundedPanel(RectTransform parent, float x, float y, float width, float height, Color color, Color ring)
+    {
+        RectTransform rect = Panel(parent, x, y, width, height, color);
+        UnityEngine.UI.Image image = rect.GetComponent<UnityEngine.UI.Image>();
+        SpellStyle.Round(image, SpellStyle.Round14, color); image.raycastTarget = false;
+        SpellStyle.AddRing(rect, SpellStyle.Ring14, ring);
         return rect;
     }
 
@@ -487,9 +548,6 @@ public sealed class SpellGameUI : MonoBehaviour
                     : _game.HasSealReward
                         ? $"장인이 빛나는 씰링 하나를 건넵니다.\n\n받은 씰링: {SealName(_game.RewardSeal)}\n{SealDescription(_game.RewardSeal)}\n\n덱에서 원하는 조각에 붙일 수 있습니다."
                         : "씰링을 붙였습니다.\n바뀐 조각이 덱에 반영되었습니다.";
-            _encounterDescription.rectTransform.anchoredPosition = new Vector2(140, -270);
-            _encounterDescription.rectTransform.sizeDelta = new Vector2(480, 260);
-            _encounterDescription.alignment = TextAnchor.UpperLeft;
             int glueCount = 0;
             bool canHammer = false;
             foreach (SpellGame.Card card in _game.OwnedCards)
@@ -502,7 +560,7 @@ public sealed class SpellGameUI : MonoBehaviour
             _restChoice.gameObject.SetActive(rest);
             SetEncounterOption(_restChoice, _game.CanRest);
             SetEncounterOption(_sealEventChoice, _game.HasSealReward);
-            _sealEventChoice.GetComponentInChildren<UnityEngine.UI.Text>().text = $"씰링 붙이기 · {SealName(_game.RewardSeal)}\n덱의 조각과 빈 구역을 고릅니다";
+            _sealEventChoice.GetComponentInChildren<UnityEngine.UI.Text>().text = ChoiceText($"씰링 붙이기 · {SealName(_game.RewardSeal)}", "덱의 조각과 빈 구역을 고릅니다");
         }
         bool combat = phase == SpellGame.Phase.Combat;
         _background.SetActive(!combat);
@@ -519,40 +577,119 @@ public sealed class SpellGameUI : MonoBehaviour
         if (combat) RefreshCombat();
         else if (sealWorkbench) RenderSealWorkbench();
         else if (loadout) RefreshLoadout();
-        else if (result) _resultScreen.Bind(phase == SpellGame.Phase.Victory ? "승리" : "패배");
+        else if (result) RefreshResult(phase == SpellGame.Phase.Victory);
         RefreshFeatureControls();
         RefreshOverlays();
+        if (_renderedPhase != phase) OnPhaseChanged(_renderedPhase, phase);
         _renderedPhase = phase;
+    }
+
+    /// <summary>결과 화면의 제목과 이번 게임 요약을 채운다. 승리는 금색, 패배는 붉은빛 제목을 쓴다.</summary>
+    private void RefreshResult(bool victory)
+    {
+        _resultScreen.Bind(victory ? "승리" : "패배");
+        if (_resultDetail == null) return;
+        _resultDetail.text = victory
+            ? $"전투 {BATTLE_COUNT}개를 모두 돌파했습니다\n남은 체력 {_game.Health} / {_game.MaxHealth} · 덱 {_game.OwnedCards.Count}장"
+            : $"전투 {_game.Battle}에서 쓰러졌습니다\n덱 {_game.OwnedCards.Count}장";
+        if (_resultTitle != null) _resultTitle.color = victory ? SpellStyle.GoldBright : Color.Lerp(SpellStyle.Danger, SpellStyle.Cream, 0.3f);
+    }
+
+    /// <summary>단계가 바뀌면 이전 화면의 연출을 정리하고 새 화면을 바탕색에서 부드럽게 띄운다. 결과 화면은 승패에 맞는 순간 연출을 낸다.</summary>
+    private void OnPhaseChanged(SpellGame.Phase previous, SpellGame.Phase phase)
+    {
+        if (_juice == null) return;
+        _juice.Clear();
+        _juice.FadeIn((int)previous < 0 ? STARTUP_FADE_SECONDS : PHASE_FADE_SECONDS);
+        foreach (SpellEnemyView enemy in _combatScreen.Enemies) enemy.ResetPresentation();
+        _backdrop.SetMoteColor(phase == SpellGame.Phase.Defeat ? Color.Lerp(SpellStyle.Danger, SpellStyle.Gold, 0.3f) : SpellStyle.Gold);
+        if (phase == SpellGame.Phase.Victory)
+        {
+            // 순간 연출: 번쩍임 → 제목이 튀어나옴 → 색종이.
+            _juice.Flash(SpellStyle.GoldBright, 0.45f, 0.5f);
+            _juice.After(0.12f, () => _backdrop.Celebrate(SpellStyle.GoldBright, SpellStyle.Parchment, _flameColor, _guardColor));
+        }
+        else if (phase == SpellGame.Phase.Defeat) _juice.EdgeFlash(SpellStyle.Danger, 0.75f, 1.6f);
+        else if (phase == SpellGame.Phase.Combat) _juice.After(PHASE_FADE_SECONDS, () => _juice.Banner($"전투 {_game.Battle}", SpellStyle.Cream));
     }
 
     /// <summary>타이틀 시작·결과 다시 시작·보상 건너뛰기 버튼의 동작을 연결한다.</summary>
     private void SetupOtherScreens()
     {
-        _encounterScreen = Panel(_root, 0, 0, 1280, 720, new Color(0.08f, 0.1f, 0.15f));
+        // 바탕 연출이 비쳐 보이도록 화면 판 자체는 투명하게 두고, 제목·이야기 상자·선택지를 다른 화면과 같은 모양으로 놓는다.
+        _encounterScreen = Panel(_root, 0, 0, 1280, 720, new Color(0, 0, 0, 0));
         _encounterScreen.name = "Event and Rest Screen";
-        Label(_encounterScreen, "", 240, 170, 800, 90, 42);
+        Label(_encounterScreen, "", 240, 92, 800, 72, 46);
         _encounterTitle = _encounterScreen.GetComponentInChildren<UnityEngine.UI.Text>();
-        Label(_encounterScreen, "", 240, 285, 800, 100, 24);
-        _encounterDescription = _encounterScreen.GetChild(1).GetComponent<UnityEngine.UI.Text>();
-        _workshopChoices = Element("Workshop Choices", _encounterScreen, 700, 270, 440, 278);
-        _workshopHammer = Button(_workshopChoices, "[E] 분해\n덱의 조각 1장을 여러 조각으로 나눕니다", 0, 98, 440, 82, BeginHammer, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
-        _workshopGlue = Button(_workshopChoices, "[Q] 접착\n덱의 조각 2장을 하나로 붙입니다", 0, 0, 440, 82, BeginGlue, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
-        _restChoice = Button(_workshopChoices, "휴식\n최대 체력의 30% 회복", 0, 196, 440, 82, () => { if (_game.TryRest()) Render(); }, fontSize: 20).GetComponent<UnityEngine.UI.Button>();
-        _workshopHammer.gameObject.AddComponent<CanvasGroup>();
-        _workshopGlue.gameObject.AddComponent<CanvasGroup>();
-        _restChoice.gameObject.AddComponent<CanvasGroup>();
-        _sealEventChoice = Button(_encounterScreen, "씰링 붙이기", 700, 270, 440, 100, () => OpenCombatReward(SpellGame.RewardKind.Seal), fontSize: 20).GetComponent<UnityEngine.UI.Button>();
-        _sealEventChoice.gameObject.AddComponent<CanvasGroup>();
+        _encounterTitle.font = SpellStyle.Serif;
+        RectTransform divider = Panel(_encounterScreen, 480, 176, 320, 2, SpellStyle.Gold);
+        UnityEngine.UI.Image dividerImage = divider.GetComponent<UnityEngine.UI.Image>();
+        dividerImage.sprite = SpellStyle.FadeH; dividerImage.raycastTarget = false;
+        RectTransform story = RoundedPanel(_encounterScreen, 110, 226, 520, 304, SpellStyle.Alpha(SpellStyle.Panel, 0.88f), SpellStyle.Line);
+        Label(story, "", 30, 26, 460, 252, 21, TextAnchor.UpperLeft);
+        _encounterDescription = story.GetComponentInChildren<UnityEngine.UI.Text>();
+        _encounterDescription.lineSpacing = 1.25f;
+        _workshopChoices = Element("Workshop Choices", _encounterScreen, 680, 226, 490, 304);
+        _workshopGlue = Choice(_workshopChoices, ChoiceText("[Q] 접착", "덱의 조각 2장을 하나로 붙입니다"), 0, 0, 490, 90, BeginGlue);
+        _workshopHammer = Choice(_workshopChoices, ChoiceText("[E] 분해", "덱의 조각 1장을 여러 조각으로 나눕니다"), 0, 107, 490, 90, BeginHammer);
+        _restChoice = Choice(_workshopChoices, ChoiceText("휴식", "최대 체력의 30% 회복"), 0, 214, 490, 90, () => { if (_game.TryRest()) Render(); });
+        _sealEventChoice = Choice(_encounterScreen, ChoiceText("씰링 붙이기", ""), 680, 226, 490, 110, () => OpenCombatReward(SpellGame.RewardKind.Seal));
         DisableNavigation((RectTransform)_sealEventChoice.transform);
         DisableNavigation((RectTransform)_restChoice.transform);
         DisableNavigation((RectTransform)_workshopHammer.transform);
         DisableNavigation((RectTransform)_workshopGlue.transform);
-        Button(_encounterScreen, "계속", 490, 600, 300, 64, ContinueEncounter, fontSize: 26);
+        RectTransform proceed = Button(_encounterScreen, "계속", 490, 590, 300, 66, ContinueEncounter, SpellStyle.Button, 28);
+        proceed.GetComponentInChildren<UnityEngine.UI.Text>().font = SpellStyle.Serif;
+        proceed.GetComponentInChildren<UnityEngine.UI.Text>().color = SpellStyle.Parchment;
+        StyleFrame(proceed);
+        SetupResultDetail();
         _titleScreen.StartButton.SetAction(StartNewGame);
         _resultScreen.Restart.SetAction(() => StartRun(_isSealerRun, _isThiefRun, _isCurserRun, _isContaminatorRun));
         _rewardScreen.Skip.SetAction(LeaveRewardSelection);
         _loadoutScreen.Setup(_game, _layout, PatternColor, ShapeTint, card => HasTraits(card) ? AccentColor(card) : _subColor, TraitDescriptionText, SealColor,
             () => { ClearSelection(); _message = ""; Render(); }, ContinueFromLoadout);
+    }
+
+    /// <summary>이벤트·휴식 화면의 선택지 버튼을 만든다. 제목 줄은 크게, 설명 줄은 작고 옅게 보이며, 쓸 수 없을 때 흐리게 할 투명도 묶음을 함께 붙인다.</summary>
+    private UnityEngine.UI.Button Choice(RectTransform parent, string richText, float x, float y, float width, float height, Action action)
+    {
+        RectTransform rect = Button(parent, richText, x, y, width, height, action, SpellStyle.Button, 20);
+        UnityEngine.UI.Text label = rect.GetComponentInChildren<UnityEngine.UI.Text>();
+        label.supportRichText = true; label.lineSpacing = 1.15f; label.color = SpellStyle.Parchment;
+        StyleFrame(rect);
+        rect.gameObject.AddComponent<CanvasGroup>();
+        return rect.GetComponent<UnityEngine.UI.Button>();
+    }
+
+    /// <summary>선택지 문구를 큰 제목 줄과 작은 설명 줄로 꾸민다. 설명이 비어 있으면 제목만 쓴다.</summary>
+    private static string ChoiceText(string title, string detail)
+    {
+        return string.IsNullOrEmpty(detail) ? $"<size=25>{title}</size>" : $"<size=25>{title}</size>\n<size=17><color=#BDB4A0>{detail}</color></size>";
+    }
+
+    /// <summary>버튼의 테두리를 타이틀 시작 버튼과 같은 금색 가는 액자로 바꾼다.</summary>
+    private static void StyleFrame(RectTransform button)
+    {
+        Transform ring = button.Find("Ring");
+        if (ring == null || SpellStyle.FrameHairline == null) return;
+        UnityEngine.UI.Image image = ring.GetComponent<UnityEngine.UI.Image>();
+        image.sprite = SpellStyle.FrameHairline; image.color = Color.white;
+    }
+
+    /// <summary>결과 화면 제목 아래에 이번 게임 요약 줄을 만들고, 제목이 튀어나오듯 나타나게 한다.</summary>
+    private void SetupResultDetail()
+    {
+        Transform title = _resultScreen.transform.Find("Title");
+        if (title == null) return;
+        _resultTitle = title.GetComponent<UnityEngine.UI.Text>();
+        _resultDetail = Instantiate(_resultTitle, title.parent);
+        _resultDetail.name = "Detail";
+        _resultDetail.transform.SetSiblingIndex(title.GetSiblingIndex() + 1);
+        _resultDetail.font = SpellStyle.Sans; _resultDetail.fontSize = 26; _resultDetail.color = SpellStyle.Soft; _resultDetail.lineSpacing = 1.25f;
+        RectTransform rect = _resultDetail.rectTransform;
+        rect.anchoredPosition = _resultTitle.rectTransform.anchoredPosition + new Vector2(0, -128); rect.sizeDelta = new Vector2(rect.sizeDelta.x, 84);
+        SpellPopIn pop = SpellPopIn.Attach(_resultTitle.gameObject, 0.5f, 0.42f, false);
+        pop.Overshoot = true;
     }
 
     /// <summary>보상·배치 통합 화면을 갱신한다. 새로 얻은 도안은 화면에서 직접 놓은 자리에 이미 있다.</summary>
@@ -623,7 +760,8 @@ public sealed class SpellGameUI : MonoBehaviour
     private void SetupDebugRemote()
     {
         RectTransform title = (RectTransform)_titleScreen.transform;
-        Button(title, "개발자 모드 시작", 20, 20, 240, 48, StartDeveloperGame);
+        // 개발용 버튼은 타이틀의 주인공이 아니므로 옅게 둔다.
+        Button(title, "개발자 모드 시작", 20, 20, 240, 48, StartDeveloperGame).gameObject.AddComponent<CanvasGroup>().alpha = 0.45f;
         RectTransform combat = (RectTransform)_combatScreen.transform;
         Button(combat, "리모콘 (F2)", 20, 20, 180, 44, ToggleDebugRemote);
         Button(combat, "◀ 손패", 20, 75, 120, 40, () => { if (CanInteract) _table.ChangeHandPage(-1); });
@@ -649,36 +787,66 @@ public sealed class SpellGameUI : MonoBehaviour
     }
 
     /// <summary>방금 시전한 도안의 연출을 재생한다. 조각(코팅·씰링) 연출을 먼저 하나씩 차례로 보여 준 뒤 도안 공격 연출을 낸다. 공격 연출이 시작되기까지의 지연(초)을 반환한다.</summary>
-    private float PlayCastEffect(int board, SpellGame.SpellEvaluation evaluation, int guards)
+    private float PlayCastEffect(int board, SpellGame.SpellEvaluation evaluation, int guards, out float[] hitTimes)
     {
+        // hitTimes는 LastCastHits와 같은 순서로, 시전 순간부터 각 타격이 적에 닿기까지의 시간(초)이다.
+        hitTimes = new float[_game.LastCastHits.Count];
         if (_castEffects == null) return 0;
         // 파편 씰링 타격은 도안 연출 대신 파편 연출로 따로 그린다.
         List<RectTransform> hits = new List<RectTransform>(), shards = new List<RectTransform>();
+        List<int> hitIndices = new List<int>(), shardIndices = new List<int>();
         for (int i = 0; i < _game.LastCastHits.Count; i++)
         {
             int hit = _game.LastCastHits[i];
             if (hit < 0 || hit >= _combatScreen.Enemies.Length) continue;
-            if (_game.LastCastHitSources[i] == SpellGame.HitSource.Shard) shards.Add(_combatScreen.Enemies[hit].EffectAnchor);
-            else hits.Add(_combatScreen.Enemies[hit].EffectAnchor);
+            if (_game.LastCastHitSources[i] == SpellGame.HitSource.Shard) { shards.Add(_combatScreen.Enemies[hit].EffectAnchor); shardIndices.Add(i); }
+            else { hits.Add(_combatScreen.Enemies[hit].EffectAnchor); hitIndices.Add(i); }
         }
-        RectTransform player = (RectTransform)_combatScreen.PlayerStatus.transform;
+        RectTransform player = _combatScreen.PlayerStatus.Portrait;
         bool HasTerm(string name) { foreach (string term in evaluation.Terms) if (term.StartsWith(name)) return true; return false; }
         bool amplified = HasTerm("증폭"), cogged = HasTerm("톱니");
-        int traits = PlayTraitEffects(board, evaluation, guards, amplified, cogged, shards, player);
+        List<float> shardStarts = new List<float>();
+        int traits = PlayTraitEffects(board, evaluation, guards, amplified, cogged, shards, player, shardStarts);
         float attackDelay = traits > 0 ? (traits - 1) * TRAIT_STEP_SECONDS + ATTACK_AFTER_TRAITS_SECONDS : 0;
-        _castEffects.Play(SpellGame.PatternCastEffect(board), player, hits, evaluation.Block > 0, PatternColor(board), attackDelay);
+        SpellGame.CastEffect effect = SpellGame.PatternCastEffect(board);
+        _castEffects.Play(effect, player, hits, evaluation.Block > 0, PatternColor(board), attackDelay);
         // 증폭·톱니로 강해진 타격은 공격 연출이 적에 닿는 순간에 맞춰 적 위에 표시한다.
-        float hitTime = attackDelay + HIT_IMPACT_SECONDS;
+        float impact = SpellCastEffectGraphic.ImpactDelay(effect), stagger = SpellCastEffectGraphic.HitStagger(effect);
         for (int i = 0; i < hits.Count; i++)
         {
-            if (amplified) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.AmplifyHit, player, hits[i], hitTime + i * SpellCastEffectGraphic.HIT_STAGGER, CoatingColor(SpellGame.Coating.Amplify));
-            if (cogged) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.CogHit, player, hits[i], hitTime + i * SpellCastEffectGraphic.HIT_STAGGER, CoatingColor(SpellGame.Coating.Cog));
+            float hitTime = attackDelay + impact + i * stagger;
+            hitTimes[hitIndices[i]] = hitTime;
+            if (amplified) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.AmplifyHit, player, hits[i], hitTime, CoatingColor(SpellGame.Coating.Amplify));
+            if (cogged) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.CogHit, player, hits[i], hitTime, CoatingColor(SpellGame.Coating.Cog));
         }
+        for (int i = 0; i < shardIndices.Count; i++) hitTimes[shardIndices[i]] = shardStarts[i] + SpellCastEffectGraphic.SHARD_IMPACT_SECONDS;
         return attackDelay;
     }
 
-    /// <summary>시전에서 실제로 발동한 코팅·씰링 효과를 도안 자리에서 TRAIT_STEP_SECONDS 간격으로 하나씩 재생하고, 재생한 개수를 반환한다.</summary>
-    private int PlayTraitEffects(int board, SpellGame.SpellEvaluation e, int guards, bool amplified, bool cogged, List<RectTransform> shards, RectTransform player)
+    /// <summary>시전 결과를 연출이 닿는 순간에 맞춰 보여 주도록 예약한다. 적은 맞는 순간에 체력이 깎이며 반응하고, 얻은 방어도는 플레이어 위에 떠오른다. 화면을 갱신하기 전에 불러야 한다.</summary>
+    private void QueueCastFeedback(int board, SpellGame.SpellEvaluation evaluation, float attackDelay, float[] hitTimes)
+    {
+        float now = Time.unscaledTime;
+        Color color = PatternColor(board);
+        for (int i = 0; i < _game.LastCastHits.Count; i++)
+        {
+            int hit = _game.LastCastHits[i];
+            if (hit < 0 || hit >= _combatScreen.Enemies.Length) continue;
+            bool isShard = _game.LastCastHitSources[i] == SpellGame.HitSource.Shard;
+            _combatScreen.Enemies[hit].QueueHit(now + hitTimes[i], _game.LastCastHitDamages[i], isShard ? SealColor(SpellGame.Seal.Shard) : color);
+        }
+        if (evaluation.Block <= 0 || _juice == null) return;
+        SpellPlayerStatusView status = _combatScreen.PlayerStatus;
+        int block = evaluation.Block;
+        _juice.After(attackDelay + BLOCK_FLOAT_SECONDS, () =>
+        {
+            status.PlayGuard();
+            _juice.Float($"방어도 +{block}", status.Portrait, new Vector2(0, 124), SpellStyle.Guard, 34);
+        });
+    }
+
+    /// <summary>시전에서 실제로 발동한 코팅·씰링 효과를 도안 자리에서 TRAIT_STEP_SECONDS 간격으로 하나씩 재생하고, 재생한 개수를 반환한다. 파편 연출이 시작되는 시간은 shardStarts에 순서대로 담는다.</summary>
+    private int PlayTraitEffects(int board, SpellGame.SpellEvaluation e, int guards, bool amplified, bool cogged, List<RectTransform> shards, RectTransform player, List<float> shardStarts)
     {
         RectTransform origin = _combatScreen.CastButtons[board].Rect, hand = _combatScreen.HandDropArea;
         int order = 0;
@@ -690,7 +858,11 @@ public sealed class SpellGameUI : MonoBehaviour
         if (cogged) Next(SpellCastEffectGraphic.Trait.Cog, origin, null, CoatingColor(SpellGame.Coating.Cog));
         if (e.Terms.Exists(term => term.StartsWith("덧칠"))) Next(SpellCastEffectGraphic.Trait.Overpaint, origin, null, SealColor(SpellGame.Seal.Overpaint));
         for (int i = 0; i < guards; i++) Next(SpellCastEffectGraphic.Trait.Guard, origin, player, CoatingColor(SpellGame.Coating.Guard));
-        foreach (RectTransform shard in shards) Next(SpellCastEffectGraphic.Trait.Shard, origin, shard, SealColor(SpellGame.Seal.Shard));
+        foreach (RectTransform shard in shards)
+        {
+            shardStarts.Add(order * TRAIT_STEP_SECONDS);
+            Next(SpellCastEffectGraphic.Trait.Shard, origin, shard, SealColor(SpellGame.Seal.Shard));
+        }
         // 보충·회수는 전투가 이어질 때만 실제로 손패에 카드가 들어온다.
         if (_game.CurrentPhase == SpellGame.Phase.Combat)
         {
@@ -930,6 +1102,17 @@ public sealed class SpellGameUI : MonoBehaviour
         ClearSelection(); Render();
     }
 
+    /// <summary>3D 판에서 조각을 도안에 놓았을 때 조각을 튀게 하고 놓인 자리에 반응 연출을 낸다. 그 조각으로 도안이 완성됐으면 완성 연출을 함께 낸다.</summary>
+    public void PiecePlaced(SpellGame.Card card, int spell)
+    {
+        if (_castEffects == null || _game.CurrentPhase != SpellGame.Phase.Combat) return;
+        _table.PopPiece(card);
+        Color color = PatternColor(spell);
+        if (_table.TryPieceScreenRect(card, out Rect piece)) _castEffects.PlayFxAtScreen(SpellCastEffectGraphic.Fx.Place, piece.center, color);
+        if (_game.IsComplete(spell) && !_game.IsSealed(spell) && _table.TryPatternScreenRect(spell, out Rect pattern))
+            _castEffects.PlayFxAtScreen(SpellCastEffectGraphic.Fx.Complete, pattern.center, color, 0.08f);
+    }
+
     /// <summary>3D 판 위 화면 위치를 소수 격자 좌표로 바꾸고 교차 여부를 반환한다.</summary>
     public bool TryTableGrid(Vector2 position, out Vector2 grid)
     {
@@ -1143,7 +1326,17 @@ public sealed class SpellGameUI : MonoBehaviour
         if (!_onboarding.AllowsEndTurn) return;
         int healthBefore = _game.Health;
         int incoming = 0;
-        foreach (SpellGame.Enemy enemy in _game.Enemies) if (enemy.Health > 0) incoming += enemy.Intent;
+        // 적이 실제로 한 행동을 연출하려고 행동 전의 의도를 적어 둔다.
+        List<int> actors = new List<int>(), amounts = new List<int>();
+        List<SpellGame.EnemyAction> actions = new List<SpellGame.EnemyAction>();
+        for (int i = 0; i < _game.Enemies.Count; i++)
+        {
+            SpellGame.Enemy enemy = _game.Enemies[i];
+            if (enemy.Health <= 0) continue;
+            incoming += enemy.Intent;
+            actors.Add(i); actions.Add(enemy.NextAction);
+            amounts.Add(enemy.NextAction == SpellGame.EnemyAction.Attack ? enemy.Intent : enemy.ActionAmount);
+        }
         int absorbed = Math.Min(_game.Block, incoming);
         _pendingCast = -1; ClearSelection(); _game.EndTurn(); _message = "";
         int damage = healthBefore - _game.Health;
@@ -1157,7 +1350,50 @@ public sealed class SpellGameUI : MonoBehaviour
         ShowFeedback(string.Join(" · ", parts), _dangerColor);
         if (_game.LastContaminationAdded > 0)
             ShowFeedback($"받은 피해 {damage} · 오염술사가 뽑을 더미에 오염 조각 {_game.LastContaminationAdded}장을 섞었습니다!", AccentColorForContamination());
+        bool stillFighting = _game.CurrentPhase == SpellGame.Phase.Combat;
+        // 첫 공격이 닿는 순간에 체력 막대가 깎이도록, 화면을 갱신하기 전에 막대 갱신을 그때까지 미룬다.
+        float firstImpact = -1f;
+        for (int k = 0; k < actions.Count && firstImpact < 0; k++)
+            if (actions[k] == SpellGame.EnemyAction.Attack) firstImpact = k * ENEMY_ACT_STEP_SECONDS + SpellEnemyView.LUNGE_IMPACT_SECONDS;
+        if (stillFighting && firstImpact > 0 && damage > 0) _combatScreen.PlayerStatus.HoldHealth(firstImpact);
         Render();
+        if (stillFighting) PlayEnemyTurn(actors, actions, amounts, Mathf.Max(0, firstImpact), damage, blocked);
+    }
+
+    /// <summary>방금 끝난 적의 차례를 연출한다. 공격한 적은 차례로 덤벼들고, 방어·충전·저주는 적 위에 글자로 뜬다.
+    /// 첫 공격이 닿는 순간 플레이어가 흔들리며 받은 피해와 막은 양이 떠오른다. 입력은 막지 않는다.</summary>
+    private void PlayEnemyTurn(List<int> actors, List<SpellGame.EnemyAction> actions, List<int> amounts, float impact, int damage, int blocked)
+    {
+        if (_juice == null) return;
+        for (int k = 0; k < actors.Count; k++)
+        {
+            if (actors[k] >= _combatScreen.Enemies.Length) continue;
+            SpellEnemyView view = _combatScreen.Enemies[actors[k]];
+            float delay = k * ENEMY_ACT_STEP_SECONDS;
+            int amount = amounts[k];
+            Vector2 above = new Vector2(0, 40);
+            switch (actions[k])
+            {
+                case SpellGame.EnemyAction.Attack: view.PlayAttack(delay); break;
+                case SpellGame.EnemyAction.Defend: _juice.After(delay, () => _juice.Float($"방어도 +{amount}", view.EffectAnchor, above, SpellStyle.Guard, 30)); break;
+                case SpellGame.EnemyAction.Charge: _juice.After(delay, () => _juice.Float($"충전 +{amount}", view.EffectAnchor, above, _warnColor, 30)); break;
+                case SpellGame.EnemyAction.Curse: _juice.After(delay, () => _juice.Float("저주", view.EffectAnchor, above, CURSED_COLOR, 30)); break;
+            }
+        }
+        if (damage <= 0 && blocked <= 0) return;
+        SpellPlayerStatusView status = _combatScreen.PlayerStatus;
+        _juice.After(impact, () =>
+        {
+            if (damage > 0)
+            {
+                status.PlayHit();
+                _juice.Shake(12f, 0.32f);
+                _juice.EdgeFlash(SpellStyle.Danger, 0.6f, 0.55f);
+                if (_castEffects != null) _castEffects.PlayFx(SpellCastEffectGraphic.Fx.Hurt, status.Portrait, SpellStyle.Danger);
+                _juice.Float($"-{damage}", status.Portrait, new Vector2(0, 76), new Color(1f, 0.56f, 0.5f), 52);
+            }
+            if (blocked > 0) _juice.Float($"막음 {blocked}", status.Portrait, new Vector2(0, damage > 0 ? 140 : 76), SpellStyle.Guard, 32);
+        });
     }
 
     /// <summary>완성된 주문의 시전을 시작하고 단일 대상 주문은 적 선택을 기다린다.</summary>
@@ -1188,8 +1424,9 @@ public sealed class SpellGameUI : MonoBehaviour
         foreach (SpellGame.Placement piece in _game.Boards[board].Pieces) if (piece.Card.Coating == SpellGame.Coating.Guard) guards++;
         if (!_game.Cast(board, target)) { _message = "살아 있는 적을 고르세요"; Render(); return; }
         _onboarding.NotifyCast(board);
-        float attackDelay = PlayCastEffect(board, evaluation, guards);
-        _impactStart = Time.unscaledTime + attackDelay + HIT_IMPACT_SECONDS;
+        float attackDelay = PlayCastEffect(board, evaluation, guards, out float[] hitTimes);
+        QueueCastFeedback(board, evaluation, attackDelay, hitTimes);
+        _impactStart = Time.unscaledTime + attackDelay + SpellCastEffectGraphic.ImpactDelay(SpellGame.PatternCastEffect(board));
         _pendingCast = -1; ClearSelection();
         _impactHits = new bool[_game.Enemies.Count];
         foreach (int hit in _game.LastCastHits) if (hit >= 0 && hit < _impactHits.Length) _impactHits[hit] = true;
