@@ -23,10 +23,10 @@ public sealed class SpellGameUI : MonoBehaviour
     private const float ENEMY_BAR_WIDTH = 320f;
     private const float ENEMY_NARROW_BAR_WIDTH = 280f;
     private const float MENU_GAP = 4f;
-    private const float TRAIT_WIDTH = 250f;
-    private const float TRAIT_PADDING = 12f;
-    private const float TRAIT_BAR = 5f;
-    private const float TRAIT_POINTER_GAP = 22f;
+    // 도안·조각 설명 패널 묶음의 포인터와의 간격, 위아래로 쌓은 패널 사이 간격, 옆에 붙는 태그 설명이 차지할 폭이다.
+    private const float TOOLTIP_POINTER_GAP = 18f;
+    private const float TOOLTIP_STACK_GAP = 6f;
+    private const float TOOLTIP_TAG_ROOM = 258f;
     private static readonly Vector2[] THEFT_START_POINTS = { new Vector2(1180, 130), new Vector2(1180, 430), new Vector2(640, 65), new Vector2(80, 65) };
     private static readonly bool ONBOARDING_ENABLED = false;
     private static readonly Vector2 MESSAGE_POSITION = new Vector2(705, -480);
@@ -201,12 +201,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private SpellGame.Card _glueDragCard;
     private int _glueDragRotation;
     private RectTransform _glueCoatingChoice;
-    private RectTransform _coatingTooltip;
-    private RectTransform _sealTooltip;
-    private UnityEngine.UI.Text _coatingTooltipText;
-    private UnityEngine.UI.Text _sealTooltipText;
-    private UnityEngine.UI.Image _coatingTooltipBar;
-    private UnityEngine.UI.Image _sealTooltipBar;
+    private SpellPatternTooltipView _pieceTooltip;
     private bool _isSealerRun;
     private bool _isThiefRun;
     private bool _isCurserRun;
@@ -1313,24 +1308,88 @@ public sealed class SpellGameUI : MonoBehaviour
         if (CanInteract) BeginCast(board);
     }
 
-    /// <summary>손패 조각의 코팅·씰링 설명을 포인터 좌우에 펼쳐 표시하거나 지운다. 조각 이름은 표시하지 않는다.</summary>
+    /// <summary>손패 조각의 설명 패널을 포인터 근처에 띄우거나 지운다. 특성·저주·소멸이 없는 일반 조각은 띄우지 않는다.</summary>
     public void ShowPieceTooltip(SpellGame.Card card, Vector2 screenPosition)
     {
         ShowTextTooltip(null, screenPosition);
-        ShowTraitTooltip(card, screenPosition);
+        if (card == null || !CanShowTooltip || !HasPieceTooltip(card)) return;
+        ShowTooltipGroup(screenPosition, -1, card);
     }
 
-    /// <summary>포인터가 가리킨 도안의 주문 효과와 완성 상태를 표시하고, 가리킨 조각이 있으면 코팅·씰링 설명을 좌우에 펼친다.</summary>
+    /// <summary>포인터가 가리킨 도안의 설명 패널을 띄우고, 가리킨 조각이 있으면 그 조각 설명 패널을 도안 패널 아래에 이어 붙인다.</summary>
     public void ShowPatternTooltip(int spell, Vector2 screenPosition, SpellGame.Card card = null, bool canRecall = false)
     {
-        if (spell < 0) { ShowTextTooltip(null, screenPosition); ShowTraitTooltip(null, screenPosition); return; }
         ShowTextTooltip(null, screenPosition);
-        if (!CanShowTooltip) return;
-        if (_patternTooltip == null) _patternTooltip = SpellPatternTooltipView.Create((RectTransform)_combatScreen.Tooltip.Box.parent, _font, _textColor, _subColor);
-        _patternTooltip.Show(PatternTooltipContent(spell), screenPosition);
-        // 태그 발동 조건은 설명 박스 옆에 따로 띄운다.
-        SpellTagTooltip.Show(SpellGame.PatternKeywordExplanation(spell), _patternTooltip.Box);
-        ShowTraitTooltip(card, screenPosition);
+        if (spell < 0 || !CanShowTooltip) return;
+        ShowTooltipGroup(screenPosition, spell, card != null && HasPieceTooltip(card) ? card : null);
+    }
+
+    /// <summary>도안 패널과 조각 패널을 한 열로 쌓고 태그 설명은 그 옆에 둔다. 포인터 오른쪽에 자리가 없으면 왼쪽으로 펼쳐 서로 겹치지 않게 한다.</summary>
+    private void ShowTooltipGroup(Vector2 screenPosition, int spell, SpellGame.Card card)
+    {
+        RectTransform parent = (RectTransform)_combatScreen.Tooltip.Box.parent;
+        if (_patternTooltip == null) _patternTooltip = SpellPatternTooltipView.Create(parent, _font, _textColor, _subColor);
+        if (_pieceTooltip == null) _pieceTooltip = SpellPatternTooltipView.Create(parent, _font, _textColor, _subColor, "Piece Tooltip");
+        bool hasPattern = spell >= 0, hasPiece = card != null;
+        string tag = hasPattern ? SpellGame.PatternKeywordExplanation(spell) : "";
+        if (hasPattern) _patternTooltip.SetContent(PatternTooltipContent(spell)); else _patternTooltip.Hide();
+        if (hasPiece) _pieceTooltip.SetContent(PieceTooltipContent(card)); else _pieceTooltip.Hide();
+        if (!hasPattern && !hasPiece) return;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screenPosition, null, out Vector2 local)) return;
+        Rect area = parent.rect;
+        float height = (hasPattern ? _patternTooltip.Size.y : 0) + (hasPattern && hasPiece ? TOOLTIP_STACK_GAP : 0) + (hasPiece ? _pieceTooltip.Size.y : 0);
+        float sideWidth = SpellPatternTooltipView.WIDTH + (tag.Length > 0 ? TOOLTIP_TAG_ROOM : 0);
+        // 오른쪽에 열과 태그 설명이 다 들어가면 오른쪽, 아니면 왼쪽으로 펼친다.
+        bool right = local.x + TOOLTIP_POINTER_GAP + sideWidth <= area.xMax || local.x - TOOLTIP_POINTER_GAP - sideWidth < area.xMin && area.xMax - local.x >= local.x - area.xMin;
+        float x = right ? local.x + TOOLTIP_POINTER_GAP : local.x - TOOLTIP_POINTER_GAP - SpellPatternTooltipView.WIDTH;
+        x = Mathf.Clamp(x, area.xMin, area.xMax - SpellPatternTooltipView.WIDTH);
+        float top = local.y - TOOLTIP_POINTER_GAP;
+        if (top - height < area.yMin) top = local.y + TOOLTIP_POINTER_GAP + height;
+        top = Mathf.Clamp(top, area.yMin + height, area.yMax);
+        if (hasPattern) { _patternTooltip.PlaceAt(new Vector2(x, top)); top -= _patternTooltip.Size.y + TOOLTIP_STACK_GAP; }
+        if (hasPiece) _pieceTooltip.PlaceAt(new Vector2(x, top));
+        // 태그 발동 조건은 열의 바깥쪽(포인터 반대편)에 따로 띄운다.
+        if (hasPattern) SpellTagTooltip.Show(tag, _patternTooltip.Box, !right); else SpellTagTooltip.Hide();
+    }
+
+    /// <summary>조각 설명 패널을 띄울 내용(특성·저주·소멸)이 있는지 반환한다.</summary>
+    private bool HasPieceTooltip(SpellGame.Card card)
+    {
+        return HasTraits(card) || card.IsRecallCopy || _game.IsCursed(card);
+    }
+
+    /// <summary>조각 설명 패널 내용을 만든다. 도안 패널과 같은 모양으로 이름·종류를 적고, 고유·오염·코팅·소멸·씰링·이전 효과를 항목으로 나열하며, 저주면 상태 띠를 붙인다.</summary>
+    private SpellPatternTooltipView.Content PieceTooltipContent(SpellGame.Card card)
+    {
+        List<SpellPatternTooltipView.Entry> entries = new List<SpellPatternTooltipView.Entry>();
+        void Add(string title, string body, Color color) { entries.Add(new SpellPatternTooltipView.Entry { Title = title, Body = body, Color = color }); }
+        if (card.IsUnique) Add("고유", UniqueDescription(card), _subColor);
+        if (card.IsContaminated) Add("오염 · 공격·방어 -2", "시전에 사용한 오염 조각마다 감소 · 최소 0 · 이번 전투 한정 · 접착 불가", AccentColorForContamination());
+        if (card.Coating != SpellGame.Coating.None) Add($"코팅 · {CoatingName(card.Coating)}", CoatingDescription(card.Coating), CoatingColor(card.Coating));
+        if (card.IsRecallCopy) Add("소멸", "회수로 만든 임시 조각 · 시전에 쓰거나 턴이 끝나면 사라짐", VANISH_COLOR);
+        foreach (SpellGame.Seal seal in Enum.GetValues(typeof(SpellGame.Seal)))
+        {
+            int count = seal == SpellGame.Seal.None ? 0 : SpellGame.SealCount(card, seal);
+            if (count > 0) Add($"씰링 · {SealName(seal)}{(count > 1 ? $" ×{count}" : "")}", SealDescription(seal), SealColor(seal));
+        }
+        foreach (SpellGame.Effect effect in new[] { SpellGame.Effect.Period, SpellGame.Effect.Resonance })
+            if (SpellGame.EffectCount(card, effect) > 0) Add(EffectName(effect), EffectDescription(effect), _warnColor);
+        Color accent = entries.Count > 0 ? entries[0].Color : _subColor;
+        SpellPatternTooltipView.Content c = new SpellPatternTooltipView.Content
+        {
+            Name = DisplayName(card),
+            KindLabel = card.IsUnique ? "고유 조각" : card.Glued != null ? "접착 조각" : "조각",
+            Entries = entries,
+            Accent = accent,
+            ValueColor = _textColor,
+        };
+        if (_game.IsCursed(card))
+        {
+            c.Status = "저주받은 조각";
+            c.StatusDetail = $"이번 턴에 이 조각으로 시전하면 풀립니다 · 못 하면 턴 종료 시 HP -{_game.Curse.Amount}";
+            c.StatusColor = CURSED_COLOR;
+        }
+        return c;
     }
 
     /// <summary>도안 설명 패널 내용을 만든다. 효과와 지금 시전했을 때의 예상 수치만 담고, 봉인·저주 상태면 상태 띠를 붙인다.</summary>
@@ -1386,106 +1445,24 @@ public sealed class SpellGameUI : MonoBehaviour
         return false;
     }
 
-    /// <summary>지정한 설명을 화면 좌표 근처에 표시하거나 지운다. 드래그·조준 중에는 표시하지 않는다.</summary>
+    /// <summary>지정한 설명을 화면 좌표 근처에 표시하거나 지운다. 도안·조각 설명 패널은 함께 숨긴다. 드래그·조준 중에는 표시하지 않는다.</summary>
     public void ShowTextTooltip(string message, Vector2 screenPosition)
     {
         SpellTagTooltip.Hide();
         if (_patternTooltip != null) _patternTooltip.Hide();
+        if (_pieceTooltip != null) _pieceTooltip.Hide();
         if (message == null || !CanShowTooltip) { _combatScreen.Tooltip.Hide(); return; }
         _combatScreen.Tooltip.Show(message, screenPosition);
     }
 
     private bool CanShowTooltip { get { return CanInteract && _dragGhost == null && _pendingCast < 0 && !_castDragging && !_boardGraphic.IsDraggingPattern; } }
 
-    /// <summary>문구 설명과 좌우 코팅·씰링 설명을 모두 숨긴다.</summary>
+    /// <summary>문구 설명과 도안·조각·태그 설명 패널을 모두 숨긴다.</summary>
     private void HideTooltips()
     {
         _combatScreen.Tooltip.Hide(); SpellTagTooltip.Hide();
         if (_patternTooltip != null) _patternTooltip.Hide();
-        if (_coatingTooltip != null) { _coatingTooltip.gameObject.SetActive(false); _sealTooltip.gameObject.SetActive(false); }
-    }
-
-    /// <summary>카드의 코팅(또는 고유)을 포인터 왼쪽, 씰링과 이전 효과를 포인터 오른쪽에 펼쳐 표시한다. 해당 내용이 없는 쪽 패널은 숨긴다.</summary>
-    private void ShowTraitTooltip(SpellGame.Card card, Vector2 screenPosition)
-    {
-        bool cursed = card != null && _game.IsCursed(card);
-        bool recallCopy = card != null && card.IsRecallCopy;
-        if (card == null || !CanShowTooltip || (!HasTraits(card) && !cursed && !recallCopy))
-        {
-            if (_coatingTooltip != null) { _coatingTooltip.gameObject.SetActive(false); _sealTooltip.gameObject.SetActive(false); }
-            return;
-        }
-        if (_coatingTooltip == null) CreateTraitTooltips();
-        _coatingTooltip.SetAsLastSibling(); _sealTooltip.SetAsLastSibling();
-        string left = "", right = "";
-        Color leftColor = _textColor, rightColor = _textColor;
-        if (card.IsUnique) { left = $"<b>고유</b>\n{UniqueDescription(card)}"; leftColor = _subColor; }
-        else if (card.IsContaminated) { left = "<b>오염 · 공격·방어 -2</b>\n시전에 사용한 오염 조각마다 감소 · 최소 0\n이번 전투 한정 · 접착 불가"; leftColor = AccentColorForContamination(); }
-        else if (card.Coating != SpellGame.Coating.None) { left = $"<b><color=#{ColorUtility.ToHtmlStringRGB(CoatingColor(card.Coating))}>코팅 · {CoatingName(card.Coating)}</color></b>\n{CoatingDescription(card.Coating)}"; leftColor = CoatingColor(card.Coating); }
-        // 저주 대상 조각이면 왼쪽 설명 맨 위에 저주 상태를 먼저 알리고 패널 강조색도 저주 색으로 바꾼다.
-        if (cursed)
-        {
-            string curse = $"<b><color=#{ColorUtility.ToHtmlStringRGB(CURSED_COLOR)}>저주받은 조각</color></b>\n이번 턴에 이 조각으로 시전하면 풀립니다\n못 하면 턴 종료 시 HP -{_game.Curse.Amount}";
-            left = left.Length > 0 ? curse + "\n\n" + left : curse;
-            leftColor = CURSED_COLOR;
-        }
-        List<string> lines = new List<string>();
-        // 소멸은 씰링·코팅처럼 하나의 조각 특성으로 오른쪽 설명 맨 위에 보여 준다.
-        if (recallCopy)
-        {
-            lines.Add($"<b><color=#{ColorUtility.ToHtmlStringRGB(VANISH_COLOR)}>● 소멸</color></b>\n회수로 만든 임시 조각 · 시전에 쓰거나 턴이 끝나면 사라짐");
-            rightColor = VANISH_COLOR;
-        }
-        foreach (SpellGame.Seal seal in Enum.GetValues(typeof(SpellGame.Seal)))
-        {
-            int count = seal == SpellGame.Seal.None ? 0 : SpellGame.SealCount(card, seal);
-            if (count == 0) continue;
-            if (lines.Count == 0) rightColor = SealColor(seal);
-            lines.Add($"<b><color=#{ColorUtility.ToHtmlStringRGB(SealColor(seal))}>● 씰링 · {SealName(seal)}{(count > 1 ? $" ×{count}" : "")}</color></b>\n{SealDescription(seal)}");
-        }
-        foreach (SpellGame.Effect effect in new[] { SpellGame.Effect.Period, SpellGame.Effect.Resonance })
-            if (SpellGame.EffectCount(card, effect) > 0) lines.Add($"<b>{EffectName(effect)}</b>\n{EffectDescription(effect)}");
-        right = string.Join("\n\n", lines);
-        Vector2 local;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(_root, screenPosition, null, out local);
-        Rect area = _root.rect;
-        Vector2 pointer = new Vector2(local.x - area.xMin, area.yMax - local.y);
-        PlaceTraitPanel(_coatingTooltip, _coatingTooltipText, _coatingTooltipBar, left, leftColor, pointer.x - TRAIT_POINTER_GAP - TRAIT_WIDTH, pointer.y + TRAIT_POINTER_GAP);
-        PlaceTraitPanel(_sealTooltip, _sealTooltipText, _sealTooltipBar, right, rightColor, pointer.x + TRAIT_POINTER_GAP, pointer.y + TRAIT_POINTER_GAP);
-    }
-
-    /// <summary>설명 패널 하나의 문구·강조색·크기를 정하고 화면 안쪽으로 맞춰 놓는다. 문구가 비어 있으면 숨긴다.</summary>
-    private void PlaceTraitPanel(RectTransform panel, UnityEngine.UI.Text text, UnityEngine.UI.Image bar, string value, Color accent, float x, float y)
-    {
-        panel.gameObject.SetActive(value.Length > 0);
-        if (value.Length == 0) return;
-        text.text = value; bar.color = accent;
-        float height = text.preferredHeight + TRAIT_PADDING * 2 + TRAIT_BAR;
-        panel.sizeDelta = new Vector2(TRAIT_WIDTH, height);
-        panel.anchoredPosition = new Vector2(Mathf.Clamp(x, 0, 1280 - TRAIT_WIDTH), -Mathf.Clamp(y, 0, 720 - height));
-    }
-
-    /// <summary>좌우 설명 패널을 처음 한 번 만든다. 입력은 가로채지 않는다.</summary>
-    private void CreateTraitTooltips()
-    {
-        _coatingTooltip = CreateTraitPanel("Coating Tooltip", out _coatingTooltipText, out _coatingTooltipBar);
-        _sealTooltip = CreateTraitPanel("Seal Tooltip", out _sealTooltipText, out _sealTooltipBar);
-    }
-
-    /// <summary>위쪽 강조 막대와 여러 줄 설명 문구를 가진 설명 패널을 만든다.</summary>
-    private RectTransform CreateTraitPanel(string name, out UnityEngine.UI.Text text, out UnityEngine.UI.Image bar)
-    {
-        RectTransform panel = Panel(_root, 0, 0, TRAIT_WIDTH, 100, new Color(0.06f, 0.07f, 0.1f, 0.96f));
-        panel.name = name; panel.GetComponent<UnityEngine.UI.Image>().raycastTarget = false;
-        RectTransform barRect = Element("Accent", panel, 0, 0, TRAIT_WIDTH, TRAIT_BAR);
-        barRect.anchorMax = new Vector2(1, 1); barRect.sizeDelta = new Vector2(0, TRAIT_BAR);
-        bar = barRect.gameObject.AddComponent<UnityEngine.UI.Image>(); bar.raycastTarget = false;
-        RectTransform textRect = Element("Text", panel, TRAIT_PADDING, TRAIT_BAR + TRAIT_PADDING, TRAIT_WIDTH - TRAIT_PADDING * 2, 10);
-        text = textRect.gameObject.AddComponent<UnityEngine.UI.Text>();
-        text.font = _font; text.fontSize = 16; text.lineSpacing = 1.1f; text.alignment = TextAnchor.UpperLeft; text.color = new Color(0.92f, 0.94f, 0.96f);
-        text.supportRichText = true; text.raycastTarget = false; text.horizontalOverflow = HorizontalWrapMode.Wrap; text.verticalOverflow = VerticalWrapMode.Overflow;
-        panel.gameObject.SetActive(false);
-        return panel;
+        if (_pieceTooltip != null) _pieceTooltip.Hide();
     }
 
     /// <summary>단일 대상 주문을 놓은 화면 좌표의 살아 있는 적에게 시전한다.</summary>

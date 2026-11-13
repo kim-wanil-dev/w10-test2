@@ -1,21 +1,30 @@
+using System.Collections.Generic;
+
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>전투 중 도안을 가리켰을 때 도안 이름·효과·예상 수치를 카드 모양 패널로 보여 준다. 봉인·저주 상태면 패널 위쪽 띠와 테두리 색으로 상태를 알린다. 입력은 받지 않고 코드로 만든다.</summary>
+/// <summary>전투 중 도안·조각을 가리켰을 때 이름·효과·예상 수치·특성 목록을 카드 모양 패널로 보여 준다. 봉인·저주 상태면 패널 위쪽 띠와 테두리·배경 색으로 상태를 알린다. 입력은 받지 않고 코드로 만든다.</summary>
 public sealed class SpellPatternTooltipView : MonoBehaviour
 {
-    private const float WIDTH = 290f;
+    public const float WIDTH = 290f;
     private const float BORDER = 2f;
     private const float PADDING = 14f;
     private const float ACCENT = 4f;
-    private const float POINTER_GAP = 18f;
     private const float SECTION_GAP = 8f;
     private static readonly Color BACKGROUND = new Color(0.07f, 0.075f, 0.1f, 0.97f);
     private static readonly Color FRAME = new Color(0.22f, 0.23f, 0.28f, 1f);
     private static readonly Color DIVIDER = new Color(1f, 1f, 1f, 0.09f);
     private static readonly Color KEYWORD = new Color(0.98f, 0.8f, 0.36f);
 
-    /// <summary>패널에 표시할 내용이다. Status가 비어 있지 않으면 위쪽 상태 띠를 StatusColor로 그리고, Disabled면 본문을 흐리게 한다.</summary>
+    /// <summary>특성 목록 한 줄이다. 색 점과 굵은 제목, 그 아래 설명으로 표시한다.</summary>
+    public struct Entry
+    {
+        public string Title;
+        public string Body;
+        public Color Color;
+    }
+
+    /// <summary>패널에 표시할 내용이다. 빈 항목은 그리지 않는다. Status가 비어 있지 않으면 위쪽 상태 띠를 StatusColor로 그리고, Disabled면 본문을 흐리게 한다.</summary>
     public struct Content
     {
         public string Name;
@@ -25,6 +34,7 @@ public sealed class SpellPatternTooltipView : MonoBehaviour
         public string ValueLabel;
         public string Value;
         public string Extras;
+        public List<Entry> Entries;
         public Color Accent;
         public Color ValueColor;
         public string Status;
@@ -33,35 +43,36 @@ public sealed class SpellPatternTooltipView : MonoBehaviour
         public bool Disabled;
     }
 
-    private RectTransform _rect, _parent, _body, _banner, _accent, _divider;
+    private readonly List<Text> _entryTexts = new List<Text>();
+    private readonly List<RectTransform> _dividers = new List<RectTransform>();
+    private RectTransform _rect, _parent, _body, _banner, _accent;
     private Image _frame, _background, _bannerImage, _accentImage;
     private CanvasGroup _bodyGroup;
     private Text _status, _name, _kind, _effect, _valueLabel, _value, _extras;
+    private Font _font;
     private Color _textColor, _subColor;
+    private int _usedDividers;
 
     public RectTransform Box { get { return _rect; } }
+    public RectTransform Parent { get { return _parent; } }
+    public Vector2 Size { get { return _rect.sizeDelta; } }
 
     /// <summary>parent 아래에 패널을 만들고 숨겨 둔다. textColor·subColor는 다른 UI와 같은 본문·보조 글자색이다.</summary>
-    public static SpellPatternTooltipView Create(RectTransform parent, Font font, Color textColor, Color subColor)
+    public static SpellPatternTooltipView Create(RectTransform parent, Font font, Color textColor, Color subColor, string name = "Pattern Tooltip")
     {
-        GameObject root = new GameObject("Pattern Tooltip", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        GameObject root = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         SpellPatternTooltipView view = root.AddComponent<SpellPatternTooltipView>();
         view.Build(parent, font, textColor, subColor);
         return view;
     }
 
-    /// <summary>내용을 채우고 높이를 맞춘 뒤 포인터 아래쪽(공간이 없으면 위쪽)에 화면 안으로 맞춰 띄운다.</summary>
-    public void Show(Content content, Vector2 screenPosition)
+    /// <summary>내용을 채우고 높이를 맞춘다. 위치는 바꾸지 않으며 PlaceAt으로 띄운다.</summary>
+    public void SetContent(Content content) { Layout(content); }
+
+    /// <summary>부모 로컬 좌표의 왼쪽 위 지점에 패널을 띄운다.</summary>
+    public void PlaceAt(Vector2 topLeft)
     {
-        Layout(content);
-        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(_parent, screenPosition, null, out Vector2 local)) return;
-        Rect area = _parent.rect;
-        float height = _rect.sizeDelta.y;
-        float x = Mathf.Clamp(local.x + POINTER_GAP, area.xMin, area.xMax - WIDTH);
-        float top = local.y - POINTER_GAP;
-        if (top - height < area.yMin) top = local.y + POINTER_GAP + height;
-        top = Mathf.Clamp(top, area.yMin + height, area.yMax);
-        _rect.localPosition = new Vector3(x, top, 0);
+        _rect.localPosition = new Vector3(topLeft.x, topLeft.y, 0);
         gameObject.SetActive(true);
         _rect.SetAsLastSibling();
     }
@@ -72,7 +83,7 @@ public sealed class SpellPatternTooltipView : MonoBehaviour
     /// <summary>테두리·배경·상태 띠·강조 막대·글자 요소를 만든다.</summary>
     private void Build(RectTransform parent, Font font, Color textColor, Color subColor)
     {
-        _parent = parent; _textColor = textColor; _subColor = subColor;
+        _parent = parent; _font = font; _textColor = textColor; _subColor = subColor;
         _rect = (RectTransform)transform;
         _rect.SetParent(parent, false);
         _rect.anchorMin = _rect.anchorMax = new Vector2(0.5f, 0.5f); _rect.pivot = new Vector2(0, 1);
@@ -94,8 +105,6 @@ public sealed class SpellPatternTooltipView : MonoBehaviour
         _name = Label(_body, font, 20, TextAnchor.UpperLeft, textColor); _name.fontStyle = FontStyle.Bold;
         _kind = Label(_body, font, 13, TextAnchor.UpperRight, subColor);
         _effect = Label(_body, font, 15, TextAnchor.UpperLeft, textColor);
-        _divider = TopChild("Divider", _body, typeof(Image));
-        Image divider = _divider.GetComponent<Image>(); divider.color = DIVIDER; divider.raycastTarget = false;
         _valueLabel = Label(_body, font, 13, TextAnchor.LowerLeft, subColor);
         _value = Label(_body, font, 26, TextAnchor.LowerRight, textColor); _value.fontStyle = FontStyle.Bold;
         _extras = Label(_body, font, 13, TextAnchor.UpperLeft, subColor);
@@ -106,6 +115,7 @@ public sealed class SpellPatternTooltipView : MonoBehaviour
     private void Layout(Content c)
     {
         float inner = WIDTH - BORDER * 2, textWidth = inner - PADDING * 2, y = 0;
+        _usedDividers = 0;
         bool hasStatus = !string.IsNullOrEmpty(c.Status);
         _banner.gameObject.SetActive(hasStatus);
         if (hasStatus)
@@ -126,23 +136,25 @@ public sealed class SpellPatternTooltipView : MonoBehaviour
 
         float body = PADDING;
         _name.text = c.Name;
-        _kind.text = c.KindLabel; _kind.color = Color.Lerp(c.Accent, _textColor, 0.35f);
+        _kind.text = c.KindLabel ?? ""; _kind.color = Color.Lerp(c.Accent, _textColor, 0.35f);
         float kindWidth = Mathf.Min(_kind.preferredWidth + 2, textWidth * 0.4f);
         float nameHeight = Place(_name, PADDING, body, textWidth - kindWidth - 6);
         Place(_kind, PADDING + textWidth - kindWidth, body + 5, kindWidth);
         body += nameHeight + 4;
 
-        _effect.text = string.IsNullOrEmpty(c.Keyword) ? c.Effect : $"{c.Effect}\n<color=#{ColorUtility.ToHtmlStringRGB(KEYWORD)}>{c.Keyword}</color>";
-        body += Place(_effect, PADDING, body, textWidth) + SECTION_GAP + 2;
+        bool hasEffect = !string.IsNullOrEmpty(c.Effect);
+        _effect.gameObject.SetActive(hasEffect);
+        if (hasEffect)
+        {
+            _effect.text = string.IsNullOrEmpty(c.Keyword) ? c.Effect : $"{c.Effect}\n<color=#{ColorUtility.ToHtmlStringRGB(KEYWORD)}>{c.Keyword}</color>";
+            body += Place(_effect, PADDING, body, textWidth);
+        }
 
         bool hasValue = !string.IsNullOrEmpty(c.Value) || !string.IsNullOrEmpty(c.ValueLabel);
-        _divider.gameObject.SetActive(hasValue || !string.IsNullOrEmpty(c.Extras));
-        SetTop(_divider, body, textWidth, 1); _divider.anchoredPosition = new Vector2(PADDING, -body);
-        body += 1 + SECTION_GAP;
-
         _valueLabel.gameObject.SetActive(hasValue); _value.gameObject.SetActive(hasValue);
         if (hasValue)
         {
+            body = AddDivider(body, textWidth);
             _value.text = c.Value ?? ""; _value.color = c.ValueColor;
             _valueLabel.text = c.ValueLabel ?? "";
             float valueHeight = Mathf.Max(_value.preferredHeight, 30);
@@ -150,16 +162,52 @@ public sealed class SpellPatternTooltipView : MonoBehaviour
             SetBox(_valueLabel, PADDING, body, textWidth, valueHeight - 4);
             body += valueHeight;
         }
-        _extras.gameObject.SetActive(!string.IsNullOrEmpty(c.Extras));
-        if (_extras.gameObject.activeSelf)
+        bool hasExtras = !string.IsNullOrEmpty(c.Extras);
+        _extras.gameObject.SetActive(hasExtras);
+        if (hasExtras)
         {
+            if (!hasValue) body = AddDivider(body, textWidth);
             _extras.text = c.Extras;
             body += 2 + Place(_extras, PADDING, body + 2, textWidth);
         }
+
+        // 특성 목록: 항목마다 구분선을 두고 색 점·굵은 제목과 설명을 적는다.
+        int count = c.Entries == null ? 0 : c.Entries.Count;
+        while (_entryTexts.Count < count) _entryTexts.Add(Label(_body, _font, 14, TextAnchor.UpperLeft, _textColor));
+        for (int i = 0; i < _entryTexts.Count; i++)
+        {
+            bool show = i < count;
+            _entryTexts[i].gameObject.SetActive(show);
+            if (!show) continue;
+            Entry entry = c.Entries[i];
+            string color = ColorUtility.ToHtmlStringRGB(entry.Color);
+            _entryTexts[i].text = $"<color=#{color}>●</color> <b><color=#{color}>{entry.Title}</color></b>"
+                + (string.IsNullOrEmpty(entry.Body) ? "" : $"\n<size=13><color=#{ColorUtility.ToHtmlStringRGB(Color.Lerp(_subColor, _textColor, 0.5f))}>{entry.Body}</color></size>");
+            body = AddDivider(body, textWidth);
+            body += Place(_entryTexts[i], PADDING, body, textWidth);
+        }
+        for (int i = _usedDividers; i < _dividers.Count; i++) _dividers[i].gameObject.SetActive(false);
+
         body += PADDING;
         SetTop(_body, y, inner, body);
         _bodyGroup.alpha = c.Disabled ? 0.45f : 1f;
         _rect.sizeDelta = new Vector2(WIDTH, y + body + BORDER * 2);
+    }
+
+    /// <summary>body 위치에 구분선을 놓고, 구분선 아래 내용이 시작할 위치를 반환한다.</summary>
+    private float AddDivider(float body, float width)
+    {
+        body += SECTION_GAP;
+        if (_usedDividers >= _dividers.Count)
+        {
+            RectTransform line = TopChild("Divider", _body, typeof(Image));
+            Image image = line.GetComponent<Image>(); image.color = DIVIDER; image.raycastTarget = false;
+            _dividers.Add(line);
+        }
+        RectTransform divider = _dividers[_usedDividers++];
+        divider.gameObject.SetActive(true);
+        divider.anchoredPosition = new Vector2(PADDING, -body); divider.sizeDelta = new Vector2(width, 1);
+        return body + 1 + SECTION_GAP;
     }
 
     /// <summary>글자를 부모 왼쪽 위 기준 (x, y)에 너비 width로 놓고 그 높이를 반환한다.</summary>
