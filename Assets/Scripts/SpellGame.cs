@@ -50,7 +50,7 @@ public sealed class SpellGame
     private const int VICTORY_HEAL = 6;
     private const int START_HEALTH = 50;
     private const int DEVELOPER_HEALTH = 9999;
-    private const int LAST_BATTLE = 5;
+    public const int LAST_BATTLE = 5;
     private const double REST_HEAL_RATIO = 0.3;
 
     /// <summary>도형이 칸 하나에서 차지하는 위·오른쪽·아래·왼쪽 구역 비트다.</summary>
@@ -337,6 +337,8 @@ public sealed class SpellGame
     public Seal RewardSeal { get; private set; }
     public RewardKind ActiveReward { get; private set; }
     public IReadOnlyList<Reward> ActiveRewardChoices { get { return ActiveReward == RewardKind.Pattern ? _patternRewards : _rewards; } }
+    // 도안 보상 후보다. 조각 후보는 Rewards다.
+    public IReadOnlyList<Reward> PatternRewards { get { return _patternRewards; } }
 
     public Phase CurrentPhase { get; private set; } = Phase.Title;
     public int Health { get; private set; }
@@ -1814,6 +1816,26 @@ public sealed class SpellGame
         }
         else return false;
         ActiveReward = RewardKind.None;
+        return true;
+    }
+
+    /// <summary>지정 종류의 보상 후보 하나를 바로 수령한다. 보상·배치 통합 화면에서 시험 배치를 확정할 때 쓴다.</summary>
+    public bool ClaimReward(RewardKind kind, int index)
+    {
+        if (kind != RewardKind.Piece && kind != RewardKind.Pattern) return false;
+        if (!OpenReward(kind)) return false;
+        if (ChooseReward(index)) return true;
+        ActiveReward = RewardKind.None;
+        return false;
+    }
+
+    /// <summary>보유 도안 하나를 버린다. 보상·배치 화면(보상·정비 단계)에서만 가능하다.</summary>
+    public bool DiscardPattern(int spell)
+    {
+        if (CurrentPhase != Phase.Reward && CurrentPhase != Phase.Loadout) return false;
+        if (!_ownedSpells.Remove(spell)) return false;
+        _spells.Remove(spell);
+        if (LastAcquiredPattern == spell) LastAcquiredPattern = -1;
         return true;
     }
 

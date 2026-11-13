@@ -28,11 +28,59 @@ public sealed class SpellLoadoutGrid : UnityEngine.UI.MaskableGraphic, IPointerC
     private int _held = -1;
     private int _heldRotation;
     private Vector2Int _hover = new Vector2Int(-1, -1);
+    // 보상 시험 배치 중인 도안(흰 외곽선으로 구분), 격자에 시험으로 놓은 조각과 끌고 있는 조각이다. 조각은 도안과 상관없이 격자 안 어디든 놓인다.
+    private int _trialSpell = -1;
+    private SpellGame.Card _piece, _heldPiece;
+    private Vector2Int _pieceAnchor;
+    private int _pieceRotation, _heldPieceRotation;
+    private Color _pieceTint = Color.white;
 
     /// <summary>표시할 도안 배치, 보유 목록, 도안 색과 칸 클릭 동작을 설정한다.</summary>
     public void Setup(SpellPatternLayout layout, IReadOnlyList<int> owned, Func<int, Color> colorOf, Action<Vector2Int> onClick)
     {
         _layout = layout; _owned = owned; _colorOf = colorOf; _onClick = onClick; SetVerticesDirty();
+    }
+
+    /// <summary>칸 한 변 크기를 바꾼다. 판은 영역 중심에 그린다.</summary>
+    public void SetCellSize(float size) { _cellSize = size; SetVerticesDirty(); }
+
+    /// <summary>보상 시험 배치 중인 도안을 정한다. 음수면 없다.</summary>
+    public void SetTrial(int spell) { _trialSpell = spell; SetVerticesDirty(); }
+
+    /// <summary>시험으로 놓은 조각을 정한다. card가 null이면 지운다.</summary>
+    public void SetPiece(SpellGame.Card card, Vector2Int anchor, int rotation, Color tint)
+    {
+        _piece = card; _pieceAnchor = anchor; _pieceRotation = rotation; _pieceTint = tint; SetVerticesDirty();
+    }
+
+    /// <summary>끌고 있는 조각과 방향을 정한다. card가 null이면 들고 있지 않다.</summary>
+    public void SetHeldPiece(SpellGame.Card card, int rotation, Color tint)
+    {
+        _heldPiece = card; _heldPieceRotation = rotation; _pieceTint = tint; SetVerticesDirty();
+    }
+
+    /// <summary>끌고 있는 조각을 가리킨 칸에 놓을 때의 앵커(조각 범위 왼쪽 위)를 반환한다.</summary>
+    public Vector2Int HeldPieceAnchor(Vector2Int cell)
+    {
+        Vector2 size = SpellPiece3D.CellBounds(SpellGame.CardCells(_heldPiece, _heldPieceRotation));
+        return cell - new Vector2Int(((int)size.x - 1) / 2, ((int)size.y - 1) / 2);
+    }
+
+    /// <summary>조각을 앵커·방향으로 놓았을 때 모든 구역이 격자 안에 들어가는지 반환한다.</summary>
+    public static bool PieceFits(SpellGame.Card card, Vector2Int anchor, int rotation)
+    {
+        foreach (SpellGame.ShapeCell cell in SpellGame.CardCells(card, rotation))
+            if ((cell.Mask & ~SpellPatternLayout.BoardMask(anchor.x + cell.X, anchor.y + cell.Y)) != 0) return false;
+        return true;
+    }
+
+    /// <summary>시험으로 놓은 조각이 칸 구역을 차지하는지 반환한다.</summary>
+    public bool PieceCovers(Vector2Int gridCell, int sector)
+    {
+        if (_piece == null) return false;
+        foreach (SpellGame.ShapeCell cell in SpellGame.CardCells(_piece, _pieceRotation))
+            if (_pieceAnchor.x + cell.X == gridCell.x && _pieceAnchor.y + cell.Y == gridCell.y && (cell.Mask & (1 << sector)) != 0) return true;
+        return false;
     }
 
     /// <summary>격자 표시 영역을 지정한 화면 좌표만큼 이동한다.</summary>
@@ -69,13 +117,53 @@ public sealed class SpellLoadoutGrid : UnityEngine.UI.MaskableGraphic, IPointerC
         {
             if (!_layout.IsPlaced(spell)) continue;
             Color color = _colorOf(spell);
-            DrawPattern(vh, spell, _layout.Origin(spell), _layout.Rotation(spell), new Color(color.r, color.g, color.b, FILL_ALPHA), color);
+            // 시험 배치 중인 보상 도안은 진하게 채우고 흰 외곽선으로 아직 확정 전임을 구분한다.
+            bool trial = spell == _trialSpell;
+            DrawPattern(vh, spell, _layout.Origin(spell), _layout.Rotation(spell), new Color(color.r, color.g, color.b, trial ? 0.5f : FILL_ALPHA), trial ? Color.white : color);
         }
+        if (_piece != null) DrawPiece(vh, _piece, _pieceAnchor, _pieceRotation, new Color(_pieceTint.r, _pieceTint.g, _pieceTint.b, 0.9f), Color.white);
         if (_held >= 0 && _hover.x >= 0)
         {
             Vector2Int origin = HeldOrigin(_hover);
             Color color = _layout.MoveIssue(_held, origin, _heldRotation, _owned) == null ? _validColor : _invalidColor;
             DrawPattern(vh, _held, origin, _heldRotation, new Color(color.r, color.g, color.b, FILL_ALPHA), color);
+        }
+        if (_heldPiece != null && _hover.x >= 0)
+        {
+            Vector2Int anchor = HeldPieceAnchor(_hover);
+            Color color = PieceFits(_heldPiece, anchor, _heldPieceRotation) ? _validColor : _invalidColor;
+            DrawPiece(vh, _heldPiece, anchor, _heldPieceRotation, new Color(_pieceTint.r, _pieceTint.g, _pieceTint.b, 0.75f), color);
+        }
+    }
+
+    /// <summary>조각을 앵커·방향으로 채우고 바깥 경계에 외곽선을 그린다. 격자 밖 구역은 그리지 않는다.</summary>
+    private void DrawPiece(UnityEngine.UI.VertexHelper vh, SpellGame.Card card, Vector2Int anchor, int rotation, Color fill, Color line)
+    {
+        IReadOnlyList<SpellGame.ShapeCell> cells = SpellGame.CardCells(card, rotation);
+        int MaskAt(int x, int y)
+        {
+            foreach (SpellGame.ShapeCell c in cells) if (anchor.x + c.X == x && anchor.y + c.Y == y) return c.Mask;
+            return 0;
+        }
+        foreach (SpellGame.ShapeCell cell in cells)
+        {
+            int x = anchor.x + cell.X, y = anchor.y + cell.Y;
+            int mask = cell.Mask & SpellPatternLayout.BoardMask(x, y);
+            if (mask == 0) continue;
+            Vector2 center = CellGeometry(x, y);
+            for (int sector = 0; sector < 4; sector++)
+            {
+                if ((mask & (1 << sector)) == 0) continue;
+                Sector(vh, center, sector, fill);
+                for (int direction = 0; direction < 3; direction++)
+                {
+                    SpellPatternLayout.Neighbor(x, y, sector, direction, out int nx, out int ny, out int ns);
+                    if ((MaskAt(nx, ny) & (1 << ns)) != 0) continue;
+                    if (direction == 0) Line(vh, center, _corners[(sector + 1) % 4], OUTLINE_WIDTH * 0.75f, line);
+                    else if (direction == 1) Line(vh, center, _corners[sector], OUTLINE_WIDTH * 0.75f, line);
+                    else Line(vh, _corners[sector], _corners[(sector + 1) % 4], OUTLINE_WIDTH * 0.75f, line);
+                }
+            }
         }
     }
 
