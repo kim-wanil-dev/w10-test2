@@ -18,7 +18,15 @@ public sealed class SpellPiece3D : MonoBehaviour
     private static readonly int COLOR_ID = Shader.PropertyToID("_Color");
     private static Mesh _sealMesh;
 
+    // 소멸 조각(회수 복사본) 윗면에 그리는 균열의 두께와 색이다.
+    private const float CRACK_WIDTH = 0.028f;
+    private const float CRACK_EDGE_MARGIN = 0.03f;
+    private const float CRACK_LIFT = 0.008f;
+    private static readonly Color CRACK_COLOR = new Color(0.07f, 0.06f, 0.06f);
+
     private readonly List<MeshRenderer> _sealDots = new List<MeshRenderer>();
+    private MeshRenderer _crack;
+    private Mesh _crackMesh;
     private MaterialPropertyBlock _sealBlock;
     private Material _sealMaterial;
     private System.Func<SpellGame.Seal, Color> _sealColor;
@@ -74,7 +82,7 @@ public sealed class SpellPiece3D : MonoBehaviour
         string key = LUMP_KEY;
         if (cells != null) { System.Text.StringBuilder builder = new System.Text.StringBuilder(); foreach (SpellGame.ShapeCell cell in cells) builder.Append(cell.X).Append(',').Append(cell.Y).Append(',').Append(cell.Mask).Append('|'); key = builder.ToString(); }
         if (key == _clayKey) return;
-        if (cells == null) { ReplaceMesh(CreateLump()); ShowSeals(System.Array.Empty<SpellGame.ShapeCell>(), System.Array.Empty<SpellGame.SealSpot>()); }
+        if (cells == null) { ReplaceMesh(CreateLump()); ShowSeals(System.Array.Empty<SpellGame.ShapeCell>(), System.Array.Empty<SpellGame.SealSpot>()); ShowCracks(null); }
         else SetCells(cells, System.Array.Empty<SpellGame.SealSpot>());
         _clayKey = key;
     }
@@ -102,7 +110,167 @@ public sealed class SpellPiece3D : MonoBehaviour
     {
         ReplaceMesh(CreateSectorPrism(cells, THICKNESS));
         ShowSeals(cells, seals);
+        ShowCracks(_card != null && _card.IsRecallCopy ? cells : null);
         _clayKey = null;
+    }
+
+    /// <summary>소멸 조각이면 윗면에 균열을 그리고, cells가 null이면 균열을 숨긴다. 균열은 카드마다 같은 모양이다.</summary>
+    private void ShowCracks(IReadOnlyList<SpellGame.ShapeCell> cells)
+    {
+        if (cells == null || cells.Count == 0)
+        {
+            if (_crack != null) _crack.gameObject.SetActive(false);
+            return;
+        }
+        if (_crack == null) _crack = CreateCrackRenderer("Crack", CRACK_COLOR);
+        List<CrackLine> lines = CrackLines(cells, new System.Random(_card.Id * 7919 + 17));
+        ReplaceCrackMesh(ref _crackMesh, _crack, CrackMesh(lines, CellBounds(cells) / 2, THICKNESS + CRACK_LIFT));
+        _crack.gameObject.SetActive(true);
+    }
+
+    /// <summary>균열을 그릴 자식 렌더러를 씰링 재질 사본에 지정 색을 입혀 만든다.</summary>
+    private MeshRenderer CreateCrackRenderer(string name, Color color)
+    {
+        GameObject crack = new GameObject(name) { layer = gameObject.layer };
+        crack.transform.SetParent(transform, false);
+        crack.AddComponent<MeshFilter>();
+        MeshRenderer renderer = crack.AddComponent<MeshRenderer>();
+        Material material = new Material(_sealMaterial);
+        material.SetColor(BASE_COLOR_ID, color); material.SetColor(COLOR_ID, color);
+        // 씰링 재질의 반사가 남으면 어두운 균열이 번들거려 보이므로 끈다.
+        if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0f);
+        if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0f);
+        renderer.sharedMaterial = material;
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        return renderer;
+    }
+
+    /// <summary>균열 메시를 교체하고 이전 메시를 정리한다.</summary>
+    private static void ReplaceCrackMesh(ref Mesh field, MeshRenderer renderer, Mesh mesh)
+    {
+        if (field != null) Destroy(field);
+        field = mesh; renderer.GetComponent<MeshFilter>().sharedMesh = mesh;
+    }
+
+    /// <summary>균열 한 줄기다. 점마다 두께가 있어 갈라진 곳은 굵고 끝으로 갈수록 가늘어진다.</summary>
+    private struct CrackLine
+    {
+        public List<Vector2> Points;
+        public List<float> Widths;
+    }
+
+    /// <summary>조각 전체에 퍼진 가지 모양 균열을 만든다. 넓이에 비례한 여러 갈라짐 지점에서 구불구불한 줄기가 뻗고, 줄기에서 다시 가는 잔가지가 갈라진다. 조각 밖으로 나가면 그 줄기를 멈춘다.</summary>
+    private static List<CrackLine> CrackLines(IReadOnlyList<SpellGame.ShapeCell> cells, System.Random random)
+    {
+        List<CrackLine> lines = new List<CrackLine>();
+        List<Vector2> centroids = new List<Vector2>();
+        foreach (SpellGame.ShapeCell cell in cells)
+            for (int s = 0; s < 4; s++)
+            {
+                if ((cell.Mask & (1 << s)) == 0) continue;
+                Vector2[] tri = Triangle(cell, s);
+                centroids.Add((tri[0] + tri[1] + tri[2]) / 3);
+            }
+        if (centroids.Count == 0) return lines;
+        // 갈라짐 지점을 넓이에 맞춰 여러 곳에 고르게 흩어 조각 전체에 균열이 보이게 한다.
+        float area = centroids.Count / 4f;
+        int seeds = Mathf.Clamp(Mathf.RoundToInt(area * 1.6f), 2, 8);
+        for (int i = centroids.Count - 1; i > 0; i--) { int j = random.Next(i + 1); Vector2 t = centroids[i]; centroids[i] = centroids[j]; centroids[j] = t; }
+        List<Vector2> chosen = new List<Vector2>();
+        foreach (Vector2 c in centroids)
+        {
+            bool far = true; foreach (Vector2 o in chosen) if ((o - c).sqrMagnitude < 0.2f) far = false;
+            if (far) chosen.Add(c);
+            if (chosen.Count >= seeds) break;
+        }
+        foreach (Vector2 seed in chosen)
+        {
+            int arms = 3 + random.Next(2);
+            float start = (float)random.NextDouble() * Mathf.PI * 2;
+            for (int arm = 0; arm < arms; arm++)
+            {
+                float angle = start + arm * Mathf.PI * 2 / arms + ((float)random.NextDouble() - 0.5f) * 0.9f;
+                GrowCrack(lines, cells, random, seed, angle, 0.45f + 0.4f * (float)random.NextDouble(), CRACK_WIDTH, 0);
+            }
+        }
+        return lines;
+    }
+
+    /// <summary>from에서 angle 방향으로 length만큼 구불구불하게 뻗는 줄기를 만들고, 도중에 가는 잔가지를 낸다. 끝으로 갈수록 가늘어진다.</summary>
+    private static void GrowCrack(List<CrackLine> lines, IReadOnlyList<SpellGame.ShapeCell> cells, System.Random random, Vector2 from, float angle, float length, float width, int depth)
+    {
+        const float STEP = 0.035f;
+        int steps = Mathf.Max(2, Mathf.RoundToInt(length / STEP));
+        CrackLine line = new CrackLine { Points = new List<Vector2> { from }, Widths = new List<float> { width } };
+        Vector2 point = from;
+        for (int i = 1; i <= steps; i++)
+        {
+            angle += ((float)random.NextDouble() - 0.5f) * 0.55f;
+            Vector2 next = point + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * STEP;
+            if (!InsidePiece(cells, next, CRACK_EDGE_MARGIN)) break;
+            point = next;
+            float t = i / (float)steps;
+            float w = width * Mathf.Pow(1 - t, 0.75f);
+            line.Points.Add(point); line.Widths.Add(w);
+            // 잔가지는 줄기 중간에서 비스듬히 갈라져 더 짧고 가늘게 뻗는다.
+            if (depth < 2 && i > 2 && i < steps - 1 && random.NextDouble() < 0.11)
+            {
+                float side = random.NextDouble() < 0.5 ? -1 : 1;
+                GrowCrack(lines, cells, random, point, angle + side * (0.5f + 0.6f * (float)random.NextDouble()), length * (1 - t) * (0.5f + 0.3f * (float)random.NextDouble()), w * 0.8f, depth + 1);
+            }
+        }
+        if (line.Points.Count >= 2) { line.Widths[line.Widths.Count - 1] = 0; lines.Add(line); }
+    }
+
+    /// <summary>격자 점이 조각 모양 안쪽(가장자리에서 margin 이상 떨어진 곳)에 있는지 반환한다.</summary>
+    private static bool InsidePiece(IReadOnlyList<SpellGame.ShapeCell> cells, Vector2 point, float margin)
+    {
+        return InsideSector(cells, point) && InsideSector(cells, point + new Vector2(margin, margin)) && InsideSector(cells, point + new Vector2(-margin, margin))
+            && InsideSector(cells, point + new Vector2(margin, -margin)) && InsideSector(cells, point + new Vector2(-margin, -margin));
+    }
+
+    /// <summary>격자 점이 놓인 칸의 1/4 구역이 조각에 포함되는지 반환한다.</summary>
+    private static bool InsideSector(IReadOnlyList<SpellGame.ShapeCell> cells, Vector2 point)
+    {
+        int x = Mathf.FloorToInt(point.x), y = Mathf.FloorToInt(point.y);
+        float dx = point.x - x - 0.5f, dy = point.y - y - 0.5f;
+        int sector = Mathf.Abs(dy) >= Mathf.Abs(dx) ? (dy < 0 ? 0 : 2) : (dx > 0 ? 1 : 3);
+        return (MaskAt(cells, x, y) & (1 << sector)) != 0;
+    }
+
+    /// <summary>칸의 구역 삼각형 꼭짓점(바깥 변 두 점, 칸 중심)을 반환한다.</summary>
+    private static Vector2[] Triangle(SpellGame.ShapeCell cell, int sector)
+    {
+        Vector2[] corners = { new Vector2(cell.X, cell.Y), new Vector2(cell.X + 1, cell.Y), new Vector2(cell.X + 1, cell.Y + 1), new Vector2(cell.X, cell.Y + 1) };
+        return new[] { corners[sector], corners[(sector + 1) % 4], new Vector2(cell.X + 0.5f, cell.Y + 0.5f) };
+    }
+
+    /// <summary>균열 줄기들을 윗면 높이의 띠 메시로 만든다. 점마다 두께가 달라 끝이 뾰족하게 가늘어진다.</summary>
+    private static Mesh CrackMesh(List<CrackLine> lines, Vector2 half, float height)
+    {
+        List<Vector3> vertices = new List<Vector3>(); List<int> triangles = new List<int>();
+        foreach (CrackLine line in lines)
+        {
+            int count = line.Points.Count, start = vertices.Count;
+            for (int i = 0; i < count; i++)
+            {
+                Vector2 tangent = (line.Points[Mathf.Min(i + 1, count - 1)] - line.Points[Mathf.Max(i - 1, 0)]).normalized;
+                Vector2 normal = new Vector2(-tangent.y, tangent.x) * line.Widths[i] / 2;
+                vertices.Add(Local(line.Points[i] + normal, half, height)); vertices.Add(Local(line.Points[i] - normal, half, height));
+            }
+            for (int i = 0; i < count - 1; i++)
+            {
+                int a = start + i * 2;
+                // 위에서 보이도록 감기 순서를 윗방향에 맞춘다.
+                Vector3 p0 = vertices[a], p1 = vertices[a + 1], p2 = vertices[a + 2];
+                bool flip = Vector3.Dot(Vector3.Cross(p1 - p0, p2 - p0), Vector3.up) < 0;
+                if (!flip) { triangles.Add(a); triangles.Add(a + 1); triangles.Add(a + 2); triangles.Add(a + 1); triangles.Add(a + 3); triangles.Add(a + 2); }
+                else { triangles.Add(a); triangles.Add(a + 2); triangles.Add(a + 1); triangles.Add(a + 1); triangles.Add(a + 2); triangles.Add(a + 3); }
+            }
+        }
+        Mesh mesh = new Mesh { name = "Spell Piece Crack" };
+        mesh.SetVertices(vertices); mesh.SetTriangles(triangles, 0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
+        return mesh;
     }
 
     /// <summary>씰링마다 해당 1/4 구역 무게중심 위에 색 동그라미를 둔다. 필요한 만큼만 자식을 만들고 남는 동그라미는 숨긴다.</summary>
@@ -266,6 +434,8 @@ public sealed class SpellPiece3D : MonoBehaviour
     {
         if (_mesh != null) Destroy(_mesh);
         if (_material != null) Destroy(_material);
+        if (_crackMesh != null) Destroy(_crackMesh);
+        if (_crack != null) Destroy(_crack.sharedMaterial);
     }
 }
 
