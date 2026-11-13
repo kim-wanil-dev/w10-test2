@@ -2219,7 +2219,7 @@ public sealed class SpellGameUI : MonoBehaviour
                 center += new Vector2(cell.X + (side == 1 ? 5f / 6 : side == 3 ? 1f / 6 : 0.5f), cell.Y + (side == 2 ? 5f / 6 : side == 0 ? 1f / 6 : 0.5f)); count++;
             }
         Vector2 screen = _table.GridToScreen(center / count);
-        Vector2 local = ToLayer(screen);
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(_root, screen, null, out Vector2 local);
         return new Vector2(local.x - _root.rect.xMin, _root.rect.yMax - local.y);
     }
 
@@ -2234,6 +2234,8 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_theftBattle != _game.Battle)
         {
             ClearTheftApproach(); _theftBattle = _game.Battle; _theftWasInteractive = false;
+            // 첫 시도는 조각이 놓이는 즉시 시작하고, 이후 시도부터 기존 주기를 센다.
+            _theftElapsed = Mathf.Max(0.1f, _theftIntervalSeconds);
         }
         int board; SpellGame.Placement piece;
         if (_theftApproaching && !_game.TryGetTheftPlacement(out board, out piece)) ClearTheftApproach();
