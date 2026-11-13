@@ -10,6 +10,9 @@ public sealed class SpellTable3D : MonoBehaviour
 {
     private const int TABLE_LAYER = 30;
     private const float BOARD_MARGIN = 0.22f;
+    // 도안 외곽선의 두께와 판 위 높이다. 조각 위에 보이도록 띄우되 화면에서는 격자선에 맞춰 그리고, 선 바깥 가장자리가 격자선에 닿게 안쪽으로 들인다.
+    private const float OUTLINE_WIDTH = 0.045f;
+    private const float OUTLINE_HEIGHT = 0.295f;
     // 도안 이름표 너비를 칸 한 변 단위로 나타낸 값이다. 두 글자 이름과 핸들이 한 줄에 들어가는 폭이다.
     private const float TAB_WIDTH_CELLS = 1.5f;
     private static readonly Vector3 WORLD_ORIGIN = new Vector3(1000, 0, 0);
@@ -81,6 +84,8 @@ public sealed class SpellTable3D : MonoBehaviour
     private int _dragTemplate = -1;
     private bool _isCastDragging;
     private bool _isTemplateDragging;
+    // 도안을 잡은 칸(도안 원점 기준, 회전 반영)이다. 이름표로 잡으면 원점, 빈 칸으로 잡으면 그 칸이라 포인터가 잡은 칸을 따라 움직인다.
+    private Vector2Int _templateGrab;
     private readonly int[] _overlapCounts = new int[SpellPatternLayout.COLUMNS * SpellPatternLayout.ROWS * 4];
     private Vector2Int _autoCell;
     private bool _hasAutoCell;
@@ -174,12 +179,75 @@ public sealed class SpellTable3D : MonoBehaviour
     }
 
     /// <summary>로컬 꼭짓점들을 잇는 굵은 선을 만들고 지정 재질을 공유한다.</summary>
-    private static void Line(Transform parent, Vector3[] vertices, Material material, float width)
+    private static LineRenderer Line(Transform parent, Vector3[] vertices, Material material, float width)
     {
         LineRenderer line = CreateRoot("Inlaid line", parent).gameObject.AddComponent<LineRenderer>();
         line.useWorldSpace = false; line.positionCount = vertices.Length; line.SetPositions(vertices);
         line.widthMultiplier = width; line.sharedMaterial = material; line.numCapVertices = 2;
         line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; line.receiveShadows = false;
+        return line;
+    }
+
+    /// <summary>방향을 맞춘 경계 변(안쪽이 왼쪽)들을 이어 닫힌 외곽선 고리 목록으로 만든다. 같은 방향으로 이어지는 점은 하나로 합친다.</summary>
+    private static List<List<Vector2>> OutlineLoops(List<Vector2[]> edges)
+    {
+        Dictionary<Vector2Int, List<int>> starts = new Dictionary<Vector2Int, List<int>>();
+        for (int i = 0; i < edges.Count; i++)
+        {
+            Vector2Int key = HalfKey(edges[i][0]);
+            if (!starts.TryGetValue(key, out List<int> list)) starts[key] = list = new List<int>();
+            list.Add(i);
+        }
+        bool[] used = new bool[edges.Count];
+        List<List<Vector2>> loops = new List<List<Vector2>>();
+        for (int first = 0; first < edges.Count; first++)
+        {
+            if (used[first]) continue;
+            List<Vector2> loop = new List<Vector2>();
+            int current = first;
+            while (current >= 0 && !used[current])
+            {
+                used[current] = true;
+                loop.Add(edges[current][0]);
+                int next = -1;
+                if (starts.TryGetValue(HalfKey(edges[current][1]), out List<int> candidates))
+                    foreach (int candidate in candidates) if (!used[candidate]) { next = candidate; break; }
+                current = next;
+            }
+            // 같은 직선 위의 중간 점을 빼서 선이 꺾이는 곳에만 꼭짓점을 둔다.
+            for (int i = loop.Count - 1; i >= 0 && loop.Count > 3; i--)
+            {
+                Vector2 previous = loop[(i - 1 + loop.Count) % loop.Count], next = loop[(i + 1) % loop.Count];
+                Vector2 u = (loop[i] - previous).normalized, v = (next - loop[i]).normalized;
+                if (Vector2.Dot(u, v) > 0.999f) loop.RemoveAt(i);
+            }
+            if (loop.Count >= 3) loops.Add(loop);
+        }
+        return loops;
+    }
+
+    /// <summary>격자 좌표(0.5 단위)를 사전 키로 쓸 정수 좌표로 바꾼다.</summary>
+    private static Vector2Int HalfKey(Vector2 point) { return new Vector2Int(Mathf.RoundToInt(point.x * 2), Mathf.RoundToInt(point.y * 2)); }
+
+    /// <summary>안쪽이 왼쪽인 외곽선 고리의 i번째 꼭짓점을 양쪽 변에서 inset만큼 안쪽으로 들인 위치(마이터)를 반환한다.</summary>
+    private static Vector2 InsetCorner(List<Vector2> loop, int i, float inset)
+    {
+        Vector2 previous = loop[(i - 1 + loop.Count) % loop.Count], point = loop[i], next = loop[(i + 1) % loop.Count];
+        Vector2 u = (point - previous).normalized, v = (next - point).normalized;
+        Vector2 n1 = new Vector2(-u.y, u.x), n2 = new Vector2(-v.y, v.x);
+        float denominator = Mathf.Max(0.2f, 1 + Vector2.Dot(n1, n2));
+        return point + (n1 + n2) * (inset / denominator);
+    }
+
+    /// <summary>격자 좌표를 parent 로컬 좌표로 바꾸되, 높이 height에 띄운 점이 직교 카메라 화면에서는 판 격자선 위에 정확히 겹치도록 시선 방향으로 옮긴다.</summary>
+    private Vector3 LiftedLocal(Transform parent, Vector2 grid, float height)
+    {
+        Vector3 ground = _boardRoot.TransformPoint(GridLocal(grid));
+        Vector3 lifted = _boardRoot.TransformPoint(GridLocal(grid, height));
+        Vector3 toCamera = -_camera.transform.forward;
+        float rise = lifted.y - ground.y;
+        Vector3 world = Mathf.Abs(toCamera.y) > 0.01f ? ground + toCamera * (rise / toCamera.y) : lifted;
+        return parent.InverseTransformPoint(world);
     }
 
     /// <summary>격자 좌표를 판 중심 기준 로컬 좌표로 바꾼다. 격자 +y는 화면 아래(-z)다.</summary>
@@ -408,6 +476,7 @@ public sealed class SpellTable3D : MonoBehaviour
     private void DrawPattern(Transform parent, int spell, Vector2Int origin, int rotation, Material fill, Material border)
     {
         List<Vector3> vertices = new List<Vector3>(); List<int> triangles = new List<int>();
+        List<Vector2[]> boundary = new List<Vector2[]>();
         for (int y = 0; y < SpellPatternLayout.ROWS; y++) for (int x = 0; x < SpellPatternLayout.COLUMNS; x++)
         {
             int mask = SpellPatternLayout.GridMask(spell, origin, rotation, x, y);
@@ -419,15 +488,23 @@ public sealed class SpellTable3D : MonoBehaviour
                 Vector2 a = corners[sector], b = corners[(sector + 1) % 4]; int start = vertices.Count;
                 vertices.Add(GridLocal(a, 0.015f)); vertices.Add(GridLocal(b, 0.015f)); vertices.Add(GridLocal(center, 0.015f));
                 triangles.Add(start); triangles.Add(start + 1); triangles.Add(start + 2);
+                // 삼각형 a→b→중심 순서가 시계 방향이면 뒤집어, 모든 경계 변이 도안 안쪽을 왼쪽에 두도록 방향을 맞춘다.
+                bool flip = (b.x - a.x) * (center.y - a.y) - (b.y - a.y) * (center.x - a.x) < 0;
                 for (int edge = 0; edge < 3; edge++)
                 {
                     SpellPatternLayout.Neighbor(x, y, sector, edge, out int nx, out int ny, out int ns);
                     if ((SpellPatternLayout.GridMask(spell, origin, rotation, nx, ny) & (1 << ns)) != 0) continue;
                     Vector2 from = edge == 0 ? b : edge == 1 ? center : a;
                     Vector2 to = edge == 0 ? center : edge == 1 ? a : b;
-                    Line(parent, new[] { GridLocal(from, 0.295f), GridLocal(to, 0.295f) }, border, 0.045f);
+                    boundary.Add(flip ? new[] { to, from } : new[] { from, to });
                 }
             }
+        }
+        foreach (List<Vector2> loop in OutlineLoops(boundary))
+        {
+            Vector3[] points = new Vector3[loop.Count];
+            for (int i = 0; i < loop.Count; i++) points[i] = LiftedLocal(parent, InsetCorner(loop, i, OUTLINE_WIDTH * 0.5f / _cellSize), OUTLINE_HEIGHT);
+            Line(parent, points, border, OUTLINE_WIDTH).loop = true;
         }
         Mesh mesh = new Mesh { name = "Pattern sectors" }; mesh.SetVertices(vertices); mesh.SetTriangles(triangles, 0); mesh.RecalculateNormals();
         GameObject obj = CreateRoot("Pattern surface", parent).gameObject;
@@ -485,7 +562,8 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>격자 위치를 이름표 부모의 왼쪽 위 기준 UI 좌표로 투영한다.</summary>
     private Vector2 OverlayPoint(RectTransform parent, Vector2 grid)
     {
-        Vector3 screen = _camera.WorldToScreenPoint(_boardRoot.TransformPoint(GridLocal(grid, 0.3f)));
+        // 외곽선이 화면에서 격자선에 맞춰 그려지므로 이름표·시전 버튼도 격자 높이 기준으로 투영한다.
+        Vector3 screen = _camera.WorldToScreenPoint(_boardRoot.TransformPoint(GridLocal(grid)));
         RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, null, out Vector2 point);
         return new Vector2(point.x - parent.rect.xMin, point.y - parent.rect.yMax);
     }
@@ -533,7 +611,9 @@ public sealed class SpellTable3D : MonoBehaviour
             {
                 SpellPiece3D piece = pressHit.collider.GetComponent<SpellPiece3D>();
                 if (piece != null && (piece.IsHand || _game.CanMovePiece(piece.Placement))) BeginPick(piece, _downPosition);
+                else if (piece == null && TryBeginEmptyPatternDrag(_downPosition)) { UpdateTemplateInput(pointer, released, rotations); return; }
             }
+            else if (TryBeginEmptyPatternDrag(_downPosition)) { UpdateTemplateInput(pointer, released, rotations); return; }
         }
         else if (_picked != null && pressed && _isClickSelected) { FinishPick(_downPosition); return; }
         if (_picked != null)
@@ -615,8 +695,18 @@ public sealed class SpellTable3D : MonoBehaviour
             if (!tab.gameObject.activeInHierarchy || !RectTransformUtility.RectangleContainsScreenPoint(tab, _downPosition, null)) continue;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(tab, _downPosition, null, out Vector2 local);
             if (local.x - tab.rect.xMin >= tab.rect.width - 40f) return;
-            CancelPick(); _dragTemplate = spell; _isTemplateDragging = false; return;
+            CancelPick(); _dragTemplate = spell; _isTemplateDragging = false; _templateGrab = Vector2Int.zero; return;
         }
+    }
+
+    /// <summary>판 위 도안의 조각이 없는 빈 칸을 눌렀으면 그 도안을 잡은 칸 기준으로 드래그할 준비를 하고 true를 반환한다. 실제 이동은 포인터가 조금 움직인 뒤 시작한다.</summary>
+    private bool TryBeginEmptyPatternDrag(Vector2 position)
+    {
+        if (!ScreenToGrid(position, out Vector2 grid) || !OnGrid(grid)) return false;
+        Vector2Int cell = new Vector2Int((int)grid.x, (int)grid.y);
+        if (!_layout.TryFindTarget(cell.x, cell.y, Sector(grid), _game.Spells, out int spell)) return false;
+        CancelPick(); _dragTemplate = spell; _isTemplateDragging = false; _templateGrab = cell - _layout.Origin(spell);
+        return true;
     }
 
     /// <summary>시전 버튼 클릭은 기존 대상 선택에, 드래그는 직선 조준 및 놓은 적 시전에 전달한다.</summary>
@@ -642,7 +732,7 @@ public sealed class SpellTable3D : MonoBehaviour
         Vector2 point = released ? _upPosition : position;
         if (!_isTemplateDragging && (point - _downPosition).sqrMagnitude >= 36f)
         {
-            _screen.Board.BeginPatternDrag(_dragTemplate, Vector2Int.zero); _isTemplateDragging = true;
+            _screen.Board.BeginPatternDrag(_dragTemplate, _templateGrab); _isTemplateDragging = true;
         }
         if (_isTemplateDragging)
         {

@@ -131,6 +131,12 @@ public sealed class SpellGameUI : MonoBehaviour
     private const float HIT_IMPACT_SECONDS = 0.3f;
     private const float IMPACT_FLASH_SECONDS = 0.45f;
     private float _impactStart;
+    // 도안 설명 패널과 그 안의 예상 수치·상태 띠 색이다. 저주 색은 3D 판의 저주 조각 붉은 색조와 맞춘다.
+    private SpellPatternTooltipView _patternTooltip;
+    private static readonly Color DAMAGE_VALUE_COLOR = new Color(1f, 0.6f, 0.45f);
+    private static readonly Color BLOCK_VALUE_COLOR = new Color(0.55f, 0.78f, 1f);
+    private static readonly Color SEALED_COLOR = new Color(0.62f, 0.52f, 0.95f);
+    private static readonly Color CURSED_COLOR = new Color(0.9f, 0.25f, 0.25f);
     private bool _isVictoryHold;
     private float _victoryHoldUntil = -1;
     private SpellCastEffectGraphic _castEffects;
@@ -1005,13 +1011,6 @@ public sealed class SpellGameUI : MonoBehaviour
         return extras.Count > 0 ? main + "  ·  " + string.Join(" · ", extras) : main;
     }
 
-    /// <summary>도안의 "이름 - 기본 효과\n태그: 보상" 표기와 예상 수식, 미완성 안내를 툴팁용 문구로 만든다.</summary>
-    private string BuildFormula(int spell, bool complete, out string detail)
-    {
-        detail = complete ? "" : "빈 구역을 채우면 시전할 수 있습니다";
-        return SpellGame.PatternTitle(spell) + "\n예상 " + FormulaText(spell);
-    }
-
     /// <summary>적 슬롯을 배치하고 모델의 다음 행동·방어·충전·패시브와 조준 피해 미리보기를 표시한다.</summary>
     private void RefreshEnemies()
     {
@@ -1322,20 +1321,73 @@ public sealed class SpellGameUI : MonoBehaviour
     public void ShowPatternTooltip(int spell, Vector2 screenPosition, SpellGame.Card card = null, bool canRecall = false)
     {
         if (spell < 0) { ShowTextTooltip(null, screenPosition); ShowTraitTooltip(null, screenPosition); return; }
-        bool complete = _game.IsComplete(spell);
-        string detail;
-        string formula = BuildFormula(spell, complete, out detail);
-        ShowTextTooltip($"{formula}\n{(complete ? "완성" : RemainingText(spell))}" + (string.IsNullOrEmpty(detail) ? "" : " · " + detail)
-            + (canRecall ? "\n우클릭: 이 조각을 손패로 회수" : ""), screenPosition);
+        ShowTextTooltip(null, screenPosition);
+        if (!CanShowTooltip) return;
+        if (_patternTooltip == null) _patternTooltip = SpellPatternTooltipView.Create((RectTransform)_combatScreen.Tooltip.Box.parent, _font, _textColor, _subColor);
+        _patternTooltip.Show(PatternTooltipContent(spell), screenPosition);
         // 태그 발동 조건은 설명 박스 옆에 따로 띄운다.
-        if (_combatScreen.Tooltip.gameObject.activeSelf) SpellTagTooltip.Show(SpellGame.PatternKeywordExplanation(spell), _combatScreen.Tooltip.Box);
+        SpellTagTooltip.Show(SpellGame.PatternKeywordExplanation(spell), _patternTooltip.Box);
         ShowTraitTooltip(card, screenPosition);
+    }
+
+    /// <summary>도안 설명 패널 내용을 만든다. 효과와 지금 시전했을 때의 예상 수치만 담고, 봉인·저주 상태면 상태 띠를 붙인다.</summary>
+    private SpellPatternTooltipView.Content PatternTooltipContent(int spell)
+    {
+        SpellGame.SpellEvaluation e = _game.Evaluate(spell);
+        string[] lines = SpellGame.PatternDescription(spell).Split('\n');
+        SpellPatternTooltipView.Content c = new SpellPatternTooltipView.Content
+        {
+            Name = SpellGame.PatternName(spell),
+            Effect = lines[0],
+            Keyword = lines.Length > 1 ? lines[1] : "",
+            Accent = PatternColor(spell),
+            ValueColor = _textColor,
+        };
+        switch (e.Kind)
+        {
+            case SpellGame.SpellKind.Single: c.KindLabel = "단일 공격"; c.ValueLabel = "예상 피해"; c.Value = e.Value.ToString(); c.ValueColor = DAMAGE_VALUE_COLOR; break;
+            case SpellGame.SpellKind.All: c.KindLabel = "전체 공격"; c.ValueLabel = "예상 피해 · 적 전체"; c.Value = e.Value.ToString(); c.ValueColor = DAMAGE_VALUE_COLOR; break;
+            case SpellGame.SpellKind.Scatter: c.KindLabel = "무작위 다타"; c.ValueLabel = $"예상 피해 · {e.Hits}타 합계"; c.Value = e.Total.ToString(); c.ValueColor = DAMAGE_VALUE_COLOR; break;
+            case SpellGame.SpellKind.Block: c.KindLabel = "방어"; c.ValueLabel = "예상 방어"; c.Value = e.Block.ToString(); c.ValueColor = BLOCK_VALUE_COLOR; break;
+            default: c.KindLabel = "보조"; break;
+        }
+        List<string> extras = new List<string>();
+        int guard = e.Block - (e.Kind == SpellGame.SpellKind.Block ? e.Block : 0);
+        if (guard > 0) extras.Add($"방어 +{guard}");
+        if (e.ShardHits > 0) extras.Add($"파편 {SpellGame.SHARD_DAMAGE}×{e.ShardHits}");
+        if (e.KeywordRandomDamage > 0 && e.KeywordRandomHits > 0) extras.Add(e.KeywordRandomHits > 1 ? $"무작위 적 피해 {e.KeywordRandomDamage}×{e.KeywordRandomHits}" : $"무작위 적 피해 {e.KeywordRandomDamage}");
+        if (e.Draws > 0) extras.Add($"보충 {e.Draws}장");
+        if (e.Recalls > 0) extras.Add($"회수 {e.Recalls}장");
+        c.Extras = string.Join("  ·  ", extras);
+        if (_game.IsSealed(spell))
+        {
+            string sealer = "";
+            foreach (SpellGame.Enemy enemy in _game.Enemies) if (enemy.IsSealer && enemy.Health > 0 && enemy.SealedSpell == spell) { sealer = enemy.Name; break; }
+            c.Status = "봉인됨 · 시전할 수 없음";
+            c.StatusDetail = string.IsNullOrEmpty(sealer) ? "봉인한 적에게 피해를 주면 풀립니다" : $"{sealer}에게 피해를 주면 풀립니다";
+            c.StatusColor = SEALED_COLOR; c.Disabled = true;
+        }
+        else if (HasCursedPiece(spell))
+        {
+            c.Status = "저주받은 조각이 놓여 있음";
+            c.StatusDetail = $"이번 턴에 시전하면 저주가 풀립니다 · 못 하면 턴 종료 시 HP -{_game.Curse.Amount}";
+            c.StatusColor = CURSED_COLOR;
+        }
+        return c;
+    }
+
+    /// <summary>도안 판에 이번 턴 저주 대상 조각이 놓여 있는지 반환한다.</summary>
+    private bool HasCursedPiece(int spell)
+    {
+        foreach (SpellGame.Placement piece in _game.Boards[spell].Pieces) if (_game.IsCursed(piece.Card)) return true;
+        return false;
     }
 
     /// <summary>지정한 설명을 화면 좌표 근처에 표시하거나 지운다. 드래그·조준 중에는 표시하지 않는다.</summary>
     public void ShowTextTooltip(string message, Vector2 screenPosition)
     {
         SpellTagTooltip.Hide();
+        if (_patternTooltip != null) _patternTooltip.Hide();
         if (message == null || !CanShowTooltip) { _combatScreen.Tooltip.Hide(); return; }
         _combatScreen.Tooltip.Show(message, screenPosition);
     }
@@ -1346,13 +1398,15 @@ public sealed class SpellGameUI : MonoBehaviour
     private void HideTooltips()
     {
         _combatScreen.Tooltip.Hide(); SpellTagTooltip.Hide();
+        if (_patternTooltip != null) _patternTooltip.Hide();
         if (_coatingTooltip != null) { _coatingTooltip.gameObject.SetActive(false); _sealTooltip.gameObject.SetActive(false); }
     }
 
     /// <summary>카드의 코팅(또는 고유)을 포인터 왼쪽, 씰링과 이전 효과를 포인터 오른쪽에 펼쳐 표시한다. 해당 내용이 없는 쪽 패널은 숨긴다.</summary>
     private void ShowTraitTooltip(SpellGame.Card card, Vector2 screenPosition)
     {
-        if (card == null || !CanShowTooltip || !HasTraits(card))
+        bool cursed = card != null && _game.IsCursed(card);
+        if (card == null || !CanShowTooltip || (!HasTraits(card) && !cursed))
         {
             if (_coatingTooltip != null) { _coatingTooltip.gameObject.SetActive(false); _sealTooltip.gameObject.SetActive(false); }
             return;
@@ -1364,6 +1418,13 @@ public sealed class SpellGameUI : MonoBehaviour
         if (card.IsUnique) { left = $"<b>고유</b>\n{UniqueDescription(card)}"; leftColor = _subColor; }
         else if (card.IsContaminated) { left = "<b>오염 · 공격·방어 -2</b>\n시전에 사용한 오염 조각마다 감소 · 최소 0\n이번 전투 한정 · 접착 불가"; leftColor = AccentColorForContamination(); }
         else if (card.Coating != SpellGame.Coating.None) { left = $"<b><color=#{ColorUtility.ToHtmlStringRGB(CoatingColor(card.Coating))}>코팅 · {CoatingName(card.Coating)}</color></b>\n{CoatingDescription(card.Coating)}"; leftColor = CoatingColor(card.Coating); }
+        // 저주 대상 조각이면 왼쪽 설명 맨 위에 저주 상태를 먼저 알리고 패널 강조색도 저주 색으로 바꾼다.
+        if (cursed)
+        {
+            string curse = $"<b><color=#{ColorUtility.ToHtmlStringRGB(CURSED_COLOR)}>저주받은 조각</color></b>\n이번 턴에 이 조각으로 시전하면 풀립니다\n못 하면 턴 종료 시 HP -{_game.Curse.Amount}";
+            left = left.Length > 0 ? curse + "\n\n" + left : curse;
+            leftColor = CURSED_COLOR;
+        }
         List<string> lines = new List<string>();
         foreach (SpellGame.Seal seal in Enum.GetValues(typeof(SpellGame.Seal)))
         {

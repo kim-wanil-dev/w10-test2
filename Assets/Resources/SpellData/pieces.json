@@ -29,7 +29,7 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": true,
-      "starterCount": 1
+      "starterCount": 0
     },
     {
       "shape": "Triangle",
@@ -109,7 +109,7 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": true,
-      "starterCount": 4
+      "starterCount": 6
     },
     {
       "shape": "Diamond",
