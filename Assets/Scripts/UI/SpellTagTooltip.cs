@@ -27,12 +27,12 @@ public sealed class SpellTagTooltip : MonoBehaviour
         _instance.Build(parent, font);
     }
 
-    /// <summary>text를 beside 박스의 오른쪽(공간이 없으면 왼쪽)에 위쪽을 맞춰 표시한다. text가 비었거나 beside가 없으면 숨긴다.</summary>
-    public static void Show(string text, RectTransform beside)
+    /// <summary>text를 beside 박스의 오른쪽(공간이 없으면 왼쪽)에 위쪽을 맞춰 표시한다. preferLeft면 왼쪽을 먼저 쓴다. text가 비었거나 beside가 없으면 숨긴다.</summary>
+    public static void Show(string text, RectTransform beside, bool preferLeft = false)
     {
         if (_instance == null) return;
         if (string.IsNullOrEmpty(text) || beside == null || !beside.gameObject.activeInHierarchy) { Hide(); return; }
-        _instance.Place(text, beside);
+        _instance.Place(text, beside, preferLeft);
     }
 
     /// <summary>태그 설명 패널을 숨긴다.</summary>
@@ -63,7 +63,7 @@ public sealed class SpellTagTooltip : MonoBehaviour
     }
 
     /// <summary>문구에 맞춰 높이를 정하고 beside 박스 옆, 부모 영역 안쪽에 놓는다.</summary>
-    private void Place(string text, RectTransform beside)
+    private void Place(string text, RectTransform beside, bool preferLeft)
     {
         _text.text = text;
         float height = _text.preferredHeight + BAR + PADDING * 2;
@@ -72,8 +72,8 @@ public sealed class SpellTagTooltip : MonoBehaviour
         beside.GetWorldCorners(corners);
         Vector2 min = _parent.InverseTransformPoint(corners[0]), max = _parent.InverseTransformPoint(corners[2]);
         Rect area = _parent.rect;
-        float x = max.x + GAP;
-        if (x + WIDTH > area.xMax) x = min.x - GAP - WIDTH;
+        float right = max.x + GAP, left = min.x - GAP - WIDTH;
+        float x = preferLeft ? (left >= area.xMin ? left : right) : (right + WIDTH <= area.xMax ? right : left);
         x = Mathf.Clamp(x, area.xMin, area.xMax - WIDTH);
         float y = Mathf.Clamp(max.y, area.yMin + height, area.yMax);
         _rect.localPosition = new Vector3(x, y, 0);
