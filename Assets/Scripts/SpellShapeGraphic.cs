@@ -10,6 +10,7 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
     private const float SEAL_RADIUS = 0.13f;
     private const float SEAL_OUTLINE = 0.035f;
     private const int SEAL_SIDES = 14;
+    private const int CLAY_SIDES = 32;
     private static readonly Color SEAL_OUTLINE_COLOR = new Color(0.08f, 0.09f, 0.12f, 0.9f);
 
     private readonly List<SpellGame.ShapeCell> _cells = new List<SpellGame.ShapeCell>();
@@ -17,17 +18,18 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
     private readonly List<Color> _sealColors = new List<Color>();
     private SpellGame.Shape _shape;
     private bool _isCursed;
+    private bool _isClay;
 
     public SpellGame.Shape Shape
     {
         get { return _shape; }
-        set { _shape = value; _cells.Clear(); _cells.AddRange(SpellGame.ShapeCells(value, 0)); _seals.Clear(); _sealColors.Clear(); SetVerticesDirty(); }
+        set { _shape = value; _isClay = value == SpellGame.Shape.Clay; _cells.Clear(); _cells.AddRange(SpellGame.ShapeCells(value, 0)); _seals.Clear(); _sealColors.Clear(); SetVerticesDirty(); }
     }
 
     /// <summary>도안 기준 범위의 구역 마스크를 그릴 모양으로 설정한다.</summary>
     public void SetPattern(int spell)
     {
-        _cells.Clear(); _seals.Clear(); _sealColors.Clear();
+        _cells.Clear(); _seals.Clear(); _sealColors.Clear(); _isClay = false;
         for (int y = 0; y < SpellGame.LOCAL_SIZE; y++) for (int x = 0; x < SpellGame.LOCAL_SIZE; x++)
         {
             int mask = SpellGame.PatternMask(spell, x, y);
@@ -54,6 +56,8 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
         float shrink = Mathf.Max(0f, 1f - 2f * GAP / cell);
         UIVertex vertex = UIVertex.simpleVert;
         vertex.color = (_isCursed ? new Color(1f, 0.3f, 0.3f) : new Color(0.88f, 0.91f, 0.92f)) * color;
+        // 점토는 놓기 전까지 모양이 정해지지 않으므로 영역에 맞는 원으로 그린다.
+        if (_isClay) { Circle(vh, rect.center, Mathf.Min(rect.width, rect.height) / 2 - GAP, vertex.color, CLAY_SIDES); return; }
         foreach (SpellGame.ShapeCell c in _cells)
         {
             Vector2 center = SpellPatternLayout.GridToBoard(new Vector2(c.X + 0.5f, c.Y + 0.5f));
@@ -78,20 +82,20 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
             Vector2[] points = SectorPoints(sealCell, _seals[i].Sector);
             Vector2 board = center + ((points[0] + points[1] + points[2]) / 3 - center) * shrink - middle;
             Vector2 position = rect.center + new Vector2(board.x, -board.y) * cell;
-            Circle(vh, position, (SEAL_RADIUS + SEAL_OUTLINE) * cell, SEAL_OUTLINE_COLOR);
-            Circle(vh, position, SEAL_RADIUS * cell, _sealColors[i]);
+            Circle(vh, position, (SEAL_RADIUS + SEAL_OUTLINE) * cell, SEAL_OUTLINE_COLOR, SEAL_SIDES);
+            Circle(vh, position, SEAL_RADIUS * cell, _sealColors[i], SEAL_SIDES);
         }
     }
 
-    /// <summary>지정 중심과 반지름으로 채운 원을 추가한다.</summary>
-    private static void Circle(UnityEngine.UI.VertexHelper vh, Vector2 center, float radius, Color color)
+    /// <summary>지정 중심과 반지름으로 sides각형에 가까운 채운 원을 추가한다.</summary>
+    private static void Circle(UnityEngine.UI.VertexHelper vh, Vector2 center, float radius, Color color, int sides)
     {
         UIVertex vertex = UIVertex.simpleVert; vertex.color = color;
         int start = vh.currentVertCount;
         vertex.position = center; vh.AddVert(vertex);
-        for (int i = 0; i <= SEAL_SIDES; i++)
+        for (int i = 0; i <= sides; i++)
         {
-            float angle = i * Mathf.PI * 2 / SEAL_SIDES;
+            float angle = i * Mathf.PI * 2 / sides;
             vertex.position = center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius; vh.AddVert(vertex);
             if (i > 0) vh.AddTriangle(start, start + i, start + i + 1);
         }
@@ -100,7 +104,7 @@ public sealed class SpellShapeGraphic : UnityEngine.UI.MaskableGraphic
     /// <summary>카드 전체의 회전된 칸 목록과 저주 강조 상태를 표시한다. sealColor를 주면 씰링 위치에 그 색의 동그라미를 그린다.</summary>
     public void SetCard(SpellGame.Card card, int rotation = 0, bool isCursed = false, Func<SpellGame.Seal, Color> sealColor = null)
     {
-        _shape = card.Shape; _isCursed = isCursed;
+        _shape = card.Shape; _isCursed = isCursed; _isClay = card.IsUnique;
         _cells.Clear(); _cells.AddRange(SpellGame.CardCells(card, rotation));
         _seals.Clear(); _sealColors.Clear();
         if (sealColor != null)

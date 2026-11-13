@@ -43,6 +43,7 @@ public sealed class SpellEnemyView : MonoBehaviour
     private Action<int> _onClick;
 
     public RectTransform HitRect { get { return _hitRect; } }
+    public RectTransform EffectAnchor { get { return _silhouette; } }
 
     void Awake()
     {

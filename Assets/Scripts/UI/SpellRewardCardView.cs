@@ -1,10 +1,11 @@
 using System;
 
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-/// <summary>보상 후보 카드(특수 조각 또는 새 도안)의 종류, 모양, 이름을 표시하고 선택을 전달한다.</summary>
-public sealed class SpellRewardCardView : MonoBehaviour
+/// <summary>보상 후보 카드(특수 조각 또는 새 도안)의 종류, 모양, 이름을 표시하고 선택을 전달한다. 도안 카드에 키워드 태그가 있으면 가리키는 동안 옆에 태그 설명을 띄운다.</summary>
+public sealed class SpellRewardCardView : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     private const float SHAPE_CELL = 44f;
     private const float PATTERN_CELL = 40f;
@@ -22,6 +23,8 @@ public sealed class SpellRewardCardView : MonoBehaviour
 
     private int _reward;
     private Action<int> _onChoose;
+    private string _tagExplanation = "";
+    private bool _isHovered;
 
     /// <summary>보상 종류와 설명을 표시한다. 설명이 없으면 제목만 크게 표시하고 도형을 숨긴다.</summary>
     public void BindOption(int reward, string kind, string description, Color accent, Action<int> onChoose)
@@ -57,10 +60,11 @@ public sealed class SpellRewardCardView : MonoBehaviour
         foreach (Image cell in _patternCells) cell.gameObject.SetActive(false);
     }
 
-    /// <summary>도안을 1/4 구역 모양으로 표시한다. kind는 카드 상단 종류 문구이며 기본값은 보상용 "새 도안"이다.</summary>
+    /// <summary>도안을 1/4 구역 모양으로 표시한다. kind는 카드 상단 종류 문구이며 기본값은 보상용 "새 도안"이다. 도안 키워드 태그 설명은 가리킬 때 옆 박스로 띄운다.</summary>
     public void BindPattern(int reward, string displayName, int spell, Color accent, Action<int> onChoose, string kind = "새 도안")
     {
         Bind(reward, kind, displayName, accent, onChoose);
+        _tagExplanation = SpellGame.PatternKeywordExplanation(spell);
         _shapeArea.gameObject.SetActive(true);
         _shapeArea.sizeDelta = (Vector2)SpellPatternLayout.BaseSize(spell) * PATTERN_CELL;
         _shape.SetPattern(spell); _shape.color = accent;
@@ -76,8 +80,28 @@ public sealed class SpellRewardCardView : MonoBehaviour
         _name.rectTransform.sizeDelta = new Vector2(388, 118);
         _kind.rectTransform.sizeDelta = new Vector2(388, 26);
         _stripe.rectTransform.sizeDelta = new Vector2(396, 6);
-        _reward = reward; _onChoose = onChoose;
+        _reward = reward; _onChoose = onChoose; _tagExplanation = "";
         _kind.text = kind; _name.text = displayName; _stripe.color = accent;
+        if (_isHovered) SpellTagTooltip.Hide();
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        _isHovered = true;
+        SpellTagTooltip.Show(_tagExplanation, (RectTransform)transform);
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        _isHovered = false;
+        SpellTagTooltip.Hide();
+    }
+
+    void OnDisable()
+    {
+        if (!_isHovered) return;
+        _isHovered = false;
+        SpellTagTooltip.Hide();
     }
 
     /// <summary>선택한 보상 번호를 전달한다.</summary>

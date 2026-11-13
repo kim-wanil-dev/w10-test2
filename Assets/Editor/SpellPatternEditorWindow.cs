@@ -17,6 +17,10 @@ public sealed class SpellPatternEditorWindow : EditorWindow
     private const float OTHER_PATTERN_ALPHA = 0.3f;
 
     private static readonly string[] ROTATION_LABELS = { "0°", "90°", "180°", "270°" };
+    // SpellGame.CastEffect 순서와 같다.
+    private static readonly string[] CAST_EFFECT_LABELS = { "자동 (효과 종류로)", "없음", "불씨 (불덩이)", "번개", "유성", "참격 (베기)", "강타 (충격파)", "산탄 (탄환)", "방패 (밀치기·강타)", "방벽 (보호막)", "철벽 (벽돌)" };
+    // SpellGame.KeywordBonus 순서와 같다.
+    private static readonly string[] KEYWORD_BONUS_LABELS = { "추가 피해", "무작위 적 피해", "방어도" };
     private static readonly Color BOARD_COLOR = new Color(0.3f, 0.3f, 0.3f);
     private static readonly Color OUTSIDE_COLOR = new Color(0.9f, 0.2f, 0.2f);
 
@@ -121,7 +125,7 @@ public sealed class SpellPatternEditorWindow : EditorWindow
             SpellDataStore.ParseColor(pattern.Color, out Color color);
             EditorGUI.DrawRect(swatch, color);
             Rect label = new Rect(swatch.xMax + 4, row.y, row.width - SWATCH_SIZE - 4, row.height);
-            string text = $"{i}. {pattern.Name} ({pattern.Id}){(pattern.IsStarter ? "  시작" : "")}";
+            string text = $"{i}. {pattern.Name} ({pattern.Id}){(pattern.IsStarter ? "  시작" : "")}{(pattern.IsInRewardPool ? "" : "  보상 제외")}";
             if (GUI.Toggle(label, i == _selected, text, EditorStyles.toolbarButton) && i != _selected) { _selected = i; GUI.FocusControl(null); }
         }
         EditorGUILayout.EndScrollView();
@@ -156,11 +160,17 @@ public sealed class SpellPatternEditorWindow : EditorWindow
         pattern.Id = EditorGUILayout.TextField("id", pattern.Id);
         pattern.Name = EditorGUILayout.TextField("이름", pattern.Name);
         pattern.Kind = (SpellGame.SpellKind)EditorGUILayout.EnumPopup("효과 종류", pattern.Kind);
-        pattern.BaseValue = Mathf.Max(0, EditorGUILayout.IntField("기본 수치", pattern.BaseValue));
+        // 효과 종류 None은 기본 효과가 없어 기본 수치를 숨기고, 산탄은 조각 수와 관계없는 타격 횟수를 정한다.
+        if (pattern.Kind != SpellGame.SpellKind.None) pattern.BaseValue = Mathf.Max(0, EditorGUILayout.IntField(pattern.Kind == SpellGame.SpellKind.Scatter ? "1타 피해" : "기본 수치", pattern.BaseValue));
+        if (pattern.Kind == SpellGame.SpellKind.Scatter) pattern.Hits = Mathf.Max(1, EditorGUILayout.IntField("타격 횟수", pattern.Hits));
         pattern.Keyword = (SpellGame.Keyword)EditorGUILayout.EnumPopup("키워드", pattern.Keyword);
+        DrawKeywordBonus(pattern);
         Color picked = EditorGUILayout.ColorField(new GUIContent("색"), color, true, false, false);
         if (picked != color) pattern.Color = SpellDataStore.ToColorCode(picked);
+        pattern.CastEffect = (SpellGame.CastEffect)EditorGUILayout.Popup(new GUIContent("이펙트", "시전할 때 재생할 연출입니다. 자동은 효과 종류(단일 강타, 전체 유성, 방어 방벽, 산탄 탄환)로 고릅니다."), (int)pattern.CastEffect, CAST_EFFECT_LABELS);
         pattern.IsStarter = EditorGUILayout.Toggle("시작 도안", pattern.IsStarter);
+        pattern.IsInRewardPool = EditorGUILayout.Toggle(new GUIContent("보상 후보", "끄면 전투 보상의 도안 후보로 나오지 않습니다. 시작 도안은 이미 보유하므로 보상에 나오지 않습니다."), pattern.IsInRewardPool);
+        DrawDescriptionPreview(pattern);
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("장착 화면 기본 배치", EditorStyles.boldLabel);
         pattern.LayoutX = EditorGUILayout.IntSlider("x", pattern.LayoutX, 0, SpellPatternLayout.COLUMNS - 1);
@@ -188,6 +198,30 @@ public sealed class SpellPatternEditorWindow : EditorWindow
         EditorGUILayout.EndScrollView();
         EditorGUILayout.EndVertical();
         if (isChanged) MarkDirty();
+    }
+
+    /// <summary>한 방·순수·모자이크 키워드면 만족 시 보상 종류(추가 피해·무작위 적 피해·방어도)와 수치를 들여쓰기해 그린다. 모자이크는 조각 1장마다 받는 수치다. 다른 키워드면 그리지 않는다.</summary>
+    private static void DrawKeywordBonus(SpellPatternData pattern)
+    {
+        if (!SpellDataStore.HasKeywordBonus(pattern.Keyword)) return;
+        bool isMosaic = pattern.Keyword == SpellGame.Keyword.Mosaic;
+        EditorGUI.indentLevel++;
+        pattern.KeywordBonus = (SpellGame.KeywordBonus)EditorGUILayout.Popup(isMosaic ? "조각 1장마다 보상" : "만족 시 보상", (int)pattern.KeywordBonus, KEYWORD_BONUS_LABELS);
+        pattern.KeywordBonusValue = Mathf.Max(0, EditorGUILayout.IntField(isMosaic ? "1장당 수치" : "보상 수치", pattern.KeywordBonusValue));
+        EditorGUI.indentLevel--;
+    }
+
+    /// <summary>게임 화면 도안 툴팁 첫 줄에 표시될 효과 설명을 현재 편집값으로 미리 보여 준다.</summary>
+    private static void DrawDescriptionPreview(SpellPatternData pattern)
+    {
+        EditorGUILayout.Space();
+        EditorGUILayout.LabelField("게임 설명 미리보기", EditorStyles.boldLabel);
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.HelpBox(SpellDataStore.PatternTitle(pattern), MessageType.None);
+        // 게임에서 설명 박스 옆에 따로 뜨는 태그 설명이다.
+        string explanation = SpellDataStore.KeywordExplanation(pattern).Replace("<b>", "").Replace("</b>", "");
+        if (explanation.Length > 0) EditorGUILayout.HelpBox(explanation, MessageType.Info);
+        EditorGUILayout.EndHorizontal();
     }
 
     /// <summary>4×4 공유 판의 유효 구역 위에 다른 시작 도안을 옅게, 선택 도안을 진하게 그린다. 판 밖 구역은 빨간색이다. 선택 도안이 판 안에 다 들어가면 true를 반환한다.</summary>
@@ -322,8 +356,9 @@ public sealed class SpellPatternEditorWindow : EditorWindow
     {
         SpellPatternData pattern = new SpellPatternData
         {
-            Id = UniqueId(NEW_ID_PREFIX), Name = "새 도안", Kind = SpellGame.SpellKind.Single, BaseValue = 1, Keyword = SpellGame.Keyword.None,
-            LayoutX = 1, LayoutY = 1, LayoutRotation = 0, Color = SpellDataStore.ToColorCode(Color.white), IsStarter = false
+            Id = UniqueId(NEW_ID_PREFIX), Name = "새 도안", Kind = SpellGame.SpellKind.Single, BaseValue = 1, Hits = 1, Keyword = SpellGame.Keyword.None,
+            KeywordBonus = SpellGame.KeywordBonus.Damage, KeywordBonusValue = SpellGame.DEFAULT_KEYWORD_BONUS,
+            LayoutX = 1, LayoutY = 1, LayoutRotation = 0, Color = SpellDataStore.ToColorCode(Color.white), IsStarter = false, IsInRewardPool = true
         };
         pattern.Cells.Add(new SpellCellData { X = 0, Y = 0, Mask = SpellDataStore.FULL_MASK });
         return pattern;
