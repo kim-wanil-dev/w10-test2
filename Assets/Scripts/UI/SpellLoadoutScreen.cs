@@ -143,9 +143,11 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
     /// <summary>화면 아래 안내 문구를 바꾼다.</summary>
     public void ShowHint(string text) { _hint.text = text; }
 
+    public bool InputBlocked { get; set; }
+
     void Update()
     {
-        if (!_isBuilt || _game == null) return;
+        if (!_isBuilt || _game == null || InputBlocked) return;
         Keyboard keyboard = Keyboard.current; Mouse mouse = Mouse.current;
         if (_confirm != null && _confirm.gameObject.activeSelf)
         {

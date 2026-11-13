@@ -38,6 +38,7 @@ public sealed class SpellTable3D : MonoBehaviour
     [SerializeField] private Material _sealMaterial;
 
     private readonly Dictionary<int, SpellPiece3D> _pieces = new Dictionary<int, SpellPiece3D>();
+    private const float PICK_MARGIN_PIXELS = 12f;
     private readonly List<int> _removed = new List<int>();
     private readonly HashSet<int> _activeCards = new HashSet<int>();
     private readonly List<RaycastResult> _uiHits = new List<RaycastResult>();
@@ -677,12 +678,11 @@ public sealed class SpellTable3D : MonoBehaviour
         if (_dragTemplate >= 0) { UpdateTemplateInput(pointer, released, rotations); return; }
         if (_picked == null && pressed && !IsOverControl(_downPosition) && !_screen.Board.IsDraggingPattern)
         {
-            Ray pressRay = _camera.ScreenPointToRay(_downPosition);
-            if (Physics.Raycast(pressRay, out RaycastHit pressHit, 50f, 1 << TABLE_LAYER))
+            SpellPiece3D piece = FindPieceForPick(_downPosition);
+            if (piece != null)
             {
-                SpellPiece3D piece = pressHit.collider.GetComponent<SpellPiece3D>();
-                if (piece != null && (piece.IsHand || _game.CanMovePiece(piece.Placement)) && _ui.Onboarding.AllowsPick(piece.Card)) BeginPick(piece, _downPosition);
-                else if (piece == null && TryBeginEmptyPatternDrag(_downPosition)) { UpdateTemplateInput(pointer, released, rotations); return; }
+                // 온보딩 중에는 지금 단계에서 허용한 조각만 집을 수 있다.
+                if ((piece.IsHand || _game.CanMovePiece(piece.Placement)) && _ui.Onboarding.AllowsPick(piece.Card)) BeginPick(piece, _downPosition);
             }
             else if (TryBeginEmptyPatternDrag(_downPosition)) { UpdateTemplateInput(pointer, released, rotations); return; }
         }
@@ -714,6 +714,36 @@ public sealed class SpellTable3D : MonoBehaviour
     }
 
     /// <summary>포인터 아래 판 위 조각을 손패로 회수한다. 드래그로 손패에 돌려놓을 수 있는 조각(이번 턴에 놓은 환불 가능 조각)만 회수하며, 회수하면 true를 반환한다.</summary>
+    private SpellPiece3D FindPieceForPick(Vector2 pointer)
+    {
+        SpellPiece3D PieceAt(Vector2 at)
+        {
+            return Physics.Raycast(_camera.ScreenPointToRay(at), out RaycastHit hit, 50f, 1 << TABLE_LAYER)
+                ? hit.collider.GetComponent<SpellPiece3D>() : null;
+        }
+        // A direct hit always wins, including a piece that cannot currently move.
+        SpellPiece3D direct = PieceAt(pointer);
+        if (direct != null) return direct;
+        float margin = PICK_MARGIN_PIXELS * Screen.height / 1080f;
+        // Search from the cursor outwards so a nearby silhouette wins over a distant one.
+        // Sampling only on press leaves colliders, placement rules and UI hit testing intact.
+        for (int ring = 1; ring <= 3; ring++)
+        {
+            SpellPiece3D nearest = null;
+            float nearestDepth = float.PositiveInfinity;
+            for (int sample = 0; sample < 24; sample++)
+            {
+                float angle = sample * Mathf.PI * 2f / 24;
+                SpellPiece3D candidate = PieceAt(pointer + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (margin * ring / 3f));
+                if (candidate == null || (!candidate.IsHand && !_game.CanMovePiece(candidate.Placement))) continue;
+                float depth = _camera.WorldToScreenPoint(candidate.transform.position).z;
+                if (depth < nearestDepth) { nearestDepth = depth; nearest = candidate; }
+            }
+            if (nearest != null) return nearest;
+        }
+        return null;
+    }
+
     private bool TryRecallAt(Vector2 pointer)
     {
         Ray ray = _camera.ScreenPointToRay(pointer);

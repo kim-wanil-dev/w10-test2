@@ -660,6 +660,8 @@ public sealed class SpellOnboarding : MonoBehaviour
         Text text = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text)).GetComponent<Text>();
         text.rectTransform.SetParent(parent, false);
         text.font = _font; text.fontSize = size; text.color = color; text.alignment = anchor; text.supportRichText = true; text.raycastTarget = false;
+        // 글꼴의 줄 높이가 칸보다 커도 잘리지 않게 넘쳐 그린다.
+        text.verticalOverflow = VerticalWrapMode.Overflow;
         return text;
     }
 
