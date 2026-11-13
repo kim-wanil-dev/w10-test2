@@ -1742,7 +1742,7 @@ public sealed class SpellGame
         LastAcquiredPattern = -1;
         ActiveReward = RewardKind.None;
         HasPieceReward = true;
-        HasPatternReward = Battle % 2 == 0;
+        HasPatternReward = Battle % 2 == 1;
         HasSealReward = false;
         RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
         bool hasClay = false;
