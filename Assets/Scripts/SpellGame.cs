@@ -978,9 +978,13 @@ public sealed class SpellGame
     public int HammerMaxPieces(Card card)
     {
         if (HammerIssue(card) != null) return 0;
-        int smallestPieces = card.Glued == null ? SmallestPieceCount(card.Shape)
-            : SmallestPieceCount(card.Glued.First.Shape) + SmallestPieceCount(card.Glued.Second.Shape);
-        return smallestPieces;
+        return SmallestPieceCount(card);
+    }
+
+    private static int SmallestPieceCount(Card card)
+    {
+        return card.Glued == null ? SmallestPieceCount(card.Shape)
+            : SmallestPieceCount(card.Glued.First) + SmallestPieceCount(card.Glued.Second);
     }
 
     /// <summary>현재 도형 데이터의 공통 분해 규칙을 끝까지 적용했을 때의 결과 장수를 반환한다.</summary>
@@ -1004,12 +1008,9 @@ public sealed class SpellGame
         if (card.Glued == null) AddHammerCards(card, Decompose(card.Shape, chance, maxPieces, _random), card.Coating, results);
         else
         {
-            List<Fragment> firstPieces = new List<Fragment>(), secondPieces = new List<Fragment>();
             int extraLeft = maxPieces - 2;
-            SplitFragment(new Fragment(card.Glued.First.Shape, 0, 0, 0), chance, _random, firstPieces, ref extraLeft);
-            SplitFragment(new Fragment(card.Glued.Second.Shape, 0, 0, 0), chance, _random, secondPieces, ref extraLeft);
-            AddHammerCards(card.Glued.First, firstPieces, card.Coating, results);
-            AddHammerCards(card.Glued.Second, secondPieces, card.Coating, results);
+            SplitHammerCard(card.Glued.First, chance, card.Coating, results, ref extraLeft);
+            SplitHammerCard(card.Glued.Second, chance, card.Coating, results, ref extraLeft);
         }
         resultShapes = new Shape[results.Count];
         for (int i = 0; i < results.Count; i++) resultShapes[i] = results[i].Shape;
@@ -1022,6 +1023,27 @@ public sealed class SpellGame
     }
 
     /// <summary>쪼갠 조각마다 카드를 만든다. 코팅은 모든 조각에 적용하고, 씰링은 그 1/4 구역을 가진 조각에만 남긴다. 이전 효과는 가장 큰 조각 한 장에만 남기며 동률은 무작위로 고른다.</summary>
+    private void SplitHammerCard(Card source, float chance, Coating coating, List<Card> results, ref int extraLeft)
+    {
+        if (source.Glued != null)
+        {
+            if (extraLeft == 0 || _random.NextDouble() >= chance)
+            {
+                Card copy = CopyCard(source, true);
+                copy.Coating = coating;
+                results.Add(copy);
+                return;
+            }
+            extraLeft--;
+            SplitHammerCard(source.Glued.First, chance, coating, results, ref extraLeft);
+            SplitHammerCard(source.Glued.Second, chance, coating, results, ref extraLeft);
+            return;
+        }
+        List<Fragment> fragments = new List<Fragment>();
+        SplitFragment(new Fragment(source.Shape, 0, 0, 0), chance, _random, fragments, ref extraLeft);
+        AddHammerCards(source, fragments, coating, results);
+    }
+
     private void AddHammerCards(Card source, IReadOnlyList<Fragment> fragments, Coating coating, List<Card> results)
     {
         int effectIndex = 0, largest = 0, ties = 0;
@@ -1058,7 +1080,6 @@ public sealed class SpellGame
         if (card == null || !_owned.Contains(card)) return "덱에서 조각을 선택하세요";
         if (card.IsContaminated) return "오염 조각은 이번 프로토타입에서 접착할 수 없습니다";
         if (card.IsUnique) return "고유 조각은 접착할 수 없습니다";
-        if (card.Glued != null) return "접착된 카드는 다시 접착할 수 없습니다";
         return null;
     }
 
@@ -1068,7 +1089,8 @@ public sealed class SpellGame
         string issue = GlueCardIssue(first) ?? GlueCardIssue(second);
         if (issue != null) return issue;
         if (first == second) return "서로 다른 조각 두 장을 선택하세요";
-        if (Math.Abs(relativeX) > 2 * LOCAL_SIZE || Math.Abs(relativeY) > 2 * LOCAL_SIZE) return "조각 사이에 틈이 있습니다";
+        if ((long)relativeX > ShapeWidth(first, firstRotation) || (long)relativeX < -ShapeWidth(second, secondRotation)
+            || (long)relativeY > ShapeHeight(first, firstRotation) || (long)relativeY < -ShapeHeight(second, secondRotation)) return "조각 사이에 틈이 있습니다";
         bool touching = false;
         for (int y = 0; y < ShapeHeight(first, firstRotation); y++) for (int x = 0; x < ShapeWidth(first, firstRotation); x++)
         {
