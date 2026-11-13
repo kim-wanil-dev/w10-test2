@@ -262,19 +262,7 @@ public sealed class SpellGame
         }
     }
 
-    // 도형별 한 단계 분해 결과(도형, 방향, 원본 기본 방향 기준 왼쪽 위 칸). 빈 배열은 더 나눌 수 없는 도형이다.
-    private static readonly Fragment[][] BASE_SPLITS = {
-        new[] { new Fragment(Shape.Triangle, 0, 1, 0), new Fragment(Shape.Triangle, 2, 0, 0) },
-        new[] { new Fragment(Shape.QuarterTriangle, 0, 0, 0), new Fragment(Shape.QuarterTriangle, 1, 0, 1) },
-        new[] { new Fragment(Shape.Square, 0, 0, 0), new Fragment(Shape.Square, 0, 1, 1) },
-        new Fragment[0],
-        new[] { new Fragment(Shape.QuarterTriangle, 1, 0, 0), new Fragment(Shape.QuarterTriangle, 3, 0, 0) },
-        new[] { new Fragment(Shape.Triangle, 1, 0, 0), new Fragment(Shape.Triangle, 3, 1, 0) },
-        new[] { new Fragment(Shape.Triangle, 1, 0, 0), new Fragment(Shape.Triangle, 2, 1, 0) },
-        new[] { new Fragment(Shape.QuarterTriangle, 2, 1, 0), new Fragment(Shape.Square, 0, 0, 0) },
-        new[] { new Fragment(Shape.Square, 0, 1, 0), new Fragment(Shape.Triangle, 3, 2, 1), new Fragment(Shape.Triangle, 3, 0, 1) },
-        new[] { new Fragment(Shape.Square, 0, 1, 0), new Fragment(Shape.Rectangle, 0, 0, 1) },
-        new Fragment[0] };
+    private static readonly Dictionary<int, Fragment[]> SPLIT_CACHE = new Dictionary<int, Fragment[]>();
     private static readonly int SHAPE_KIND_COUNT = Enum.GetValues(typeof(Shape)).Length;
     private static readonly int SEAL_KIND_COUNT = Enum.GetValues(typeof(Seal)).Length - 1;
     private static readonly int COATING_KIND_COUNT = Enum.GetValues(typeof(Coating)).Length - 1;
@@ -289,6 +277,7 @@ public sealed class SpellGame
     private static readonly bool[] SHAPE_MIRRORED;
     private static readonly Shape[] REWARD_SHAPES;
     private static readonly int[] STARTER_COUNTS;
+    private static readonly int[] DECOMPOSITION_PRIORITIES;
     private static readonly ShapeCell[][][] SHAPE_ORIENTATIONS;
 
     private readonly Random _random = new Random();
@@ -383,9 +372,11 @@ public sealed class SpellGame
         SHAPE_MIRRORED = new bool[SHAPE_KIND_COUNT];
         bool[] isReward = new bool[SHAPE_KIND_COUNT];
         STARTER_COUNTS = new int[SHAPE_KIND_COUNT];
+        DECOMPOSITION_PRIORITIES = new int[SHAPE_KIND_COUNT];
         foreach (SpellPieceData piece in SpellDataStore.LoadPieces().Pieces)
         {
             STARTER_COUNTS[(int)piece.Shape] = piece.StarterCount;
+            DECOMPOSITION_PRIORITIES[(int)piece.Shape] = piece.DecompositionPriority;
             int shape = (int)piece.Shape;
             BASE_SHAPES[shape] = new ShapeCell[piece.Cells.Count];
             for (int i = 0; i < piece.Cells.Count; i++) BASE_SHAPES[shape][i] = new ShapeCell(piece.Cells[i].X, piece.Cells[i].Y, piece.Cells[i].Mask);
@@ -889,56 +880,40 @@ public sealed class SpellGame
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 분해할 조각 하나를 선택하세요";
         if (card.IsUnique) return "고유 조각은 쪼갤 수 없습니다";
-        if (card.Glued == null && card.Shape == Shape.QuarterTriangle) return "1/4 삼각형은 가장 작은 조각이라 분해할 수 없습니다";
         int firstSplit = card.Glued != null ? 2 : SplitOnce(new Fragment(card.Shape, 0, 0, 0)).Length;
-        if (firstSplit == 0) return "이 도형은 더 분해할 수 없습니다";
+        if (firstSplit == 0) return "현재 도형으로 빈틈없이 나눌 수 없는 최소 조각입니다";
         return null;
     }
 
-    /// <summary>조각을 BASE_SPLITS 규칙으로 한 단계 나누고, 원본 조각의 방향과 위치를 적용해 루트 기본 방향 기준 자식 목록을 반환한다.</summary>
+    /// <summary>등록 도형의 실제 영역에서 분해 조합을 계산·캐시하고 원본의 방향·위치를 적용한 자식 목록을 반환한다.</summary>
     private static Fragment[] SplitOnce(Fragment fragment)
     {
-        Fragment[] baseSplit = BASE_SPLITS[(int)fragment.Shape];
-        Fragment[] result = new Fragment[baseSplit.Length];
-        IReadOnlyList<ShapeCell> parentBase = ShapeCells(fragment.Shape, 0), parentCells = ShapeCells(fragment.Shape, fragment.Rotation);
-        for (int c = 0; c < baseSplit.Length; c++)
+        if (fragment.Shape == Shape.Clay) return Array.Empty<Fragment>();
+        int key = (int)fragment.Shape * 4 + fragment.Rotation;
+        if (!SPLIT_CACHE.TryGetValue(key, out Fragment[] split))
         {
-            // 자식 칸을 원본 기본 방향에서 원본의 현재 방향으로 옮긴다.
-            IReadOnlyList<ShapeCell> childBase = ShapeCells(baseSplit[c].Shape, baseSplit[c].Rotation);
-            ShapeCell[] moved = new ShapeCell[childBase.Count];
-            int minX = int.MaxValue, minY = int.MaxValue;
-            for (int i = 0; i < childBase.Count; i++)
+            ulong[][] masks = new ulong[SHAPE_KIND_COUNT][];
+            for (int shape = 0; shape < masks.Length; shape++)
             {
-                int index = 0;
-                while (parentBase[index].X != baseSplit[c].X + childBase[i].X || parentBase[index].Y != baseSplit[c].Y + childBase[i].Y) index++;
-                int mask = 0;
-                for (int sector = 0; sector < 4; sector++)
-                    if ((childBase[i].Mask & (1 << sector)) != 0) mask |= 1 << RotateSector(fragment.Shape, fragment.Rotation, sector);
-                moved[i] = new ShapeCell(parentCells[index].X, parentCells[index].Y, mask);
-                minX = Math.Min(minX, moved[i].X); minY = Math.Min(minY, moved[i].Y);
+                masks[shape] = new ulong[4];
+                for (int rotation = 0; rotation < 4; rotation++) masks[shape][rotation] = ShapeBits((Shape)shape, rotation);
             }
-            result[c] = new Fragment(baseSplit[c].Shape, MatchRotation(baseSplit[c].Shape, moved, minX, minY), fragment.X + minX, fragment.Y + minY);
+            SpellShapePartitioner.Part[] parts = SpellShapePartitioner.Split(masks[(int)fragment.Shape][fragment.Rotation], masks, LOCAL_SIZE, (int)Shape.Clay, DECOMPOSITION_PRIORITIES);
+            split = new Fragment[parts.Length];
+            for (int i = 0; i < parts.Length; i++) split[i] = new Fragment((Shape)parts[i].Shape, parts[i].Rotation, parts[i].X, parts[i].Y);
+            SPLIT_CACHE.Add(key, split);
         }
+        Fragment[] result = new Fragment[split.Length];
+        for (int i = 0; i < result.Length; i++) result[i] = new Fragment(split[i].Shape, split[i].Rotation, fragment.X + split[i].X, fragment.Y + split[i].Y);
         return result;
     }
 
-    /// <summary>왼쪽 위가 (minX, minY)인 칸 목록과 같은 모양이 되는 도형 방향을 찾아 반환한다.</summary>
-    private static int MatchRotation(Shape shape, ShapeCell[] cells, int minX, int minY)
+    /// <summary>현재 도형·방향의 점유 구역을 4×4칸 비트맵으로 반환한다.</summary>
+    private static ulong ShapeBits(Shape shape, int rotation)
     {
-        for (int rotation = 0; rotation < 4; rotation++)
-        {
-            IReadOnlyList<ShapeCell> candidate = ShapeCells(shape, rotation);
-            if (candidate.Count != cells.Length) continue;
-            bool same = true;
-            foreach (ShapeCell cell in cells)
-            {
-                bool found = false;
-                foreach (ShapeCell other in candidate) if (other.X == cell.X - minX && other.Y == cell.Y - minY && other.Mask == cell.Mask) found = true;
-                if (!found) { same = false; break; }
-            }
-            if (same) return rotation;
-        }
-        throw new InvalidOperationException($"{shape} 분해 결과의 방향을 찾지 못했습니다");
+        ulong result = 0;
+        foreach (ShapeCell cell in ShapeCells(shape, rotation)) result |= (ulong)cell.Mask << ((cell.Y * LOCAL_SIZE + cell.X) * 4);
+        return result;
     }
 
     /// <summary>강도 0~1에서 첫 분해 이후 자식의 추가 분해 확률을 반환한다.</summary>
@@ -990,7 +965,11 @@ public sealed class SpellGame
         for (int i = 0; i < cells.Count; i++)
         {
             if (fragment.X + cells[i].X != seal.X || fragment.Y + cells[i].Y != seal.Y || (cells[i].Mask & (1 << seal.Sector)) == 0) continue;
-            mapped = new SealSpot(baseCells[i].X, baseCells[i].Y, ((seal.Sector - fragment.Rotation) % 4 + 4) % 4, seal.Seal); return true;
+            for (int sector = 0; sector < 4; sector++)
+                if (RotateSector(fragment.Shape, fragment.Rotation, sector) == seal.Sector)
+                {
+                    mapped = new SealSpot(baseCells[i].X, baseCells[i].Y, sector, seal.Seal); return true;
+                }
         }
         mapped = default; return false;
     }
@@ -999,15 +978,23 @@ public sealed class SpellGame
     public int HammerMaxPieces(Card card)
     {
         if (HammerIssue(card) != null) return 0;
-        int smallestPieces = card.Glued == null ? SmallestPieceCount(card.Shape)
-            : SmallestPieceCount(card.Glued.First.Shape) + SmallestPieceCount(card.Glued.Second.Shape);
-        return smallestPieces;
+        return SmallestPieceCount(card);
     }
 
-    /// <summary>기본 도형을 모두 1/4 삼각형까지 나눴을 때의 조각 수, 즉 도형 면적을 1/4 삼각형 면적으로 나눈 값을 반환한다.</summary>
+    private static int SmallestPieceCount(Card card)
+    {
+        return card.Glued == null ? SmallestPieceCount(card.Shape)
+            : SmallestPieceCount(card.Glued.First) + SmallestPieceCount(card.Glued.Second);
+    }
+
+    /// <summary>현재 도형 데이터의 공통 분해 규칙을 끝까지 적용했을 때의 결과 장수를 반환한다.</summary>
     private static int SmallestPieceCount(Shape shape)
     {
-        return ShapeArea(shape) / ShapeArea(Shape.QuarterTriangle);
+        Fragment[] parts = SplitOnce(new Fragment(shape, 0, 0, 0));
+        if (parts.Length == 0) return 1;
+        int count = 0;
+        foreach (Fragment part in parts) count += SmallestPieceCount(part.Shape);
+        return count;
     }
 
     /// <summary>강도에 따른 분해 결과로 덱 원본을 영구 교체하고 이벤트 작업 기회를 소모한다.</summary>
@@ -1021,12 +1008,9 @@ public sealed class SpellGame
         if (card.Glued == null) AddHammerCards(card, Decompose(card.Shape, chance, maxPieces, _random), card.Coating, results);
         else
         {
-            List<Fragment> firstPieces = new List<Fragment>(), secondPieces = new List<Fragment>();
             int extraLeft = maxPieces - 2;
-            SplitFragment(new Fragment(card.Glued.First.Shape, 0, 0, 0), chance, _random, firstPieces, ref extraLeft);
-            SplitFragment(new Fragment(card.Glued.Second.Shape, 0, 0, 0), chance, _random, secondPieces, ref extraLeft);
-            AddHammerCards(card.Glued.First, firstPieces, card.Coating, results);
-            AddHammerCards(card.Glued.Second, secondPieces, card.Coating, results);
+            SplitHammerCard(card.Glued.First, chance, card.Coating, results, ref extraLeft);
+            SplitHammerCard(card.Glued.Second, chance, card.Coating, results, ref extraLeft);
         }
         resultShapes = new Shape[results.Count];
         for (int i = 0; i < results.Count; i++) resultShapes[i] = results[i].Shape;
@@ -1039,6 +1023,27 @@ public sealed class SpellGame
     }
 
     /// <summary>쪼갠 조각마다 카드를 만든다. 코팅은 모든 조각에 적용하고, 씰링은 그 1/4 구역을 가진 조각에만 남긴다. 이전 효과는 가장 큰 조각 한 장에만 남기며 동률은 무작위로 고른다.</summary>
+    private void SplitHammerCard(Card source, float chance, Coating coating, List<Card> results, ref int extraLeft)
+    {
+        if (source.Glued != null)
+        {
+            if (extraLeft == 0 || _random.NextDouble() >= chance)
+            {
+                Card copy = CopyCard(source, true);
+                copy.Coating = coating;
+                results.Add(copy);
+                return;
+            }
+            extraLeft--;
+            SplitHammerCard(source.Glued.First, chance, coating, results, ref extraLeft);
+            SplitHammerCard(source.Glued.Second, chance, coating, results, ref extraLeft);
+            return;
+        }
+        List<Fragment> fragments = new List<Fragment>();
+        SplitFragment(new Fragment(source.Shape, 0, 0, 0), chance, _random, fragments, ref extraLeft);
+        AddHammerCards(source, fragments, coating, results);
+    }
+
     private void AddHammerCards(Card source, IReadOnlyList<Fragment> fragments, Coating coating, List<Card> results)
     {
         int effectIndex = 0, largest = 0, ties = 0;
@@ -1046,7 +1051,7 @@ public sealed class SpellGame
         {
             for (int i = 0; i < fragments.Count; i++)
             {
-                int area = SmallestPieceCount(fragments[i].Shape);
+                int area = ShapeArea(fragments[i].Shape);
                 if (area > largest) { largest = area; effectIndex = i; ties = 1; }
                 else if (area == largest && _random.Next(++ties) == 0) effectIndex = i;
             }
@@ -1075,7 +1080,6 @@ public sealed class SpellGame
         if (card == null || !_owned.Contains(card)) return "덱에서 조각을 선택하세요";
         if (card.IsContaminated) return "오염 조각은 이번 프로토타입에서 접착할 수 없습니다";
         if (card.IsUnique) return "고유 조각은 접착할 수 없습니다";
-        if (card.Glued != null) return "접착된 카드는 다시 접착할 수 없습니다";
         return null;
     }
 
@@ -1085,7 +1089,8 @@ public sealed class SpellGame
         string issue = GlueCardIssue(first) ?? GlueCardIssue(second);
         if (issue != null) return issue;
         if (first == second) return "서로 다른 조각 두 장을 선택하세요";
-        if (Math.Abs(relativeX) > 2 * LOCAL_SIZE || Math.Abs(relativeY) > 2 * LOCAL_SIZE) return "조각 사이에 틈이 있습니다";
+        if ((long)relativeX > ShapeWidth(first, firstRotation) || (long)relativeX < -ShapeWidth(second, secondRotation)
+            || (long)relativeY > ShapeHeight(first, firstRotation) || (long)relativeY < -ShapeHeight(second, secondRotation)) return "조각 사이에 틈이 있습니다";
         bool touching = false;
         for (int y = 0; y < ShapeHeight(first, firstRotation); y++) for (int x = 0; x < ShapeWidth(first, firstRotation); x++)
         {
@@ -1153,10 +1158,9 @@ public sealed class SpellGame
         }
     }
 
-    /// <summary>카드를 버림 더미로 보낸다. 절도 대상이었다면 절도를 취소한다.</summary>
+    /// <summary>카드를 버림 더미로 보낸다. 절도 목표 소멸은 다음 목표 조회에서 처리한다.</summary>
     private void Discard(Card card)
     {
-        if (TheftTarget == card) CancelTheft();
         _discard.Add(card);
     }
 
@@ -1237,8 +1241,8 @@ public sealed class SpellGame
         enemy.Block -= absorbed; damage -= absorbed;
         int before = enemy.Health;
         enemy.Health -= damage;
+        if (enemy == _theftOwner && enemy.Health < before) CancelTheft();
         if (enemy.Health <= 0) { enemy.Block = 0; enemy.Charge = 0; }
-        if (enemy == _theftOwner && enemy.Health <= 0) CancelTheft();
         if (enemy.IsSealer && enemy.Health < before && enemy.SealedSpell >= 0)
         {
             enemy.SealedSpell = -1;
@@ -1416,7 +1420,6 @@ public sealed class SpellGame
     public bool Recall(int board, Placement piece)
     {
         if (CurrentPhase != Phase.Combat || board < 0 || board >= Boards.Count || !CanMovePiece(piece) || Hand.Count >= MAX_HAND || !Boards[board].MutablePieces.Remove(piece)) return false;
-        if (TheftTarget == piece.Card) CancelTheft();
         _hand.Add(piece.Card); UpdateCompleter(Boards[board], null); return true;
     }
 
@@ -1428,7 +1431,6 @@ public sealed class SpellGame
         if (Hand.Count + current > MAX_HAND) return false;
         foreach (Placement p in b.Pieces)
         {
-            if (TheftTarget == p.Card) CancelTheft();
             if (CanMovePiece(p)) { _hand.Add(p.Card); }
             else Discard(p.Card);
         }
@@ -1454,17 +1456,28 @@ public sealed class SpellGame
         return false;
     }
 
-    /// <summary>현재 절도 대상이 여전히 배치되어 있는지 확인해 해당 도안 ID와 현재 배치 정보를 반환한다.</summary>
+    public bool HasActiveTheft { get { return CurrentPhase == Phase.Combat && _theftOwner != null && _theftOwner.Health > 0; } }
+
+    /// <summary>현재 배치를 반환한다. 목표 소멸 시 다른 배치 조각을 고르고, 조각이 없으면 접근을 취소한다.</summary>
     public bool TryGetTheftPlacement(out int boardIndex, out Placement placement)
     {
         boardIndex = -1; placement = null;
-        if (CurrentPhase != Phase.Combat || TheftTarget == null || _theftOwner == null || _theftOwner.Health <= 0) return false;
+        if (!HasActiveTheft) return false;
         for (int i = 0; i < Boards.Count; i++) foreach (Placement piece in Boards[i].Pieces)
         {
             if (piece.Card != TheftTarget) continue;
             boardIndex = i; placement = piece; return true;
         }
-        return false;
+        if (CraftCount > 0)
+        {
+            int index = _random.Next(CraftCount);
+            for (int i = 0; i < Boards.Count; i++) foreach (Placement piece in Boards[i].Pieces)
+            {
+                if (index-- != 0) continue;
+                TheftTarget = piece.Card; boardIndex = i; placement = piece; return true;
+            }
+        }
+        CancelTheft(); return false;
     }
 
     /// <summary>절도 시도를 취소하며 대상 카드와 배치 횟수는 변경하지 않는다.</summary>

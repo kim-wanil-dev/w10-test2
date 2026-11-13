@@ -16,4 +16,6 @@ public sealed class SpellPieceData
     [JsonProperty("isInRewardPool", Required = Required.Always)] public bool IsInRewardPool { get; set; }
     // 새 게임 시작 덱에 넣을 장수다. 0이면 기본 덱에 넣지 않는다.
     [JsonProperty("starterCount")] public int StarterCount { get; set; }
+    // 분해 재료 후보의 우선순위다. 기본 조각을 0, 새 도형의 기본값을 1로 두며 결과 위치·개수는 자동 계산한다.
+    [JsonProperty("decompositionPriority")] public int DecompositionPriority { get; set; } = 1;
 }
