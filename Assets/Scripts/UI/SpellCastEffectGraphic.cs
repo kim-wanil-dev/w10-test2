@@ -7,7 +7,7 @@ using UnityEngine.UI;
 public sealed class SpellCastEffectGraphic : MaskableGraphic
 {
     private const int CIRCLE_SIDES = 20;
-    private const float HIT_STAGGER = 0.09f;
+    public const float HIT_STAGGER = 0.09f;
     private const float HIT_DURATION = 0.75f;
     private const float SELF_DURATION = 0.9f;
     private static readonly Color HOT_COLOR = new Color(1f, 0.62f, 0.25f);
@@ -43,11 +43,11 @@ public sealed class SpellCastEffectGraphic : MaskableGraphic
         raycastTarget = false;
     }
 
-    /// <summary>시전 연출을 시작한다. caster는 시전자, hitTargets는 실제로 맞은 적의 화면 RectTransform을 타격 순서대로 담는다. gainedBlock이면 시전자에게 방어 연출을 더한다.</summary>
-    public void Play(SpellGame.CastEffect effect, RectTransform caster, IReadOnlyList<RectTransform> hitTargets, bool gainedBlock, Color color)
+    /// <summary>시전 연출을 delay초 뒤에 시작한다. caster는 시전자, hitTargets는 실제로 맞은 적의 화면 RectTransform을 타격 순서대로 담는다. gainedBlock이면 시전자에게 방어 연출을 더한다.</summary>
+    public void Play(SpellGame.CastEffect effect, RectTransform caster, IReadOnlyList<RectTransform> hitTargets, bool gainedBlock, Color color, float delay = 0)
     {
         if (effect == SpellGame.CastEffect.None || effect == SpellGame.CastEffect.Auto) return;
-        float now = Time.unscaledTime;
+        float now = Time.unscaledTime + delay;
         Vector2 from = LocalCenter(caster);
         bool isSelfKind = effect == SpellGame.CastEffect.Barrier || effect == SpellGame.CastEffect.IronWall;
         if (gainedBlock || isSelfKind && hitTargets.Count == 0)

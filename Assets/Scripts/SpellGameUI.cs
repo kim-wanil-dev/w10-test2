@@ -124,6 +124,13 @@ public sealed class SpellGameUI : MonoBehaviour
     private bool[] _impactHits = Array.Empty<bool>();
     // 공격으로 전투가 끝났을 때 시전 연출이 끝난 뒤 보상 화면을 열기까지 기다리는 시간이다.
     private const float VICTORY_HOLD_SECONDS = 0.5f;
+    // 조각(코팅·씰링) 연출을 하나씩 차례로 시작하는 간격과, 마지막 조각 연출 뒤 공격 연출이 나가기까지의 시간이다.
+    private const float TRAIT_STEP_SECONDS = 0.3f;
+    private const float ATTACK_AFTER_TRAITS_SECONDS = 0.45f;
+    // 공격 연출이 시작된 뒤 적에 닿을 때까지의 대략적인 시간이다. 적 피격 번쩍임과 증폭·톱니 타격 표시를 여기에 맞춘다.
+    private const float HIT_IMPACT_SECONDS = 0.3f;
+    private const float IMPACT_FLASH_SECONDS = 0.45f;
+    private float _impactStart;
     private bool _isVictoryHold;
     private float _victoryHoldUntil = -1;
     private SpellCastEffectGraphic _castEffects;
@@ -364,9 +371,10 @@ public sealed class SpellGameUI : MonoBehaviour
     private void UpdateFeedback()
     {
         if (_game.CurrentPhase != SpellGame.Phase.Combat && !_isVictoryHold) return;
-        float remaining = _feedbackUntil - Time.unscaledTime;
+        // 공격 연출이 적에 닿는 시각부터 잠깐 번쩍였다가 흐려진다.
+        float elapsed = Time.unscaledTime - _impactStart;
         SpellEnemyView[] enemies = _combatScreen.Enemies;
-        float alpha = remaining > 0 ? 0.32f * Mathf.Clamp01((remaining - 1.05f) / 0.45f) : 0;
+        float alpha = elapsed >= 0 ? 0.32f * Mathf.Clamp01(1 - elapsed / IMPACT_FLASH_SECONDS) : 0;
         for (int i = 0; i < enemies.Length; i++) enemies[i].SetImpact(_feedbackColor, i < _impactHits.Length && _impactHits[i] ? alpha : 0);
     }
 
@@ -609,10 +617,10 @@ public sealed class SpellGameUI : MonoBehaviour
         _castEffects.raycastTarget = false;
     }
 
-    /// <summary>방금 시전한 도안의 연출을 실제로 맞은 적과 시전자 위치에 재생한다.</summary>
-    private void PlayCastEffect(int board, SpellGame.SpellEvaluation evaluation, int guards)
+    /// <summary>방금 시전한 도안의 연출을 재생한다. 조각(코팅·씰링) 연출을 먼저 하나씩 차례로 보여 준 뒤 도안 공격 연출을 낸다. 공격 연출이 시작되기까지의 지연(초)을 반환한다.</summary>
+    private float PlayCastEffect(int board, SpellGame.SpellEvaluation evaluation, int guards)
     {
-        if (_castEffects == null) return;
+        if (_castEffects == null) return 0;
         // 파편 씰링 타격은 도안 연출 대신 파편 연출로 따로 그린다.
         List<RectTransform> hits = new List<RectTransform>(), shards = new List<RectTransform>();
         for (int i = 0; i < _game.LastCastHits.Count; i++)
@@ -623,33 +631,42 @@ public sealed class SpellGameUI : MonoBehaviour
             else hits.Add(_combatScreen.Enemies[hit].EffectAnchor);
         }
         RectTransform player = (RectTransform)_combatScreen.PlayerStatus.transform;
-        _castEffects.Play(SpellGame.PatternCastEffect(board), player, hits, evaluation.Block > 0, PatternColor(board));
-        PlayTraitEffects(board, evaluation, guards, hits, shards, player);
+        bool HasTerm(string name) { foreach (string term in evaluation.Terms) if (term.StartsWith(name)) return true; return false; }
+        bool amplified = HasTerm("증폭"), cogged = HasTerm("톱니");
+        int traits = PlayTraitEffects(board, evaluation, guards, amplified, cogged, shards, player);
+        float attackDelay = traits > 0 ? (traits - 1) * TRAIT_STEP_SECONDS + ATTACK_AFTER_TRAITS_SECONDS : 0;
+        _castEffects.Play(SpellGame.PatternCastEffect(board), player, hits, evaluation.Block > 0, PatternColor(board), attackDelay);
+        // 증폭·톱니로 강해진 타격은 공격 연출이 적에 닿는 순간에 맞춰 적 위에 표시한다.
+        float hitTime = attackDelay + HIT_IMPACT_SECONDS;
+        for (int i = 0; i < hits.Count; i++)
+        {
+            if (amplified) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.AmplifyHit, player, hits[i], hitTime + i * SpellCastEffectGraphic.HIT_STAGGER, CoatingColor(SpellGame.Coating.Amplify));
+            if (cogged) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.CogHit, player, hits[i], hitTime + i * SpellCastEffectGraphic.HIT_STAGGER, CoatingColor(SpellGame.Coating.Cog));
+        }
+        return attackDelay;
     }
 
-    /// <summary>시전에서 실제로 발동한 코팅·씰링 효과마다 도안 자리에서 시작하는 연출을 재생한다.</summary>
-    private void PlayTraitEffects(int board, SpellGame.SpellEvaluation e, int guards, List<RectTransform> hits, List<RectTransform> shards, RectTransform player)
+    /// <summary>시전에서 실제로 발동한 코팅·씰링 효과를 도안 자리에서 TRAIT_STEP_SECONDS 간격으로 하나씩 재생하고, 재생한 개수를 반환한다.</summary>
+    private int PlayTraitEffects(int board, SpellGame.SpellEvaluation e, int guards, bool amplified, bool cogged, List<RectTransform> shards, RectTransform player)
     {
-        RectTransform origin = _combatScreen.CastButtons[board].Rect;
-        bool HasTerm(string name) { foreach (string term in e.Terms) if (term.StartsWith(name)) return true; return false; }
-        if (HasTerm("증폭"))
+        RectTransform origin = _combatScreen.CastButtons[board].Rect, hand = _combatScreen.HandDropArea;
+        int order = 0;
+        void Next(SpellCastEffectGraphic.Trait kind, RectTransform from, RectTransform to, Color color, bool handFallback = false)
         {
-            _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Amplify, origin, null, 0, CoatingColor(SpellGame.Coating.Amplify));
-            for (int i = 0; i < hits.Count; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.AmplifyHit, origin, hits[i], 0.32f + i * 0.09f, CoatingColor(SpellGame.Coating.Amplify));
+            _castEffects.PlayTrait(kind, from, to, order++ * TRAIT_STEP_SECONDS, color, handFallback);
         }
-        if (HasTerm("톱니"))
-        {
-            _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Cog, origin, null, 0.05f, CoatingColor(SpellGame.Coating.Cog));
-            for (int i = 0; i < hits.Count; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.CogHit, origin, hits[i], 0.3f + i * 0.09f, CoatingColor(SpellGame.Coating.Cog));
-        }
-        if (HasTerm("덧칠")) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Overpaint, origin, null, 0, SealColor(SpellGame.Seal.Overpaint));
-        for (int i = 0; i < guards; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Guard, origin, player, 0.05f + i * 0.12f, CoatingColor(SpellGame.Coating.Guard));
-        for (int i = 0; i < shards.Count; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Shard, origin, shards[i], 0.2f + i * 0.12f, SealColor(SpellGame.Seal.Shard));
+        if (amplified) Next(SpellCastEffectGraphic.Trait.Amplify, origin, null, CoatingColor(SpellGame.Coating.Amplify));
+        if (cogged) Next(SpellCastEffectGraphic.Trait.Cog, origin, null, CoatingColor(SpellGame.Coating.Cog));
+        if (e.Terms.Exists(term => term.StartsWith("덧칠"))) Next(SpellCastEffectGraphic.Trait.Overpaint, origin, null, SealColor(SpellGame.Seal.Overpaint));
+        for (int i = 0; i < guards; i++) Next(SpellCastEffectGraphic.Trait.Guard, origin, player, CoatingColor(SpellGame.Coating.Guard));
+        foreach (RectTransform shard in shards) Next(SpellCastEffectGraphic.Trait.Shard, origin, shard, SealColor(SpellGame.Seal.Shard));
         // 보충·회수는 전투가 이어질 때만 실제로 손패에 카드가 들어온다.
-        if (_game.CurrentPhase != SpellGame.Phase.Combat) return;
-        RectTransform hand = _combatScreen.HandDropArea;
-        for (int i = 0; i < e.Recalls; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Recall, origin, hand, 0.3f + i * 0.15f, SealColor(SpellGame.Seal.Recall), true);
-        for (int i = 0; i < e.Draws; i++) _castEffects.PlayTrait(SpellCastEffectGraphic.Trait.Refill, (RectTransform)_combatScreen.DrawPile.transform, hand, 0.35f + i * 0.15f, SealColor(SpellGame.Seal.Refill), true);
+        if (_game.CurrentPhase == SpellGame.Phase.Combat)
+        {
+            for (int i = 0; i < e.Recalls; i++) Next(SpellCastEffectGraphic.Trait.Recall, origin, hand, SealColor(SpellGame.Seal.Recall), true);
+            for (int i = 0; i < e.Draws; i++) Next(SpellCastEffectGraphic.Trait.Refill, (RectTransform)_combatScreen.DrawPile.transform, hand, SealColor(SpellGame.Seal.Refill), true);
+        }
+        return order;
     }
 
     /// <summary>리모콘을 전환하고 진행 중인 선택과 조준을 취소한다.</summary>
@@ -1252,7 +1269,8 @@ public sealed class SpellGameUI : MonoBehaviour
         int guards = 0;
         foreach (SpellGame.Placement piece in _game.Boards[board].Pieces) if (piece.Card.Coating == SpellGame.Coating.Guard) guards++;
         if (!_game.Cast(board, target)) { _message = "살아 있는 대상을 선택하세요"; Render(); return; }
-        PlayCastEffect(board, evaluation, guards);
+        float attackDelay = PlayCastEffect(board, evaluation, guards);
+        _impactStart = Time.unscaledTime + attackDelay + HIT_IMPACT_SECONDS;
         _onboardingComplete = true;
         _pendingCast = -1; ClearSelection();
         _impactHits = new bool[_game.Enemies.Count];
