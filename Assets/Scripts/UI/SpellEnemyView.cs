@@ -6,8 +6,7 @@ using UnityEngine.UI;
 /// <summary>적 한 칸의 공격 의도, 실루엣, 이름·체력, 대상·조준·쓰러짐 상태와 예상 피해를 표시한다.</summary>
 public sealed class SpellEnemyView : MonoBehaviour
 {
-    private const float NAME_GAP = 14f;
-    private const float AIM_NAME_GAP = 30f;
+    private const float NAME_GAP = 30f;
     private const float INTENT_GAP = 16f;
     private const float BOSS_INTENT_GAP = 48f;
     private const float AIM_PADDING = 22f;
@@ -63,7 +62,7 @@ public sealed class SpellEnemyView : MonoBehaviour
         float healthTop = _healthRect.anchoredPosition.y + _healthRect.sizeDelta.y;
         float nameBottom = healthTop + 8f;
         _nameRect.anchoredPosition = new Vector2(0, nameBottom);
-        float silhouetteBottom = nameBottom + _nameRect.sizeDelta.y + (aiming ? AIM_NAME_GAP : NAME_GAP);
+        float silhouetteBottom = nameBottom + _nameRect.sizeDelta.y + NAME_GAP;
         _silhouette.sizeDelta = size;
         _silhouette.anchoredPosition = new Vector2(0, silhouetteBottom);
         foreach (Image part in _bodyParts) part.color = color;
