@@ -1794,13 +1794,9 @@ public sealed class SpellGame
         if (CurrentPhase != Phase.Reward) return false;
         if (index == -1)
         {
-            CurrentPhase = Battle == LAST_BATTLE ? Phase.Victory
-                : Battle == 2 || Battle == 3 ? Phase.Event
-                : Battle == 4 ? Phase.Rest : Phase.Loadout;
-            if (IsWorkshopEvent) _hasUsedWorkshop = false;
-            if (CurrentPhase == Phase.Rest) _hasRested = false;
-            HasSealReward = IsSealEvent;
-            RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
+            CurrentPhase = Battle == LAST_BATTLE ? Phase.Victory : Phase.Loadout;
+            HasSealReward = false;
+            RewardSeal = Seal.None;
             ActiveReward = RewardKind.None;
             return true;
         }
@@ -1924,6 +1920,16 @@ public sealed class SpellGame
         if (CurrentPhase != Phase.Loadout || equipped.Count == 0) return false;
         foreach (int spell in equipped) if (!_ownedSpells.Contains(spell)) return false;
         _spells.Clear(); _spells.AddRange(equipped); _spells.Sort();
+        if (Battle == 2 || Battle == 3 || Battle == 4)
+        {
+            CurrentPhase = Battle == 4 ? Phase.Rest : Phase.Event;
+            _hasUsedWorkshop = false;
+            _hasRested = false;
+            HasSealReward = IsSealEvent;
+            RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
+            ActiveReward = RewardKind.None;
+            return true;
+        }
         StartBattle(); return true;
     }
 
@@ -1945,7 +1951,7 @@ public sealed class SpellGame
         if (CurrentPhase != Phase.Event && CurrentPhase != Phase.Rest) return false;
         HasSealReward = false;
         ActiveReward = RewardKind.None;
-        CurrentPhase = Phase.Loadout;
+        StartBattle();
         return true;
     }
     /// <summary>기본·복합 카드의 지정 회전에서 점유하는 칸 목록을 반환한다.</summary>

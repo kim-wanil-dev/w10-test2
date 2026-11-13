@@ -22,6 +22,99 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
     private int _dragPart = -1;
     private Vector2 _dragOffset;
     private Vector2 _dragPoint;
+    private struct ReferencePattern
+    {
+        public int Spell, Rotation;
+        public Vector2Int Position;
+        public Color Color;
+    }
+    private readonly System.Collections.Generic.List<ReferencePattern> _references = new System.Collections.Generic.List<ReferencePattern>();
+
+    // These references only contribute vertices; they never enter the combat board or hit testing.
+    public void SetReferencePatterns(SpellPatternLayout layout, System.Collections.Generic.IReadOnlyList<int> equipped, System.Func<int, Color> colorOf)
+    {
+        _references.Clear();
+        foreach (int spell in equipped)
+        {
+            if (!layout.IsPlaced(spell)) continue;
+            _references.Add(new ReferencePattern { Spell = spell, Rotation = layout.Rotation(spell),
+                Position = layout.Origin(spell) + new Vector2Int(4, 1), Color = colorOf(spell) });
+        }
+        // Start with the valid equipment layout, then spread references without changing their orientation.
+        for (int pass = 0; pass < 4; pass++) for (int i = 0; i < _references.Count; i++)
+        {
+            ReferencePattern item = _references[i];
+            Vector2Int size = SpellPatternLayout.RotatedSize(item.Spell, item.Rotation);
+            float best = ReferenceSpacing(i, item.Position);
+            Vector2Int position = item.Position;
+            for (int y = 0; y <= GRID_HEIGHT - size.y; y++) for (int x = 0; x <= GRID_WIDTH - size.x; x++)
+            {
+                Vector2Int candidate = new Vector2Int(x, y);
+                float score = ReferenceSpacing(i, candidate);
+                if (score > best + 0.001f) { best = score; position = candidate; }
+            }
+            item.Position = position; _references[i] = item;
+        }
+        SetVerticesDirty();
+    }
+
+    private float ReferenceSpacing(int index, Vector2Int position)
+    {
+        ReferencePattern item = _references[index];
+        Vector2Int size = SpellPatternLayout.RotatedSize(item.Spell, item.Rotation);
+        float spacing = GRID_WIDTH * GRID_WIDTH + GRID_HEIGHT * GRID_HEIGHT;
+        for (int y = 0; y < size.y; y++) for (int x = 0; x < size.x; x++)
+        {
+            int mask = SpellPatternLayout.GridMask(item.Spell, position, item.Rotation, position.x + x, position.y + y);
+            if (mask == 0) continue;
+            for (int j = 0; j < _references.Count; j++)
+            {
+                if (j == index) continue;
+                ReferencePattern other = _references[j];
+                Vector2Int otherSize = SpellPatternLayout.RotatedSize(other.Spell, other.Rotation);
+                for (int oy = 0; oy < otherSize.y; oy++) for (int ox = 0; ox < otherSize.x; ox++)
+                {
+                    int gx = other.Position.x + ox, gy = other.Position.y + oy;
+                    int otherMask = SpellPatternLayout.GridMask(other.Spell, other.Position, other.Rotation, gx, gy);
+                    if (otherMask == 0) continue;
+                    if (gx == position.x + x && gy == position.y + y && (mask & otherMask) != 0) return float.NegativeInfinity;
+                    spacing = Mathf.Min(spacing, (new Vector2(position.x + x - gx, position.y + y - gy)).sqrMagnitude);
+                }
+            }
+        }
+        Vector2 center = (Vector2)position + (Vector2)size * 0.5f;
+        return spacing - 0.015f * (center - new Vector2(GRID_WIDTH / 2f, GRID_HEIGHT / 2f)).sqrMagnitude;
+    }
+
+    private void DrawReferencePatterns(UnityEngine.UI.VertexHelper vh)
+    {
+        foreach (ReferencePattern item in _references)
+        {
+            Vector2Int size = SpellPatternLayout.RotatedSize(item.Spell, item.Rotation);
+            Color fill = item.Color; fill.a = 0.12f;
+            Color edge = item.Color; edge.a = 0.6f;
+            for (int y = 0; y < size.y; y++) for (int x = 0; x < size.x; x++)
+            {
+                int gx = item.Position.x + x, gy = item.Position.y + y;
+                int mask = SpellPatternLayout.GridMask(item.Spell, item.Position, item.Rotation, gx, gy);
+                for (int sector = 0; sector < 4; sector++)
+                {
+                    if ((mask & (1 << sector)) == 0) continue;
+                    FillSectorPoints(gx, gy, sector);
+                    Vector2 a = ToLocal(_points[0]), b = ToLocal(_points[1]), center = ToLocal(_points[2]);
+                    Triangle(vh, a, b, center, fill);
+                    for (int direction = 0; direction < 3; direction++)
+                    {
+                        SpellPatternLayout.Neighbor(gx, gy, sector, direction, out int nx, out int ny, out int ns);
+                        if ((SpellPatternLayout.GridMask(item.Spell, item.Position, item.Rotation, nx, ny) & (1 << ns)) != 0) continue;
+                        if (direction == 0) Line(vh, center, b, edge, 2f);
+                        else if (direction == 1) Line(vh, center, a, edge, 2f);
+                        else Line(vh, a, b, edge, 2f);
+                    }
+                }
+            }
+        }
+    }
 
     public bool IsDragging { get { return _dragPart >= 0; } }
     public int DragPart { get { return _dragPart; } }
@@ -84,6 +177,7 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
             Vector2 a = ToLocal(_points[0]), b = ToLocal(_points[1]), center = ToLocal(_points[2]);
             Line(vh, a, b, _lineColor, GRID_LINE_WIDTH); Line(vh, center, a, _lineColor, GRID_LINE_WIDTH);
         }
+        DrawReferencePatterns(vh);
         bool valid = _ui.GluePlacementIssue() == null;
         // 도안 판과 같이 조각 삼각형을 칸 중심 쪽으로 칸 간격만큼 당겨 격자선이 보이게 한다.
         float shrink = Mathf.Max(0f, 1f - 2f * _cellGap / CELL_SIZE);
