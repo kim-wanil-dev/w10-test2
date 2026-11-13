@@ -239,7 +239,7 @@ public sealed class SpellGameUI : MonoBehaviour
         SetupOverlays();
         _onboarding = SpellOnboarding.Create(_game, _table, _combatScreen, _loadoutScreen, _font,
             () => _showPauseMenu || _showHelp || _openPile >= 0 || _showDebugRemote || _glueOverlay != null || _hammerPhase != HammerPhase.None || _sealWorkbench != null,
-            Render);
+            () => _pendingCast, Render);
         SetupReplayTutorialButton();
         SetupDebugRemote();
         SetupCastEffects();

@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
-/// <summary>첫 실행 온보딩. 첫 전투(B1~B5)와 첫 보상(R1~R4)을 단계별로 강제 안내한다.
+/// <summary>첫 실행 온보딩. 첫 전투(B1a~B5b)와 첫 보상(R1~R4b)을 행동 하나씩 짧은 문구로 강제 안내한다. 안내 창은 한 단계 안에서 움직이지 않는다.
 /// 단계는 게임 상태에서 매 프레임 판정하고, 현재 단계의 강조 영역만 밝게 남긴 채 나머지를 가린다.
 /// 마우스를 직접 읽는 전투 판·보상 화면은 Allows… 함수로 입력을 거르고, 그 밖의 버튼은 가림막이 클릭을 막는다.
 /// 문구는 Resources/SpellData/onboarding.json에서 읽는다.</summary>
@@ -28,7 +28,12 @@ public sealed class SpellOnboarding : MonoBehaviour
     private static readonly Color TEXT_COLOR = new Color(0.94f, 0.92f, 0.87f);
     private static readonly Color SUB_COLOR = new Color(0.68f, 0.7f, 0.76f);
 
-    private enum Step { None, B1, B2, B3, B4, B5, BattleFree, R1, R2, R3, R4 }
+    // 안내 창은 한 단계에 한두 줄만 보여 주고 행동마다 다음 단계로 넘긴다. 순서를 바꾸면 IsBattleStep·헤더 판정(R1 이후는 보상)도 맞춰야 한다.
+    private enum Step { None, B1a, B1b, B2a, B2b, B3a, B3b, B4a, B4b, B4c, B5a, B5b, BattleFree, R1, R2a, R2b, R3a, R3b, R4a, R4b }
+    // 확인 버튼으로 넘기는 설명 단계다.
+    private static readonly HashSet<Step> CONFIRM_STEPS = new HashSet<Step> { Step.B4b, Step.B5a, Step.B5b, Step.R2a, Step.R3a, Step.R3b };
+    // 안내 창이 자리를 정하기 전에 강조 영역(떨어지는 조각 등)이 자리 잡기를 기다리는 시간이다.
+    private const float POPUP_SETTLE_SECONDS = 0.35f;
 
     private sealed class TextData
     {
@@ -47,12 +52,17 @@ public sealed class SpellOnboarding : MonoBehaviour
     private SpellCombatScreen _combat;
     private SpellLoadoutScreen _loadout;
     private Func<bool> _isModalOpen;
+    private Func<int> _pendingCast;
     private Action _onChanged;
     private Font _font;
     private TextData _text;
 
     private bool _active;
-    private bool _emberCast, _barrierCast, _lockedConfirmed, _sealsConfirmed, _wasReward;
+    private bool _emberCast, _barrierCast, _wasReward;
+    private readonly HashSet<Step> _confirmed = new HashSet<Step>();
+    private bool _popupPlaced, _hasPopupPosition;
+    private float _stepStart, _stableSince;
+    private Vector4 _holeSignature;
     private int _ember = -1, _barrier = -1;
     private Step _step = Step.None;
     private float _idleSince;
@@ -61,7 +71,7 @@ public sealed class SpellOnboarding : MonoBehaviour
     private RectTransform _root, _popup, _skipModal, _ghost;
     private Text _header, _title, _body, _ghostText;
     private Button _confirm;
-    private CanvasGroup _ghostGroup;
+    private CanvasGroup _ghostGroup, _popupGroup;
     private readonly List<Image> _dims = new List<Image>();
     private readonly List<Image> _frames = new List<Image>();
     private readonly List<Rect> _holes = new List<Rect>();
@@ -72,7 +82,7 @@ public sealed class SpellOnboarding : MonoBehaviour
     private bool IsGuiding { get { return _active && _step != Step.None && _step != Step.BattleFree; } }
 
     /// <summary>온보딩 화면을 만들고 게임·전투 판·보상 화면을 연결한다. isModalOpen이 true면(일시정지·도움말 등) 안내를 잠시 숨긴다.</summary>
-    public static SpellOnboarding Create(SpellGame game, SpellTable3D table, SpellCombatScreen combat, SpellLoadoutScreen loadout, Font font, Func<bool> isModalOpen, Action onChanged)
+    public static SpellOnboarding Create(SpellGame game, SpellTable3D table, SpellCombatScreen combat, SpellLoadoutScreen loadout, Font font, Func<bool> isModalOpen, Func<int> pendingCast, Action onChanged)
     {
         GameObject obj = new GameObject("Onboarding", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         Canvas canvas = obj.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.sortingOrder = 500;
@@ -80,7 +90,7 @@ public sealed class SpellOnboarding : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize; scaler.referenceResolution = new Vector2(1920, 1080); scaler.matchWidthOrHeight = 0.5f;
         SpellOnboarding onboarding = obj.AddComponent<SpellOnboarding>();
         onboarding._game = game; onboarding._table = table; onboarding._combat = combat; onboarding._loadout = loadout; onboarding._font = font;
-        onboarding._isModalOpen = isModalOpen; onboarding._onChanged = onChanged;
+        onboarding._isModalOpen = isModalOpen; onboarding._pendingCast = pendingCast; onboarding._onChanged = onChanged;
         onboarding.Build();
         loadout.PressFilter = onboarding.AllowsPress;
         return onboarding;
@@ -96,7 +106,8 @@ public sealed class SpellOnboarding : MonoBehaviour
     public void Begin(bool active)
     {
         _active = active;
-        _emberCast = _barrierCast = _lockedConfirmed = _sealsConfirmed = _wasReward = false;
+        _emberCast = _barrierCast = _wasReward = false;
+        _confirmed.Clear(); _popupPlaced = _hasPopupPosition = false;
         _ember = _barrier = -1;
         for (int i = 0; i < SpellGame.PatternCount; i++)
         {
@@ -142,8 +153,8 @@ public sealed class SpellOnboarding : MonoBehaviour
     public bool AllowsPlace(int spell)
     {
         if (!IsBattleStep) return true;
-        if (_step == Step.B1 || _step == Step.B4) return spell == _ember;
-        if (_step == Step.B3) return spell == _barrier;
+        if (_step == Step.B1a || _step == Step.B1b || _step == Step.B4a) return spell == _ember;
+        if (_step == Step.B3a) return spell == _barrier;
         return false;
     }
 
@@ -151,27 +162,24 @@ public sealed class SpellOnboarding : MonoBehaviour
     public bool AllowsCast(int spell)
     {
         if (!IsBattleStep) return true;
-        return (_step == Step.B2 && spell == _ember) || (_step == Step.B3 && spell == _barrier);
+        return ((_step == Step.B2a || _step == Step.B2b) && spell == _ember) || (_step == Step.B3b && spell == _barrier);
     }
 
-    /// <summary>턴을 종료해도 되는지다. B4에서 불씨에 조각을 놓은 뒤에만 허용한다.</summary>
-    public bool AllowsEndTurn { get { return !IsBattleStep || (_step == Step.B4 && _game.Boards[_ember].Pieces.Count > 0); } }
+    /// <summary>턴을 종료해도 되는지다. 턴 종료를 안내하는 단계에서만 허용한다.</summary>
+    public bool AllowsEndTurn { get { return !IsBattleStep || _step == Step.B4c; } }
 
     /// <summary>판 위 도안을 옮기거나 도안 메뉴를 열어도 되는지다.</summary>
     public bool AllowsPatternEdit { get { return !IsBattleStep; } }
 
-    private bool IsBattleStep { get { return _active && _step >= Step.B1 && _step <= Step.B5; } }
+    private bool IsBattleStep { get { return _active && _step >= Step.B1a && _step <= Step.B5b; } }
 
-    /// <summary>지금 집을 수 있는 조각 모양이다. 불씨는 정사각형을 먼저 놓아야 1/4 삼각형 자리가 남으므로 순서를 정한다.</summary>
+    /// <summary>지금 집을 수 있는 조각 모양이다. 불씨는 정사각형을 먼저 놓아야 반 칸 삼각형 자리가 남으므로 순서를 정한다.</summary>
     private SpellGame.Shape? AllowedShape()
     {
         switch (_step)
         {
-            case Step.B1:
-                foreach (SpellGame.Placement piece in _game.Boards[_ember].Pieces) if (piece.Card.Shape == SpellGame.Shape.Diamond) return SpellGame.Shape.QuarterTriangle;
-                return SpellGame.Shape.Diamond;
-            case Step.B3: return _game.IsComplete(_barrier) ? (SpellGame.Shape?)null : SpellGame.Shape.Diamond;
-            case Step.B4: return _game.Boards[_ember].Pieces.Count > 0 ? (SpellGame.Shape?)null : SpellGame.Shape.QuarterTriangle;
+            case Step.B1a: case Step.B3a: return SpellGame.Shape.Diamond;
+            case Step.B1b: case Step.B4a: return SpellGame.Shape.QuarterTriangle;
             default: return null;
         }
     }
@@ -186,18 +194,32 @@ public sealed class SpellOnboarding : MonoBehaviour
         {
             if (_game.Turn == 1)
             {
-                if (!_emberCast) return _game.IsComplete(_ember) ? Step.B2 : Step.B1;
-                if (!_barrierCast) return Step.B3;
-                return Step.B4;
+                if (!_emberCast)
+                {
+                    if (_game.IsComplete(_ember)) return _pendingCast() == _ember ? Step.B2b : Step.B2a;
+                    foreach (SpellGame.Placement piece in _game.Boards[_ember].Pieces) if (piece.Card.Shape == SpellGame.Shape.Diamond) return Step.B1b;
+                    return Step.B1a;
+                }
+                if (!_barrierCast) return _game.IsComplete(_barrier) ? Step.B3b : Step.B3a;
+                if (_game.Boards[_ember].Pieces.Count == 0) return Step.B4a;
+                return _confirmed.Contains(Step.B4b) ? Step.B4c : Step.B4b;
             }
-            return _lockedConfirmed || _game.Boards[_ember].Pieces.Count == 0 ? Step.BattleFree : Step.B5;
+            if (_game.Boards[_ember].Pieces.Count == 0) return Step.BattleFree;
+            if (!_confirmed.Contains(Step.B5a)) return Step.B5a;
+            return _confirmed.Contains(Step.B5b) ? Step.BattleFree : Step.B5b;
         }
         if (_game.CurrentPhase == SpellGame.Phase.Reward)
         {
             _wasReward = true;
             if (_game.ActiveReward == SpellGame.RewardKind.Seal) return Step.None;
-            if (_game.HasPatternReward && _loadout.Tab == SpellGame.RewardKind.Pattern) return _loadout.HasTrialPattern ? Step.R2 : Step.R1;
-            if (_game.HasPieceReward && _loadout.Tab == SpellGame.RewardKind.Piece) return _sealsConfirmed ? Step.R4 : Step.R3;
+            if (_game.HasPatternReward && _loadout.Tab == SpellGame.RewardKind.Pattern)
+                return !_loadout.HasTrialPattern ? Step.R1 : _confirmed.Contains(Step.R2a) ? Step.R2b : Step.R2a;
+            if (_game.HasPieceReward && _loadout.Tab == SpellGame.RewardKind.Piece)
+            {
+                if (!_confirmed.Contains(Step.R3a)) return Step.R3a;
+                if (!_confirmed.Contains(Step.R3b)) return Step.R3b;
+                return _loadout.HasTrialPiece ? Step.R4b : Step.R4a;
+            }
             return Step.None;
         }
         if (_wasReward) Finish();
@@ -216,7 +238,7 @@ public sealed class SpellOnboarding : MonoBehaviour
     {
         if (_root == null) return;
         Step step = Evaluate();
-        if (step != _step) { _step = step; _idleSince = Time.unscaledTime; Refresh(); }
+        if (step != _step) { _step = step; _idleSince = _stepStart = Time.unscaledTime; _popupPlaced = false; Refresh(); }
         bool visible = IsGuiding && !_isModalOpen();
         if (_root.gameObject.activeSelf != visible) _root.gameObject.SetActive(visible);
         if (!visible) { _holes.Clear(); return; }
@@ -240,7 +262,7 @@ public sealed class SpellOnboarding : MonoBehaviour
         CloseSkip();
     }
 
-    private bool IsConfirmStep { get { return _step == Step.B5 || _step == Step.R3; } }
+    private bool IsConfirmStep { get { return CONFIRM_STEPS.Contains(_step); } }
 
     /// <summary>강조 영역을 다시 구하고 가림막·테두리·안내 창·손가락 위치를 맞춘다.</summary>
     private void Layout()
@@ -278,6 +300,7 @@ public sealed class SpellOnboarding : MonoBehaviour
         }
         for (int i = frames; i < _frames.Count; i++) _frames[i].gameObject.SetActive(false);
         LayoutPopup(size);
+        _popupGroup.blocksRaycasts = _popupGroup.alpha > 0;
         UpdateGhost();
         _popup.SetAsLastSibling(); _ghost.SetAsLastSibling(); _skipModal.SetAsLastSibling();
     }
@@ -287,68 +310,97 @@ public sealed class SpellOnboarding : MonoBehaviour
     {
         switch (_step)
         {
-            case Step.B1:
-            case Step.B4:
-            {
-                SpellGame.Shape? shape = AllowedShape();
-                if (shape.HasValue)
-                {
-                    Rect card = AddCard(shape.Value); Rect target = AddPattern(_ember);
-                    Ghost(card, target);
-                }
-                else { Rect end = AddRect(_combat.EndTurn.transform as RectTransform); Ghost(end, end); }
+            case Step.B1a: case Step.B1b: case Step.B4a:
+                Ghost(AddCard(AllowedShape().Value), AddPattern(_ember));
                 break;
-            }
-            case Step.B2:
+            case Step.B3a:
+                Ghost(AddCard(SpellGame.Shape.Diamond), AddPattern(_barrier));
+                break;
+            case Step.B2a:
             {
                 Rect cast = AddRect(_combat.CastButtons[_ember].Rect);
-                Rect enemy = cast;
-                bool first = true;
-                for (int i = 0; i < _game.Enemies.Count && i < _combat.Enemies.Length; i++)
-                {
-                    if (_game.Enemies[i].Health <= 0) continue;
-                    Rect rect = AddRect(_combat.Enemies[i].transform as RectTransform);
-                    if (first) { enemy = rect; first = false; }
-                }
-                Ghost(cast, enemy);
+                Ghost(cast, AddEnemies());
                 break;
             }
-            case Step.B3:
-                if (_game.IsComplete(_barrier)) { Rect cast = AddRect(_combat.CastButtons[_barrier].Rect); Ghost(cast, cast); }
-                else { Rect card = AddCard(SpellGame.Shape.Diamond); Rect target = AddPattern(_barrier); Ghost(card, target); }
+            case Step.B2b:
+            {
+                Rect enemy = AddEnemies();
+                Ghost(enemy, enemy);
                 break;
-            case Step.B5:
+            }
+            case Step.B3b:
+            {
+                Rect cast = AddRect(_combat.CastButtons[_barrier].Rect);
+                Ghost(cast, cast);
+                break;
+            }
+            case Step.B4b:
                 foreach (SpellGame.Placement piece in _game.Boards[_ember].Pieces)
-                    if (piece.Turn < _game.Turn && _table.TryPieceScreenRect(piece.Card, out Rect screen)) { AddScreen(screen); break; }
+                    if (_table.TryPieceScreenRect(piece.Card, out Rect placed)) AddScreen(placed);
+                break;
+            case Step.B4c:
+            {
+                Rect end = AddRect(_combat.EndTurn.transform as RectTransform);
+                Ghost(end, end);
+                break;
+            }
+            case Step.B5a:
+                foreach (SpellGame.Placement piece in _game.Boards[_ember].Pieces)
+                    if (piece.Turn < _game.Turn && _table.TryPieceScreenRect(piece.Card, out Rect locked)) AddScreen(locked);
+                break;
+            case Step.B5b:
                 AddRect(_combat.Tabs[_ember].Rect);
                 break;
-            case Step.R1:
+            case Step.R1: case Step.R4a:
             {
-                Rect first = default; bool hasFirst = false;
-                for (int i = 0; i < 3; i++) if (_loadout.TryCardRect(i, out RectTransform card)) { Rect r = AddRect(card); if (!hasFirst) { first = r; hasFirst = true; } }
-                Rect grid = AddRect(_loadout.GridFrame);
-                if (hasFirst) Ghost(first, grid);
+                Rect first = AddRewardCards(3);
+                Ghost(first, AddRect(_loadout.GridFrame));
                 break;
             }
-            case Step.R2:
-            {
+            case Step.R2a:
                 AddRect(_loadout.GridFrame); AddRect(_loadout.StorageFrame);
-                if (_loadout.DecideButton.gameObject.activeInHierarchy) { Rect decide = AddRect(_loadout.DecideButton); Ghost(decide, decide); }
                 break;
-            }
-            case Step.R3:
-                for (int i = 0; i < 2; i++) if (_loadout.TryCardRect(i, out RectTransform card)) AddRect(card);
-                break;
-            case Step.R4:
+            case Step.R2b: case Step.R4b:
             {
-                Rect first = default; bool hasFirst = false;
-                for (int i = 0; i < 3; i++) if (_loadout.TryCardRect(i, out RectTransform card)) { Rect r = AddRect(card); if (!hasFirst) { first = r; hasFirst = true; } }
-                Rect grid = AddRect(_loadout.GridFrame);
-                if (_loadout.HasTrialPiece && _loadout.DecideButton.gameObject.activeInHierarchy) { Rect decide = AddRect(_loadout.DecideButton); Ghost(decide, decide); }
-                else if (hasFirst) Ghost(first, grid);
+                AddRect(_loadout.GridFrame);
+                if (_step == Step.R2b) AddRect(_loadout.StorageFrame);
+                Rect decide = AddRect(_loadout.DecideButton);
+                Ghost(decide, decide);
                 break;
             }
+            case Step.R3a:
+                if (_loadout.TryCardRect(0, out RectTransform seal)) AddRect(seal);
+                break;
+            case Step.R3b:
+                if (_loadout.TryCardRect(1, out RectTransform coating)) AddRect(coating);
+                break;
         }
+    }
+
+    /// <summary>살아 있는 적을 모두 강조 영역에 넣고 첫 적의 범위를 반환한다.</summary>
+    private Rect AddEnemies()
+    {
+        Rect first = default; bool found = false;
+        for (int i = 0; i < _game.Enemies.Count && i < _combat.Enemies.Length; i++)
+        {
+            if (_game.Enemies[i].Health <= 0) continue;
+            Rect rect = AddRect(_combat.Enemies[i].transform as RectTransform);
+            if (!found) { first = rect; found = true; }
+        }
+        return first;
+    }
+
+    /// <summary>보상 카드 앞 count장을 강조 영역에 넣고 첫 카드의 범위를 반환한다.</summary>
+    private Rect AddRewardCards(int count)
+    {
+        Rect first = default; bool found = false;
+        for (int i = 0; i < count; i++)
+        {
+            if (!_loadout.TryCardRect(i, out RectTransform card)) continue;
+            Rect rect = AddRect(card);
+            if (!found) { first = rect; found = true; }
+        }
+        return first;
     }
 
     /// <summary>손패에서 지정 모양의 첫 조각을 강조 영역에 넣는다.</summary>
@@ -401,6 +453,13 @@ public sealed class SpellOnboarding : MonoBehaviour
         _body.rectTransform.sizeDelta = new Vector2(inner, bodyHeight);
         float height = POPUP_PAD + 24 + 8 + 40 + 12 + bodyHeight + (IsConfirmStep ? 20 + 52 : 0) + POPUP_PAD;
         _popup.sizeDelta = new Vector2(POPUP_WIDTH, height);
+        // 한 단계 안에서는 안내 창을 움직이지 않는다. 보인 뒤에 자리를 옮기지 않도록, 자리를 정하기 전에는 창을 숨긴다.
+        if (_popupPlaced) { _popupGroup.alpha = 1; return; }
+        // 강조 영역이 움직이는 동안(조각 낙하, 화면 배치 변경)은 자리를 확정하지 않는다.
+        Vector4 signature = Vector4.zero;
+        foreach (Rect hole in _holes) signature += new Vector4(hole.xMin, hole.yMin, hole.xMax, hole.yMax);
+        if ((signature - _holeSignature).sqrMagnitude > 4f) { _holeSignature = signature; _stableSince = Time.unscaledTime; }
+        bool settled = Time.unscaledTime - Mathf.Max(_stepStart, _stableSince) >= POPUP_SETTLE_SECONDS;
         // 각 강조 영역과 전체 강조 범위의 위·아래·좌·우를 후보로 두고, 강조 영역을 가장 적게 가리면서 가까운 곳을 고른다.
         List<Rect> anchors = new List<Rect>(_holes);
         if (_holes.Count > 1)
@@ -419,20 +478,30 @@ public sealed class SpellOnboarding : MonoBehaviour
             candidates.Add(new Vector2(anchor.xMax + POPUP_GAP, anchor.center.y - height / 2));
             candidates.Add(new Vector2(anchor.xMin - POPUP_GAP - POPUP_WIDTH, anchor.center.y - height / 2));
         }
+        // 이전 단계의 자리가 새 강조 영역을 가리지 않으면 그대로 두어 창이 덜 움직이게 한다.
+        if (_hasPopupPosition) candidates.Insert(0, _popup.anchoredPosition);
         Vector2 best = candidates[0]; float bestScore = float.MaxValue;
-        foreach (Vector2 candidate in candidates)
+        bool keepPrevious = false;
+        for (int i = 0; i < candidates.Count; i++)
         {
+            Vector2 candidate = candidates[i];
             Vector2 position = new Vector2(Mathf.Clamp(candidate.x, 16, size.x - POPUP_WIDTH - 16), Mathf.Clamp(candidate.y, 16, size.y - height - 16));
             Rect popup = new Rect(position, new Vector2(POPUP_WIDTH, height));
+            bool overlaps = false;
             float score = Vector2.Distance(popup.center, focus);
             foreach (Rect hole in _holes)
             {
                 float w = Mathf.Min(popup.xMax, hole.xMax) - Mathf.Max(popup.xMin, hole.xMin), h = Mathf.Min(popup.yMax, hole.yMax) - Mathf.Max(popup.yMin, hole.yMin);
-                if (w > 0 && h > 0) score += 100000 + w * h;
+                if (w > 0 && h > 0) { score += 100000 + w * h; overlaps = true; }
             }
+            if (i == 0 && _hasPopupPosition && !overlaps) { best = position; keepPrevious = true; break; }
             if (score < bestScore) { bestScore = score; best = position; }
         }
+        // 이전 자리를 그대로 쓸 수 있으면 바로 확정해 창이 깜빡이지 않게 한다. 옮겨야 하면 강조 영역이 멈출 때까지 숨겼다가 새 자리에 띄운다.
+        if (!keepPrevious && !settled) { _popupGroup.alpha = 0; return; }
         _popup.anchoredPosition = best;
+        _hasPopupPosition = true; _popupPlaced = true;
+        _popupGroup.alpha = 1;
     }
 
     /// <summary>마우스·키 입력이 멈춘 시간을 잰다.</summary>
@@ -478,8 +547,7 @@ public sealed class SpellOnboarding : MonoBehaviour
     /// <summary>확인 단계의 확인 버튼이다.</summary>
     private void Confirm()
     {
-        if (_step == Step.B5) _lockedConfirmed = true;
-        else if (_step == Step.R3) _sealsConfirmed = true;
+        if (IsConfirmStep) _confirmed.Add(_step);
     }
 
     // ───────────── 만들기 ─────────────
@@ -497,6 +565,7 @@ public sealed class SpellOnboarding : MonoBehaviour
 
         _popup = Box(_root, "Popup", PANEL_COLOR);
         _popup.anchorMin = _popup.anchorMax = _popup.pivot = Vector2.zero;
+        _popupGroup = _popup.gameObject.AddComponent<CanvasGroup>(); _popupGroup.alpha = 0;
         _header = MakeText(_popup, "Header", 18, ACCENT_COLOR, TextAnchor.UpperLeft);
         TopLeft(_header.rectTransform, POPUP_PAD, POPUP_PAD, 300, 24);
         _title = MakeText(_popup, "Title", 30, TEXT_COLOR, TextAnchor.UpperLeft); _title.fontStyle = FontStyle.Bold;

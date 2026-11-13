@@ -24,16 +24,19 @@ public sealed class SpellPiece3D : MonoBehaviour
     private const float CRACK_LIFT = 0.008f;
     private static readonly Color CRACK_COLOR = new Color(0.07f, 0.06f, 0.06f);
 
-    // 이전 턴에 놓여 고정된 조각의 표시다. 색을 어둡고 탁하게 낮추고 윗면에 금속 핀 머리를 박는다.
-    private const float LOCKED_BRIGHTNESS = 0.55f;
-    private const float LOCKED_SATURATION = 0.45f;
-    private const float PIN_RADIUS = 0.11f;
-    private const float PIN_TOP_RADIUS = 0.045f;
-    private const float PIN_HEIGHT = 0.07f;
-    private const int PIN_SIDES = 20;
-    private static readonly Color PIN_COLOR = new Color(0.82f, 0.8f, 0.74f);
-    private static Mesh _pinMesh;
-    private MeshRenderer _pin;
+    // 이전 턴에 놓여 고정된 조각의 표시다. 색을 이번 턴 조각보다 조금만 진하게 하고, 윗면에 어두운 받침 위로 금색 핀 머리를 박는다.
+    private const float LOCKED_BRIGHTNESS = 0.8f;
+    private const float LOCKED_SATURATION = 0.8f;
+    private const float PIN_RADIUS = 0.15f;
+    private const float PIN_TOP_RADIUS = 0.07f;
+    private const float PIN_HEIGHT = 0.1f;
+    private const float PIN_BASE_RADIUS = 0.21f;
+    private const float PIN_BASE_HEIGHT = 0.006f;
+    private const int PIN_SIDES = 24;
+    private static readonly Color PIN_COLOR = new Color(1f, 0.8f, 0.3f);
+    private static readonly Color PIN_BASE_COLOR = new Color(0.08f, 0.07f, 0.06f);
+    private static Mesh _pinMesh, _pinBaseMesh;
+    private MeshRenderer _pin, _pinBase;
     private bool _isLocked;
     private Color _tint;
 
@@ -394,21 +397,52 @@ public sealed class SpellPiece3D : MonoBehaviour
         bool changed = locked != _isLocked;
         _isLocked = locked;
         if (changed) SetTint(_tint);
-        if (!locked || cells == null || cells.Count == 0) { if (_pin != null) _pin.gameObject.SetActive(false); return; }
+        if (!locked || cells == null || cells.Count == 0)
+        {
+            if (_pin != null) { _pin.gameObject.SetActive(false); _pinBase.gameObject.SetActive(false); }
+            return;
+        }
         if (_pin == null)
         {
-            GameObject pin = new GameObject("Locked Pin") { layer = gameObject.layer };
-            pin.transform.SetParent(transform, false);
-            pin.AddComponent<MeshFilter>().sharedMesh = PinMesh();
-            _pin = pin.AddComponent<MeshRenderer>();
-            Material material = new Material(_sealMaterial);
-            material.SetColor(BASE_COLOR_ID, PIN_COLOR); material.SetColor(COLOR_ID, PIN_COLOR);
-            if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0.8f);
-            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.7f);
-            _pin.sharedMaterial = material;
+            _pinBase = CreatePinPart("Locked Pin Base", PinBaseMesh(), PIN_BASE_COLOR, 0f);
+            _pin = CreatePinPart("Locked Pin", PinMesh(), PIN_COLOR, 0.35f);
         }
-        _pin.transform.localPosition = Local(PinPoint(cells, seals), CellBounds(cells) / 2, THICKNESS);
-        _pin.gameObject.SetActive(true);
+        Vector3 point = Local(PinPoint(cells, seals), CellBounds(cells) / 2, THICKNESS);
+        _pinBase.transform.localPosition = point;
+        _pin.transform.localPosition = point + Vector3.up * PIN_BASE_HEIGHT;
+        _pinBase.gameObject.SetActive(true); _pin.gameObject.SetActive(true);
+    }
+
+    /// <summary>핀의 한 부분(받침·머리)을 씰링 재질 사본에 지정 색을 입혀 자식으로 만든다. 금속성이 높으면 반사할 환경이 없어 어둡게 보이므로 낮게 둔다.</summary>
+    private MeshRenderer CreatePinPart(string name, Mesh mesh, Color color, float metallic)
+    {
+        GameObject part = new GameObject(name) { layer = gameObject.layer };
+        part.transform.SetParent(transform, false);
+        part.AddComponent<MeshFilter>().sharedMesh = mesh;
+        MeshRenderer renderer = part.AddComponent<MeshRenderer>();
+        Material material = new Material(_sealMaterial);
+        material.SetColor(BASE_COLOR_ID, color); material.SetColor(COLOR_ID, color);
+        if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", metallic);
+        if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.55f);
+        renderer.sharedMaterial = material;
+        return renderer;
+    }
+
+    /// <summary>핀 머리 아래 깔리는 어두운 납작한 원판 메시를 처음 한 번 만든다. 밝은 조각 위에서 핀 윤곽을 또렷하게 한다.</summary>
+    private static Mesh PinBaseMesh()
+    {
+        if (_pinBaseMesh != null) return _pinBaseMesh;
+        List<Vector3> vertices = new List<Vector3>(); List<int> triangles = new List<int>();
+        Vector3 up = Vector3.up * PIN_BASE_HEIGHT;
+        for (int i = 0; i < PIN_SIDES; i++)
+        {
+            float a0 = i * Mathf.PI * 2 / PIN_SIDES, a1 = (i + 1) * Mathf.PI * 2 / PIN_SIDES;
+            Vector3 p = new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0)) * PIN_BASE_RADIUS, q = new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1)) * PIN_BASE_RADIUS;
+            AddTriangle(vertices, triangles, p + up, q + up, up, Vector3.up);
+        }
+        _pinBaseMesh = new Mesh { name = "Spell Locked Pin Base" };
+        _pinBaseMesh.SetVertices(vertices); _pinBaseMesh.SetTriangles(triangles, 0); _pinBaseMesh.RecalculateNormals(); _pinBaseMesh.RecalculateBounds();
+        return _pinBaseMesh;
     }
 
     /// <summary>조각 전체 중심에 가장 가까운 1/4 구역 중심을 핀 위치로 고른다. 씰링이 있는 구역은 가능하면 피한다.</summary>
@@ -531,7 +565,7 @@ public sealed class SpellPiece3D : MonoBehaviour
         if (_material != null) Destroy(_material);
         if (_crackMesh != null) Destroy(_crackMesh);
         if (_crack != null) Destroy(_crack.sharedMaterial);
-        if (_pin != null) Destroy(_pin.sharedMaterial);
+        if (_pin != null) { Destroy(_pin.sharedMaterial); Destroy(_pinBase.sharedMaterial); }
     }
 }
 
