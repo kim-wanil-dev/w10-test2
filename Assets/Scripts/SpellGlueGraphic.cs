@@ -22,6 +22,49 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
     private int _dragPart = -1;
     private Vector2 _dragOffset;
     private Vector2 _dragPoint;
+    private Vector2 _dragPivot;
+    private Vector2Int _autoCell;
+    private bool _hasAutoCell, _manualRotation;
+    private Vector2Int _dragStartPosition;
+    private int _dragStartRotation;
+
+    private static Vector2 PiecePivot(SpellGame.Card card, int rotation)
+    {
+        return new Vector2(SpellGame.ShapeWidth(card, rotation), SpellGame.ShapeHeight(card, rotation)) * 0.5f;
+    }
+
+    public void LockRotation() { _manualRotation = true; }
+
+    private void ResolvePlacement(SpellGame.Card card, Vector2 point, Vector2 offset, ref int rotation, out Vector2Int anchor)
+    {
+        Vector2Int cell = new Vector2Int(Mathf.FloorToInt(point.x), Mathf.FloorToInt(point.y));
+        anchor = SpellPatternLayout.PieceAnchor(point, PiecePivot(card, rotation), offset);
+        if (point.x < 0 || point.y < 0 || point.x >= GRID_WIDTH || point.y >= GRID_HEIGHT) { ResetPointerSnap(); return; }
+        if (_manualRotation || (_hasAutoCell && cell == _autoCell)) return;
+        _autoCell = cell; _hasAutoCell = true;
+        int fallback = -1;
+        for (int step = 0; step < 4; step++)
+        {
+            int candidate = (rotation + step) % 4;
+            Vector2Int at = SpellPatternLayout.PieceAnchor(point, PiecePivot(card, candidate), offset);
+            if (!_ui.GluePreviewFits(card, candidate, at, false)) continue;
+            if (fallback < 0) fallback = candidate;
+            if (_ui.GluePreviewFits(card, candidate, at, true)) { fallback = candidate; break; }
+        }
+        if (fallback >= 0) rotation = fallback;
+        anchor = SpellPatternLayout.PieceAnchor(point, PiecePivot(card, rotation), offset);
+    }
+
+    public void ResetPointerSnap() { _hasAutoCell = _manualRotation = false; }
+
+    public bool PreviewDeckDrag(SpellGame.Card card, ref int rotation, Vector2 screen, Camera camera, out Vector2Int anchor, out Vector2 snappedScreen)
+    {
+        bool inside = TryGridPoint(screen, camera, out Vector2 point);
+        ResolvePlacement(card, point, Vector2.zero, ref rotation, out anchor);
+        Vector2 center = ToLocal((Vector2)anchor + PiecePivot(card, rotation));
+        snappedScreen = RectTransformUtility.WorldToScreenPoint(camera, rectTransform.TransformPoint(center));
+        return inside;
+    }
     private struct ReferencePattern
     {
         public int Spell, Rotation;
@@ -123,9 +166,9 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
     public void RotateDragOffset(int previousHeight)
     {
         if (_dragPart < 0) return;
-        _dragOffset = new Vector2(previousHeight - _dragOffset.y, _dragOffset.x);
-        Vector2 origin = _dragPoint - _dragOffset;
-        _ui.MoveGluePart(_dragPart, new Vector2Int(Mathf.RoundToInt(origin.x), Mathf.RoundToInt(origin.y)));
+        _manualRotation = true;
+        _dragPivot = SpellPatternLayout.RotatePiecePivot(_dragPivot, previousHeight);
+        _ui.PreviewGluePart(_dragPart, _ui.GlueRotation(_dragPart), SpellPatternLayout.PieceAnchor(_dragPoint, _dragPivot, _dragOffset));
     }
 
     /// <summary>접착 미리 보기의 소유 UI와 도안 격자와 같은 빈 칸 색, 격자선 색, 칸 간격을 연결한다.</summary>
@@ -252,7 +295,12 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
         Vector2 point = GridPoint(data);
         int part = HitPart(point);
         if (part >= 0) _ui.SelectGluePart(part);
-        else _ui.MoveGluePart(_ui.SelectedGluePart, new Vector2Int(Mathf.FloorToInt(point.x), Mathf.FloorToInt(point.y)));
+        else
+        {
+            int selected = _ui.SelectedGluePart;
+            SpellGame.Card card = _ui.GlueCard(selected);
+            if (card != null) _ui.MoveGluePart(selected, SpellPatternLayout.PieceAnchor(point, PiecePivot(card, _ui.GlueRotation(selected)), Vector2.zero));
+        }
     }
 
     public void OnBeginDrag(PointerEventData data)
@@ -261,7 +309,11 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
         Vector2 point = GridPoint(data, true);
         _dragPart = HitPart(point);
         if (_dragPart < 0) return;
-        _dragOffset = point - (Vector2)_ui.GluePosition(_dragPart);
+        _dragStartPosition = _ui.GluePosition(_dragPart);
+        _dragStartRotation = _ui.GlueRotation(_dragPart);
+        ResetPointerSnap();
+        _dragPivot = PiecePivot(_ui.GlueCard(_dragPart), _ui.GlueRotation(_dragPart));
+        _dragOffset = (Vector2)_ui.GluePosition(_dragPart) + _dragPivot - point;
         _dragPoint = GridPoint(data);
         _ui.SelectGluePart(_dragPart);
     }
@@ -270,8 +322,10 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
     {
         if (!isActiveAndEnabled || _dragPart < 0 || data.button != PointerEventData.InputButton.Left) return;
         _dragPoint = GridPoint(data);
-        Vector2 origin = _dragPoint - _dragOffset;
-        _ui.MoveGluePart(_dragPart, new Vector2Int(Mathf.RoundToInt(origin.x), Mathf.RoundToInt(origin.y)));
+        int rotation = _ui.GlueRotation(_dragPart);
+        ResolvePlacement(_ui.GlueCard(_dragPart), _dragPoint, _dragOffset, ref rotation, out Vector2Int anchor);
+        _dragPivot = PiecePivot(_ui.GlueCard(_dragPart), rotation);
+        _ui.PreviewGluePart(_dragPart, rotation, anchor);
     }
 
     public void OnEndDrag(PointerEventData data)
@@ -279,6 +333,8 @@ public sealed class SpellGlueGraphic : UnityEngine.UI.MaskableGraphic, IPointerC
         if (!isActiveAndEnabled || _dragPart < 0 || data.button != PointerEventData.InputButton.Left) return;
         int part = _dragPart;
         OnDrag(data); _dragPart = -1;
+        if (!_ui.GluePreviewFits(_ui.GlueCard(part), _ui.GlueRotation(part), _ui.GluePosition(part), false))
+            _ui.PreviewGluePart(part, _dragStartRotation, _dragStartPosition);
         _ui.SelectGluePart(part);
     }
 

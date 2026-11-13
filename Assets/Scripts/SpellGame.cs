@@ -768,6 +768,32 @@ public sealed class SpellGame
     }
 
     /// <summary>다음 전투의 적과 덱을 준비하고 첫 턴을 시작한다.</summary>
+    public bool JumpToDebugRoom(Phase phase, int battle)
+    {
+        if (_owned.Count == 0 || _spells.Count == 0) return false;
+        if (phase == Phase.Combat)
+        {
+            if (battle < 1 || battle > LAST_BATTLE) return false;
+        }
+        else if (!((phase == Phase.Event && (battle == 2 || battle == 3)) || (phase == Phase.Rest && battle == 4))) return false;
+        FinishCombat(phase);
+        _enemies.Clear();
+        _rewards.Clear(); _patternRewards.Clear();
+        HasPieceReward = false; HasPatternReward = false; HasSealReward = false;
+        ActiveReward = RewardKind.None; RewardSeal = Seal.None; LastAcquiredPattern = -1;
+        _hasUsedWorkshop = false; _hasRested = false;
+        Block = 0; Turn = 0; Target = 0;
+        if (Health <= 0) Health = MaxHealth;
+        Battle = battle;
+        if (phase == Phase.Combat) { Battle--; StartBattle(); }
+        else
+        {
+            HasSealReward = IsSealEvent;
+            RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
+        }
+        return true;
+    }
+
     private void StartBattle()
     {
         Curse = null; LastCurseDamage = 0;

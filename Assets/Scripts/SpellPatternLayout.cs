@@ -8,6 +8,16 @@ public sealed class SpellPatternLayout
 {
     public const int COLUMNS = 4;
     public const int ROWS = 4;
+    public static Vector2Int PieceAnchor(Vector2 pointer, Vector2 pivot, Vector2 offset)
+    {
+        Vector2 origin = pointer + offset - pivot;
+        return new Vector2Int(Mathf.RoundToInt(origin.x), Mathf.RoundToInt(origin.y));
+    }
+
+    public static Vector2 RotatePiecePivot(Vector2 pivot, float previousHeight)
+    {
+        return new Vector2(previousHeight - pivot.y, pivot.x);
+    }
     // 화면 기준 판 한 변의 길이를 격자 칸 한 변 단위로 나타낸 값이다.
     public const float BOARD_SIZE = COLUMNS;
     private const int LOCAL_SIZE = SpellGame.LOCAL_SIZE;
