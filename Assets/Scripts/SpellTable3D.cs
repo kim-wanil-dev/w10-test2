@@ -399,7 +399,13 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>카드에 대응하는 3D 조각을 재사용하거나 카드 모양과 효과 색으로 생성한다.</summary>
     private SpellPiece3D GetPiece(SpellGame.Card card)
     {
-        if (_pieces.TryGetValue(card.Id, out SpellPiece3D piece)) return piece;
+        if (_pieces.TryGetValue(card.Id, out SpellPiece3D piece))
+        {
+            if (piece.Card == card) return piece;
+            // 새 게임은 카드 ID를 1부터 다시 매기므로, 같은 ID라도 이전 게임 카드를 가진 조각은 버리고 새로 만든다.
+            // 그대로 쓰면 미리 보기는 초록인데 손패에 없는 카드라 실제 배치가 실패한다.
+            Destroy(piece.gameObject); _pieces.Remove(card.Id);
+        }
         piece = CreateRoot("Piece " + card.Id + " " + card.Shape, _world).gameObject.AddComponent<SpellPiece3D>();
         piece.Setup(card, CoatingMaterial(card.Coating), _physicsMaterial, PieceTint(card), _sealMaterial, _ui.SealColor); _pieces.Add(card.Id, piece); return piece;
     }
