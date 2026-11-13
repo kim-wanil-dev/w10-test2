@@ -147,6 +147,9 @@ public sealed class SpellGameUI : MonoBehaviour
     private bool _showHelp;
     private int _openPile = -1;
     private RectTransform _rewardDeckButton;
+    private const int GLUE_CARDS_PER_PAGE = 6;
+    private int _glueDeckPage;
+    private RectTransform _glueDeckArea;
     private SpellPileView _rewardDeckView;
     private bool _showPauseMenu;
     private int _pendingCast = -1;
@@ -2664,6 +2667,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>접착 미리 보기와 선택을 삭제한다. 확인 전에는 카드나 사용 횟수를 변경하지 않는다.</summary>
     private void CloseGlue()
     {
+        _glueDeckPage = 0;
         if (_glueOverlay != null || _glueDragCard != null) HideDragGhost();
         _glueDragCard = null;
         _glueDragRotation = 0;
@@ -2841,6 +2845,13 @@ public sealed class SpellGameUI : MonoBehaviour
         bool escape = Keyboard.current != null && (Keyboard.current.escapeKey.wasPressedThisFrame || Keyboard.current.qKey.wasPressedThisFrame);
         if (!invalid && _glueCoatingChoice != null) { if (escape) HideGlueCoatingChoice(); return; }
         if (invalid || escape) { CloseGlue(); Render(); return; }
+        if (Mouse.current != null && _glueDeckArea != null
+            && RectTransformUtility.RectangleContainsScreenPoint(_glueDeckArea, Mouse.current.position.ReadValue(), null))
+        {
+            Vector2 scroll = Mouse.current.scroll.ReadValue();
+            float delta = Mathf.Abs(scroll.y) >= Mathf.Abs(scroll.x) ? -scroll.y : scroll.x;
+            if (Mathf.Abs(delta) > 0.01f) ChangeGlueDeckPage(delta > 0 ? 1 : -1);
+        }
         bool rotate = (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             || (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame);
         if (rotate) RotateGluePart();
@@ -2904,12 +2915,18 @@ public sealed class SpellGameUI : MonoBehaviour
         _glueConfirm = GlueButton(_glueOverlay, "접착 확인", 850, 360, 280, 55, ConfirmGlue);
         GlueButton(_glueOverlay, "취소 · Esc", 850, 435, 280, 45, () => { CloseGlue(); Render(); });
         Label(_glueOverlay, "씰링: 접착 후에도 모든 효과 유지\n코팅: 서로 다른 효과가 있으면 하나만 선택\n한쪽에만 코팅이 있으면 접착 조각 전체에 적용", 100, 490, 680, 85, 17);
-        RectTransform cards = CreateWorkshopDeck(_glueOverlay);
-        for (int i = 0; i < _game.OwnedCards.Count; i++)
+        int lastPage = Mathf.Max(0, (_game.OwnedCards.Count - 1) / GLUE_CARDS_PER_PAGE);
+        _glueDeckPage = Mathf.Clamp(_glueDeckPage, 0, lastPage);
+        GlueButton(_glueOverlay, "<", 65, 620, 65, 65, () => ChangeGlueDeckPage(-1)).interactable = _glueDeckPage > 0;
+        GlueButton(_glueOverlay, ">", 1150, 620, 65, 65, () => ChangeGlueDeckPage(1)).interactable = _glueDeckPage < lastPage;
+        RectTransform cards = Panel(_glueOverlay, 145, 590, 990, 125, new Color(0.06f, 0.08f, 0.12f));
+        _glueDeckArea = cards;
+        int firstCard = _glueDeckPage * GLUE_CARDS_PER_PAGE;
+        for (int i = firstCard; i < Mathf.Min(firstCard + GLUE_CARDS_PER_PAGE, _game.OwnedCards.Count); i++)
         {
             SpellGame.Card card = _game.OwnedCards[i];
             bool selected = _glueCards[0] == card || _glueCards[1] == card;
-            UnityEngine.UI.Button button = GlueButton(cards, "", i * 165, 0, 155, 120, () => SelectGlueCard(card));
+            UnityEngine.UI.Button button = GlueButton(cards, "", (i - firstCard) * 165, 0, 155, 120, () => SelectGlueCard(card));
             button.interactable = _game.GlueCardIssue(card) == null;
             button.GetComponent<UnityEngine.UI.Image>().color = CardColor(card, selected);
             button.gameObject.AddComponent<SpellCardDrag>().Setup(this, card);
@@ -2919,6 +2936,14 @@ public sealed class SpellGameUI : MonoBehaviour
             Label((RectTransform)button.transform, CardName(card), 3, 70, 149, 45, 13);
         }
         RefreshGlue();
+    }
+
+    private void ChangeGlueDeckPage(int direction)
+    {
+        if (_glueOverlay == null || _glueDragCard != null || _glueGraphic.IsDragging) return;
+        int lastPage = Mathf.Max(0, (_game.OwnedCards.Count - 1) / GLUE_CARDS_PER_PAGE);
+        _glueDeckPage = Mathf.Clamp(_glueDeckPage + direction, 0, lastPage);
+        RenderGlue();
     }
 
 
