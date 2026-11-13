@@ -1237,13 +1237,13 @@ public sealed class SpellGame
     private void DamageEnemy(Enemy enemy, int damage)
     {
         if (enemy.Health <= 0 || damage <= 0) return;
+        if (enemy == _theftOwner) CancelTheft();
         if (_isRecordingHits) { _lastCastHits.Add(_enemies.IndexOf(enemy)); _lastCastHitSources.Add(_hitSource); }
         int absorbed = Math.Min(enemy.Block, damage);
         enemy.Block -= absorbed; damage -= absorbed;
         int before = enemy.Health;
         enemy.Health -= damage;
         if (enemy.Health <= 0) { enemy.Block = 0; enemy.Charge = 0; }
-        if (enemy == _theftOwner && enemy.Health <= 0) CancelTheft();
         if (enemy.IsSealer && enemy.Health < before && enemy.SealedSpell >= 0)
         {
             enemy.SealedSpell = -1;
