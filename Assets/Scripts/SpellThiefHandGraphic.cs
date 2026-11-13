@@ -11,10 +11,9 @@ public sealed class SpellThiefHandGraphic : UnityEngine.UI.MaskableGraphic, IPoi
         new Rect(28, 60, 8, 25), new Rect(39, 60, 8, 31), new Rect(50, 60, 8, 33), new Rect(61, 60, 8, 27)
     };
     private SpellGameUI _ui;
-    private SpellGame.Card _target;
 
     /// <summary>손의 소유 UI와 현재 목표 인스턴스를 연결한다.</summary>
-    public void Setup(SpellGameUI ui, SpellGame.Card target) { _ui = ui; _target = target; SetVerticesDirty(); }
+    public void Setup(SpellGameUI ui) { _ui = ui; SetVerticesDirty(); }
 
     /// <summary>손바닥·손가락·손목을 테두리가 있는 단순 사각형들로 그린다.</summary>
     protected override void OnPopulateMesh(UnityEngine.UI.VertexHelper vh)
@@ -42,7 +41,7 @@ public sealed class SpellThiefHandGraphic : UnityEngine.UI.MaskableGraphic, IPoi
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (isActiveAndEnabled && eventData.button == PointerEventData.InputButton.Left) _ui.StopTheft(_target);
+        if (isActiveAndEnabled && eventData.button == PointerEventData.InputButton.Left) _ui.StopTheft();
     }
 
     /// <summary>그래픽 로컬 좌표의 손 구성 사각형을 메시 끝에 추가한다.</summary>

@@ -2189,7 +2189,7 @@ public sealed class SpellGameUI : MonoBehaviour
 
     private bool CanAdvanceTheft
     {
-        get { return CanInteract && _pendingCast < 0 && Application.isFocused && Time.timeScale > 0
+        get { return CanInteract && Application.isFocused && Time.timeScale > 0
             && !(ONBOARDING_ENABLED && !_onboardingComplete && !_onboardingPlacementExplained && _game.CraftCount > 0); }
     }
 
@@ -2238,9 +2238,8 @@ public sealed class SpellGameUI : MonoBehaviour
             _theftElapsed = Mathf.Max(0.1f, _theftIntervalSeconds);
         }
         int board; SpellGame.Placement piece;
-        if (_theftApproaching && !_game.TryGetTheftPlacement(out board, out piece)) ClearTheftApproach();
+        if (_theftApproaching && !_game.HasActiveTheft) ClearTheftApproach();
         bool interactive = CanAdvanceTheft;
-        if (_theftHand != null) _theftHand.gameObject.SetActive(interactive);
         if (!interactive) { _theftWasInteractive = false; return; }
         if (!_theftWasInteractive) { _theftWasInteractive = true; return; }
         float delta = Time.unscaledDeltaTime;
@@ -2280,14 +2279,13 @@ public sealed class SpellGameUI : MonoBehaviour
         _theftHand = Element("Thief Hand", _root, _theftPosition.x, _theftPosition.y, 96, 96);
         _theftHand.pivot = new Vector2(0.5f, 0.5f);
         _theftHand.gameObject.AddComponent<CanvasRenderer>();
-        _theftHand.gameObject.AddComponent<SpellThiefHandGraphic>().Setup(this, _game.TheftTarget);
-        _theftHand.gameObject.SetActive(CanAdvanceTheft);
+        _theftHand.gameObject.AddComponent<SpellThiefHandGraphic>().Setup(this);
     }
 
     /// <summary>클릭된 손의 대상이 현재 시도와 일치할 때만 절도를 저지하며 카드와 배치 비용을 유지한다.</summary>
-    public void StopTheft(SpellGame.Card expectedTarget)
+    public void StopTheft()
     {
-        if (!_theftApproaching || !CanAdvanceTheft || _game.TheftTarget != expectedTarget) return;
+        if (!_theftApproaching || !CanInteract || !Application.isFocused || Time.timeScale <= 0 || !_game.HasActiveTheft) return;
         ClearTheftApproach();
         _message = "도둑손 저지!"; ShowFeedback(_message, new Color(0.4f, 0.9f, 0.8f)); Render();
     }
