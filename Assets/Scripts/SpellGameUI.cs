@@ -19,7 +19,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private const float CURSOR_HINT_OFFSET = 24f;
     private const float CURSOR_HINT_PADDING = 24f;
     private const float TAB_HEIGHT = 36f;
-    private const int BATTLE_COUNT = 6;
+    private const int BATTLE_COUNT = 5;
     private const float ENEMY_BAR_WIDTH = 320f;
     private const float ENEMY_NARROW_BAR_WIDTH = 280f;
     private const float MENU_GAP = 4f;
@@ -741,7 +741,10 @@ public sealed class SpellGameUI : MonoBehaviour
         EnsurePatterns();
         screen.Battle.text = $"전투 {_game.Battle}/{BATTLE_COUNT}";
         for (int i = 0; i < screen.ProgressDots.Length; i++)
+        {
+            screen.ProgressDots[i].gameObject.SetActive(i < BATTLE_COUNT);
             screen.ProgressDots[i].color = i < _game.Battle - 1 ? _subColor : i == _game.Battle - 1 ? _textColor : _dimColor;
+        }
         int incoming = 0;
         foreach (SpellGame.Enemy enemy in _game.Enemies) if (enemy.Health > 0) incoming += enemy.Intent;
         screen.PlayerStatus.Bind(_game.Health, _game.MaxHealth, _game.Block, Math.Max(0, incoming - _game.Block) + (_game.Curse != null && !_game.Curse.IsResolved ? _game.Curse.Amount : 0));

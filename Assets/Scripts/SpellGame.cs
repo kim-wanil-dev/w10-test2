@@ -44,7 +44,7 @@ public sealed class SpellGame
     private const int VICTORY_HEAL = 6;
     private const int START_HEALTH = 50;
     private const int DEVELOPER_HEALTH = 9999;
-    private const int LAST_BATTLE = 6;
+    private const int LAST_BATTLE = 5;
     private const double REST_HEAL_RATIO = 0.3;
 
     /// <summary>도형이 칸 하나에서 차지하는 위·오른쪽·아래·왼쪽 구역 비트다.</summary>
@@ -338,7 +338,7 @@ public sealed class SpellGame
     public int Battle { get; private set; }
     public int Turn { get; private set; }
     public bool IsWorkshopEvent { get { return (CurrentPhase == Phase.Event && Battle == 2) || CurrentPhase == Phase.Rest; } }
-    public bool IsSealEvent { get { return CurrentPhase == Phase.Event && Battle == 4; } }
+    public bool IsSealEvent { get { return CurrentPhase == Phase.Event && Battle == 3; } }
     public bool CanUseWorkshop { get { return IsWorkshopEvent && !_hasUsedWorkshop; } }
     public bool CanRest { get { return CurrentPhase == Phase.Rest && !_hasRested; } }
     public int HammerUsesLeft { get { return CanUseWorkshop ? 1 : 0; } }
@@ -740,12 +740,28 @@ public sealed class SpellGame
         {
             for (int i = 0; i < 3; i++) _enemies.Add(new Enemy("잉크 하수인", DEVELOPER_HEALTH, new[] { 4 }));
         }
-        else if (Battle == 1) AddEnemy(0);
-        else if (Battle == 2) { AddEnemy(0); AddEnemy(0); }
-        else if (Battle == 3) AddEnemy(1);
-        else if (Battle == 4) { AddEnemy(1); AddEnemy(0); }
-        else if (Battle == 5) { AddEnemy(1); AddEnemy(1); }
-        else if (Battle == 6) AddEnemy(2);
+        else if (Battle == 1) { AddEnemy(0); AddEnemy(0); }
+        else if (Battle == 2)
+        {
+            _enemies.Add(new Enemy("도둑손", 12, new[] { 4, 5, 10 }, isThief: true));
+            AddEnemy(1);
+        }
+        else if (Battle == 3)
+        {
+            AddEnemy(1); AddEnemy(1);
+            _enemies.Add(new Enemy("조각 저주술사", 12, new[] { 0, 5, 4 }, isCurser: true));
+        }
+        else if (Battle == 4)
+        {
+            AddEnemy(1); AddEnemy(1);
+            _enemies.Add(new Enemy("형상 봉인자", 12, new[] { 4 }, isSealer: true));
+        }
+        else if (Battle == LAST_BATTLE)
+        {
+            AddEnemy(2);
+            _enemies.Add(new Enemy("오염술사", 12, new[] { 5, 5, 10 }, isContaminator: true));
+            _enemies.Add(new Enemy("도둑손", 12, new[] { 4, 5, 10 }, isThief: true));
+        }
         if (_hasSealerEncounter && Battle == 1) _enemies.Add(new Enemy("형상 봉인자", 12, new[] { 4 }, true));
         if (_hasThiefEncounter && Battle == 1) _enemies.Add(new Enemy("도둑손", 12, new[] { 4, 5, 10 }, false, true));
         if (_hasCurserEncounter && Battle == 1) _enemies.Add(new Enemy("조각 저주술사", 12, new[] { 0, 5, 4 }, false, false, true));
@@ -757,7 +773,7 @@ public sealed class SpellGame
     /// <summary>적 종류에 따라 체력과 공격 패턴을 설정한다.</summary>
     private void AddEnemy(int kind)
     {
-        _enemies.Add(kind == 0 ? new Enemy("잉크 하수인", 12, new[] { 4 }) : kind == 1 ? new Enemy("거대 잉크", 26, new[] { 2, 8 }) : new Enemy("서고의 수호자", 60, new[] { 4, 7, 12 }));
+        _enemies.Add(kind == 0 ? new Enemy("잉크 하수인", 12, new[] { 4 }) : kind == 1 ? new Enemy("거대 잉크", 26, new[] { 2, 8 }) : new Enemy("골렘", 60, new[] { 4, 7, 12 }));
     }
 
     /// <summary>목록을 제자리에서 무작위로 섞는다.</summary>
@@ -1586,8 +1602,8 @@ public sealed class SpellGame
         if (index == -1)
         {
             CurrentPhase = Battle == LAST_BATTLE ? Phase.Victory
-                : Battle == 2 || Battle == 4 ? Phase.Event
-                : Battle == 5 ? Phase.Rest : Phase.Loadout;
+                : Battle == 2 || Battle == 3 ? Phase.Event
+                : Battle == 4 ? Phase.Rest : Phase.Loadout;
             if (IsWorkshopEvent) _hasUsedWorkshop = false;
             if (CurrentPhase == Phase.Rest) _hasRested = false;
             HasSealReward = IsSealEvent;
