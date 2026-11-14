@@ -623,6 +623,8 @@ public sealed class SpellGameUI : MonoBehaviour
     private RectTransform Button(RectTransform parent, string caption, float x, float y, float width, float height, Action action, Color? color = null, int fontSize = 18)
     {
         RectTransform rect = Panel(parent, x, y, width, height, color ?? SpellStyle.PanelRaised);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(x + width * 0.5f, -(y + height * 0.5f));
         SpellStyle.Round(rect.GetComponent<UnityEngine.UI.Image>(), SpellStyle.Round8, color ?? SpellStyle.PanelRaised);
         SpellStyle.AddRing(rect, SpellStyle.Ring8, SpellStyle.Line);
         UnityEngine.UI.Button button = rect.gameObject.AddComponent<UnityEngine.UI.Button>();
@@ -785,8 +787,8 @@ public sealed class SpellGameUI : MonoBehaviour
                 _openPile = 2; Render();
             });
         _rewardDeckButton.anchorMin = _rewardDeckButton.anchorMax = new Vector2(0, 0);
-        _rewardDeckButton.pivot = new Vector2(0, 0);
-        _rewardDeckButton.anchoredPosition = new Vector2(40, 35);
+        _rewardDeckButton.pivot = new Vector2(0.5f, 0.5f);
+        _rewardDeckButton.anchoredPosition = new Vector2(40 + _rewardDeckButton.sizeDelta.x * 0.5f, 35 + _rewardDeckButton.sizeDelta.y * 0.5f);
         _loadoutScreen.Setup(_game, _layout, PatternColor, ShapeTint, card => HasTraits(card) ? AccentColor(card) : _subColor, TraitDescriptionText, SealColor,
             () => { ClearSelection(); _message = ""; Render(); }, ContinueFromLoadout);
     }
