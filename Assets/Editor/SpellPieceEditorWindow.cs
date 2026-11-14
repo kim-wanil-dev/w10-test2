@@ -1,14 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 
 using UnityEditor;
 using UnityEngine;
+
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 /// <summary>pieces.json의 조각 도형별 표시 이름, 칸 모양, 회전 방식과 보상 후보 여부를 편집하는 에디터 창이다. 목록은 Shape enum이 정한다.</summary>
 public sealed class SpellPieceEditorWindow : EditorWindow
 {
     private const string DRAFT_KEY = "SpellPieceEditorWindow.Draft";
+    private const string PENDING_SELECT_KEY = "SpellPieceEditorWindow.PendingSelect";
+    private const string SPELL_GAME_PATH = "Assets/Scripts/SpellGame.cs";
     private const float LIST_WIDTH = 220f;
     private const float PREVIEW_CELL_SIZE = 26f;
     private const float PREVIEW_GAP = 12f;
@@ -24,6 +30,8 @@ public sealed class SpellPieceEditorWindow : EditorWindow
     private SpellPieceTable _table;
     private string _loadError;
     private SpellGame.Shape _selected;
+    private string _newShapeId = "";
+    private string _newShapeName = "";
     private Vector2 _listScroll;
     private Vector2 _detailScroll;
     private Vector2 _messageScroll;
@@ -44,6 +52,12 @@ public sealed class SpellPieceEditorWindow : EditorWindow
     {
         wantsMouseMove = true;
         saveChangesMessage = "조각 에디터에 저장하지 않은 변경이 있습니다. 저장할까요?";
+        string pending = SessionState.GetString(PENDING_SELECT_KEY, "");
+        if (pending.Length > 0)
+        {
+            SessionState.EraseString(PENDING_SELECT_KEY);
+            if (Enum.TryParse(pending, out SpellGame.Shape added)) _selected = added;
+        }
         string draft = SessionState.GetString(DRAFT_KEY, "");
         if (draft.Length > 0 && TryRestoreDraft(draft)) return;
         LoadFromFile();
@@ -124,6 +138,26 @@ public sealed class SpellPieceEditorWindow : EditorWindow
             GUI.contentColor = previous;
         }
         EditorGUILayout.EndScrollView();
+        DrawCreatePiece();
+        EditorGUILayout.EndVertical();
+    }
+
+    /// <summary>목록 아래에 새 조각 식별자·표시 이름 입력과 추가 버튼을 그린다.</summary>
+    private void DrawCreatePiece()
+    {
+        EditorGUILayout.Space(4);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+        EditorGUILayout.LabelField("새 조각 추가", EditorStyles.boldLabel);
+        _newShapeId = EditorGUILayout.TextField("식별자 (영문)", _newShapeId);
+        _newShapeName = EditorGUILayout.TextField("표시 이름", _newShapeName);
+        string id = (_newShapeId ?? "").Trim();
+        string issue = NewShapeIssue(id);
+        using (new EditorGUI.DisabledScope(EditorApplication.isPlaying || issue != null))
+            if (GUILayout.Button("조각 추가")) CreateNewPiece(id, (_newShapeName ?? "").Trim());
+        if (EditorApplication.isPlaying)
+            EditorGUILayout.HelpBox("Play 중에는 새 조각을 추가할 수 없습니다.", MessageType.Info);
+        else if (id.Length > 0 && issue != null)
+            EditorGUILayout.HelpBox(issue, MessageType.Warning);
         EditorGUILayout.EndVertical();
     }
 
@@ -321,5 +355,67 @@ public sealed class SpellPieceEditorWindow : EditorWindow
     private static bool IsLocked(SpellGame.Shape shape)
     {
         return Array.IndexOf(LOCKED_SHAPES, shape) >= 0;
+    }
+
+    /// <summary>새 조각 Enum 식별자가 유효하지 않으면 사유를 반환한다. 사용할 수 있으면 null이다.</summary>
+    private static string NewShapeIssue(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return "영문 식별자를 입력하세요.";
+        if (!Regex.IsMatch(id, "^[A-Za-z_][A-Za-z0-9_]*$")) return "영문자·숫자·밑줄만 사용할 수 있고 숫자로 시작할 수 없습니다.";
+        foreach (string existing in Enum.GetNames(typeof(SpellGame.Shape)))
+            if (string.Equals(existing, id, StringComparison.OrdinalIgnoreCase)) return $"이미 존재하는 식별자입니다: {existing}";
+        return null;
+    }
+
+    /// <summary>SpellGame.Shape enum과 pieces.json에 새 조각을 추가하고 스크립트를 다시 불러온다.</summary>
+    private void CreateNewPiece(string id, string displayName)
+    {
+        if (NewShapeIssue(id) != null) return;
+        if (hasUnsavedChanges)
+        {
+            if (!EditorUtility.DisplayDialog("조각 에디터", "새 조각을 추가하려면 현재 변경을 먼저 저장해야 합니다. 저장하고 추가할까요?", "저장 후 추가", "취소")) return;
+            if (!Save()) return;
+        }
+        if (!File.Exists(SPELL_GAME_PATH) || !File.Exists(SpellDataStore.PIECES_ASSET_PATH))
+        {
+            EditorUtility.DisplayDialog("조각 에디터", "SpellGame.cs 또는 pieces.json 파일을 찾을 수 없습니다.", "확인");
+            return;
+        }
+
+        string script = File.ReadAllText(SPELL_GAME_PATH);
+        Regex shapeRegex = new Regex(@"(public\s+enum\s+Shape\s*\{[^}]*?)(\s*\})");
+        if (!shapeRegex.IsMatch(script))
+        {
+            EditorUtility.DisplayDialog("조각 에디터", "SpellGame.cs에서 public enum Shape 정의를 찾지 못했습니다.", "확인");
+            return;
+        }
+        string updatedScript = shapeRegex.Replace(script, m => m.Groups[1].Value.TrimEnd() + $", {id}" + m.Groups[2].Value, 1);
+
+        JObject root = JObject.Parse(File.ReadAllText(SpellDataStore.PIECES_ASSET_PATH));
+        JArray pieces = root["pieces"] as JArray;
+        if (pieces == null)
+        {
+            EditorUtility.DisplayDialog("조각 에디터", "pieces.json 형식이 올바르지 않습니다.", "확인");
+            return;
+        }
+        pieces.Add(new JObject
+        {
+            ["shape"] = id,
+            ["name"] = string.IsNullOrEmpty(displayName) ? id : displayName,
+            ["cells"] = new JArray { new JObject { ["x"] = 0, ["y"] = 0, ["mask"] = SpellDataStore.FULL_MASK } },
+            ["rotation"] = SpellPieceData.RotationMode.Rotate.ToString(),
+            ["isInRewardPool"] = true,
+            ["starterCount"] = 0,
+            ["decompositionPriority"] = 0
+        });
+
+        File.WriteAllText(SpellDataStore.PIECES_ASSET_PATH, root.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n");
+        File.WriteAllText(SPELL_GAME_PATH, updatedScript);
+        SessionState.SetString(PENDING_SELECT_KEY, id);
+        _newShapeId = "";
+        _newShapeName = "";
+        AssetDatabase.ImportAsset(SpellDataStore.PIECES_ASSET_PATH);
+        AssetDatabase.ImportAsset(SPELL_GAME_PATH);
+        AssetDatabase.Refresh();
     }
 }
