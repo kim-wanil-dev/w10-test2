@@ -253,8 +253,8 @@ public sealed class SpellGame
             string text;
             switch (NextAction)
             {
-                case EnemyAction.Defend: text = $"방어 · 방어도 {ActionAmount} 획득"; break;
-                case EnemyAction.Curse: text = $"조각 저주 · 다음 턴 손패 1장 저주 / 못 풀면 체력 -{CURSE_FAILURE_AMOUNT}"; break;
+                case EnemyAction.Defend: text = $"방어도 +{ActionAmount}"; break;
+                case EnemyAction.Curse: text = $"저주 예고 · 미해제 시 체력 -{CURSE_FAILURE_AMOUNT}"; break;
                 case EnemyAction.Charge: text = $"충전 · 다음 공격 +{ActionAmount}"; break;
                 default:
                     string strength = IsThief || IsContaminator ? (ActionCount % _pattern.Length == 0 ? "약한 " : "강한 ") : IsCurser ? "강한 " : "";
@@ -264,7 +264,7 @@ public sealed class SpellGame
             }
             if (Block > 0) text += $"\n현재 방어도 {Block}";
             if (Charge > 0) text += $"\n충전 +{Charge}";
-            if (IsThief) text += "\n상시 · 약 15초마다 조각을 훔침";
+            if (IsThief) text += "\n상시 · 일정 시간마다 손패 조각 강탈";
             return text;
         }
     }
@@ -1716,7 +1716,7 @@ public sealed class SpellGame
         {
             e.Value = Math.Max(0, e.Value - contamination);
             e.Block = Math.Max(0, e.Block - contamination);
-            e.Terms.Add($"오염 -{contamination} (최소 0)");
+            e.Terms.Add($"오염 -{contamination}");
         }
         return e;
     }

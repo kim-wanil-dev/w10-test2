@@ -78,8 +78,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "\uBC30\uCE58\uB97C \uBAA8\uB450 \uC0AC\uC6A9\uD588\uC2B5\uB2C8\uB2E4 \xB7
-    \uC2DC\uC804\uD558\uAC70\uB098 \uD134\uC744 \uC885\uB8CC\uD558\uC138\uC694"
+  m_Text: "\uBC30\uCE58 \uC644\uB8CC \xB7 \uC2DC\uC804 \uB610\uB294 \uD134 \uC885\uB8CC"
 --- !u!1 &1131326023515618952
 GameObject:
   m_ObjectHideFlags: 0
