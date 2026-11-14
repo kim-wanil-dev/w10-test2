@@ -24,6 +24,27 @@ public sealed class SpellPiece3D : MonoBehaviour
     private const float CRACK_LIFT = 0.008f;
     private static readonly Color CRACK_COLOR = new Color(0.07f, 0.06f, 0.06f);
 
+    // 이전 턴에 놓여 고정된 조각의 표시다. 색을 이번 턴 조각보다 조금만 진하게 하고, 윗면에 어두운 받침 위로 금색 핀 머리를 박는다.
+    private const float LOCKED_BRIGHTNESS = 0.8f;
+    private const float LOCKED_SATURATION = 0.8f;
+    private const float PIN_RADIUS = 0.15f;
+    private const float PIN_TOP_RADIUS = 0.07f;
+    private const float PIN_HEIGHT = 0.1f;
+    private const float PIN_BASE_RADIUS = 0.21f;
+    private const float PIN_BASE_HEIGHT = 0.006f;
+    private const int PIN_SIDES = 24;
+    private static readonly Color PIN_COLOR = new Color(1f, 0.8f, 0.3f);
+    private static readonly Color PIN_BASE_COLOR = new Color(0.08f, 0.07f, 0.06f);
+    private static Mesh _pinMesh, _pinBaseMesh;
+    private MeshRenderer _pin, _pinBase;
+    private bool _isLocked;
+    private Color _tint;
+    // 놓았을 때 튀는 크기와 시간이다.
+    private const float POP_AMOUNT = 0.12f;
+    private const float POP_SECONDS = 0.28f;
+    private float _popStart = -1f;
+    private Vector3 _popScale = Vector3.one;
+
     private readonly List<MeshRenderer> _sealDots = new List<MeshRenderer>();
     private MeshRenderer _crack;
     private Mesh _crackMesh;
@@ -339,6 +360,7 @@ public sealed class SpellPiece3D : MonoBehaviour
         _body.isKinematic = false; _body.useGravity = true;
         _body.linearVelocity = Vector3.down * 0.4f;
         _body.angularVelocity = Vector3.up * Random.Range(-1.2f, 1.2f);
+        SetLocked(false, null, null);
         SetTint(_color);
     }
 
@@ -362,8 +384,136 @@ public sealed class SpellPiece3D : MonoBehaviour
         transform.rotation = rotation;
     }
 
-    /// <summary>현재 조각의 물리 표시 색을 지정 색으로 갱신한다.</summary>
-    public void SetTint(Color color) { _material.color = color.linear * 0.65f; }
+    /// <summary>놓인 자리에서 한 번 커졌다가 제 크기로 돌아온다. 조각을 놓았다는 손맛을 준다.</summary>
+    public void Pop()
+    {
+        _popStart = Time.unscaledTime; _popScale = transform.localScale;
+    }
+
+    void Update()
+    {
+        if (_popStart < 0) return;
+        float t = (Time.unscaledTime - _popStart) / POP_SECONDS;
+        // 놓인 상태가 아니게 됐으면(집었거나 손패로 갔으면) 다른 코드가 정한 크기를 건드리지 않는다.
+        if (_isHand || _placement == null) { _popStart = -1f; return; }
+        if (t >= 1) { transform.localScale = _popScale; _popStart = -1f; return; }
+        transform.localScale = _popScale * (1f + POP_AMOUNT * SpellEase.Punch(t) * 2f);
+    }
+
+    /// <summary>현재 조각의 물리 표시 색을 지정 색으로 갱신한다. 고정 조각은 어둡고 탁하게 낮춘다.</summary>
+    public void SetTint(Color color)
+    {
+        _tint = color;
+        if (_isLocked)
+        {
+            Color.RGBToHSV(color, out float h, out float s, out float v);
+            color = Color.HSVToRGB(h, s * LOCKED_SATURATION, v * LOCKED_BRIGHTNESS);
+        }
+        _material.color = color.linear * 0.65f;
+    }
+
+    /// <summary>이전 턴에 놓여 움직일 수 없는 조각인지 표시한다. 고정이면 색을 낮추고 cells 윗면에 핀을 박는다.</summary>
+    public void SetLocked(bool locked, IReadOnlyList<SpellGame.ShapeCell> cells, IReadOnlyList<SpellGame.SealSpot> seals)
+    {
+        bool changed = locked != _isLocked;
+        _isLocked = locked;
+        if (changed) SetTint(_tint);
+        if (!locked || cells == null || cells.Count == 0)
+        {
+            if (_pin != null) { _pin.gameObject.SetActive(false); _pinBase.gameObject.SetActive(false); }
+            return;
+        }
+        if (_pin == null)
+        {
+            _pinBase = CreatePinPart("Locked Pin Base", PinBaseMesh(), PIN_BASE_COLOR, 0f);
+            _pin = CreatePinPart("Locked Pin", PinMesh(), PIN_COLOR, 0.35f);
+        }
+        Vector3 point = Local(PinPoint(cells, seals), CellBounds(cells) / 2, THICKNESS);
+        _pinBase.transform.localPosition = point;
+        _pin.transform.localPosition = point + Vector3.up * PIN_BASE_HEIGHT;
+        _pinBase.gameObject.SetActive(true); _pin.gameObject.SetActive(true);
+    }
+
+    /// <summary>핀의 한 부분(받침·머리)을 씰링 재질 사본에 지정 색을 입혀 자식으로 만든다. 금속성이 높으면 반사할 환경이 없어 어둡게 보이므로 낮게 둔다.</summary>
+    private MeshRenderer CreatePinPart(string name, Mesh mesh, Color color, float metallic)
+    {
+        GameObject part = new GameObject(name) { layer = gameObject.layer };
+        part.transform.SetParent(transform, false);
+        part.AddComponent<MeshFilter>().sharedMesh = mesh;
+        MeshRenderer renderer = part.AddComponent<MeshRenderer>();
+        Material material = new Material(_sealMaterial);
+        material.SetColor(BASE_COLOR_ID, color); material.SetColor(COLOR_ID, color);
+        if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", metallic);
+        if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.55f);
+        renderer.sharedMaterial = material;
+        return renderer;
+    }
+
+    /// <summary>핀 머리 아래 깔리는 어두운 납작한 원판 메시를 처음 한 번 만든다. 밝은 조각 위에서 핀 윤곽을 또렷하게 한다.</summary>
+    private static Mesh PinBaseMesh()
+    {
+        if (_pinBaseMesh != null) return _pinBaseMesh;
+        List<Vector3> vertices = new List<Vector3>(); List<int> triangles = new List<int>();
+        Vector3 up = Vector3.up * PIN_BASE_HEIGHT;
+        for (int i = 0; i < PIN_SIDES; i++)
+        {
+            float a0 = i * Mathf.PI * 2 / PIN_SIDES, a1 = (i + 1) * Mathf.PI * 2 / PIN_SIDES;
+            Vector3 p = new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0)) * PIN_BASE_RADIUS, q = new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1)) * PIN_BASE_RADIUS;
+            AddTriangle(vertices, triangles, p + up, q + up, up, Vector3.up);
+        }
+        _pinBaseMesh = new Mesh { name = "Spell Locked Pin Base" };
+        _pinBaseMesh.SetVertices(vertices); _pinBaseMesh.SetTriangles(triangles, 0); _pinBaseMesh.RecalculateNormals(); _pinBaseMesh.RecalculateBounds();
+        return _pinBaseMesh;
+    }
+
+    /// <summary>조각 전체 중심에 가장 가까운 1/4 구역 중심을 핀 위치로 고른다. 씰링이 있는 구역은 가능하면 피한다.</summary>
+    private static Vector2 PinPoint(IReadOnlyList<SpellGame.ShapeCell> cells, IReadOnlyList<SpellGame.SealSpot> seals)
+    {
+        List<Vector2> points = new List<Vector2>(); List<bool> sealed_ = new List<bool>();
+        Vector2 sum = Vector2.zero;
+        foreach (SpellGame.ShapeCell cell in cells)
+        {
+            Vector2 center = new Vector2(cell.X + 0.5f, cell.Y + 0.5f);
+            Vector2[] corners = { new Vector2(cell.X, cell.Y), new Vector2(cell.X + 1, cell.Y), new Vector2(cell.X + 1, cell.Y + 1), new Vector2(cell.X, cell.Y + 1) };
+            for (int sector = 0; sector < 4; sector++)
+            {
+                if ((cell.Mask & (1 << sector)) == 0) continue;
+                Vector2 point = (corners[sector] + corners[(sector + 1) % 4] + center) / 3;
+                bool hasSeal = false;
+                if (seals != null) foreach (SpellGame.SealSpot seal in seals) if (seal.X == cell.X && seal.Y == cell.Y && seal.Sector == sector) hasSeal = true;
+                points.Add(point); sealed_.Add(hasSeal); sum += point;
+            }
+        }
+        if (points.Count == 0) return CellBounds(cells) / 2;
+        Vector2 middle = sum / points.Count;
+        int best = -1; float bestScore = float.MaxValue;
+        for (int i = 0; i < points.Count; i++)
+        {
+            float score = (points[i] - middle).sqrMagnitude + (sealed_[i] ? 100f : 0f);
+            if (score < bestScore) { bestScore = score; best = i; }
+        }
+        return points[best];
+    }
+
+    /// <summary>모든 조각이 함께 쓰는 낮은 원뿔대 모양 핀 머리 메시를 처음 한 번 만든다. 납작한 씰링 동그라미와 구분되도록 위가 좁다.</summary>
+    private static Mesh PinMesh()
+    {
+        if (_pinMesh != null) return _pinMesh;
+        List<Vector3> vertices = new List<Vector3>(); List<int> triangles = new List<int>();
+        Vector3 top = Vector3.up * PIN_HEIGHT;
+        for (int i = 0; i < PIN_SIDES; i++)
+        {
+            float a0 = i * Mathf.PI * 2 / PIN_SIDES, a1 = (i + 1) * Mathf.PI * 2 / PIN_SIDES;
+            Vector3 d0 = new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1));
+            Vector3 p = d0 * PIN_RADIUS, q = d1 * PIN_RADIUS, pt = d0 * PIN_TOP_RADIUS + top, qt = d1 * PIN_TOP_RADIUS + top;
+            Vector3 side = ((d0 + d1).normalized * PIN_HEIGHT + Vector3.up * (PIN_RADIUS - PIN_TOP_RADIUS)).normalized;
+            AddTriangle(vertices, triangles, p, q, qt, side); AddTriangle(vertices, triangles, p, qt, pt, side);
+            AddTriangle(vertices, triangles, pt, qt, top, Vector3.up);
+        }
+        _pinMesh = new Mesh { name = "Spell Locked Pin" };
+        _pinMesh.SetVertices(vertices); _pinMesh.SetTriangles(triangles, 0); _pinMesh.RecalculateNormals(); _pinMesh.RecalculateBounds();
+        return _pinMesh;
+    }
 
     /// <summary>칸 목록의 범위 크기를 칸 단위로 반환한다.</summary>
     public static Vector2 CellBounds(IReadOnlyList<SpellGame.ShapeCell> cells)
@@ -436,6 +586,7 @@ public sealed class SpellPiece3D : MonoBehaviour
         if (_material != null) Destroy(_material);
         if (_crackMesh != null) Destroy(_crackMesh);
         if (_crack != null) Destroy(_crack.sharedMaterial);
+        if (_pin != null) { Destroy(_pin.sharedMaterial); Destroy(_pinBase.sharedMaterial); }
     }
 }
 

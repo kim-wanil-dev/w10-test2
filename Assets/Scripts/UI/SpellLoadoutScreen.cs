@@ -22,8 +22,8 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
     private const float CARD_TOP = 200f;
     private const float CARD_SCALE = 0.72f;
     private const float CARD_SPACING = 380f;
-    private const string DEFAULT_HINT = "도안을 끌어 격자·보관함 사이로 옮기기 · 클릭하면 들고 다시 클릭해 놓기 · R / 우클릭 회전 · 버리기 칸에 놓으면 도안 버리기";
-    private const string REWARD_HINT = "보상 카드를 끌어 놓아 보고 결정하세요 · 도안은 격자·보관함에, 조각은 내 격자 어디에나 · 카드를 클릭하면 빈 곳에 자동으로 놓기";
+    private const string DEFAULT_HINT = "드래그 또는 클릭으로 도안 이동 · R / 우클릭 회전 · 버리기 칸에 놓아 폐기";
+    private const string REWARD_HINT = "도안은 격자·보관함에, 조각은 격자에 놓아 획득 · 클릭 시 자동 배치";
     private static readonly Color PANEL_COLOR = new Color(0.07f, 0.08f, 0.11f, 0.96f);
     private static readonly Color ACCENT_COLOR = new Color(0.98f, 0.8f, 0.36f);
     private static readonly Color DANGER_COLOR = new Color(0.88f, 0.38f, 0.35f);
@@ -116,6 +116,27 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
         HideGhost();
     }
 
+    /// <summary>누르기를 받을지 거르는 함수다. 온보딩이 강조 영역 밖의 누르기를 막는 데 쓴다. null이면 모두 받는다.</summary>
+    public Func<Vector2, bool> PressFilter { get; set; }
+    public RectTransform GridFrame { get { return _gridFrame; } }
+    public RectTransform StorageFrame { get { return _storageFrame; } }
+    public RectTransform DecideButton { get { return _decide; } }
+    public SpellGame.RewardKind Tab { get { return _tab; } }
+    public bool HasTrialPattern { get { return _trialPattern >= 0; } }
+    public bool HasTrialPiece { get { return _trialPiece != null; } }
+
+    /// <summary>지금 탭에서 보상 번호 rewardIndex를 보여 주는 카드가 있으면 그 범위를 돌려준다.</summary>
+    public bool TryCardRect(int rewardIndex, out RectTransform rect)
+    {
+        rect = null;
+        for (int i = 0; i < _cards.Count && i < _cardIndices.Count; i++)
+        {
+            if (_cardIndices[i] != rewardIndex || !_cards[i].gameObject.activeInHierarchy) continue;
+            rect = (RectTransform)_cards[i].transform; return true;
+        }
+        return false;
+    }
+
     /// <summary>계속 버튼 문구를 바꾼다.</summary>
     public void SetContinueLabel(string label) { _start.SetLabel(label); }
 
@@ -146,7 +167,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
         }
         // 들고 있지 않을 때 R은 시험으로 놓은 조각을 제자리에서 돌린다.
         if (keyboard != null && keyboard.rKey.wasPressedThisFrame && _trialPiece != null) RotateTrialPiece();
-        if (mouse.leftButton.wasPressedThisFrame) BeginPress(pointer);
+        if (mouse.leftButton.wasPressedThisFrame && (PressFilter == null || PressFilter(pointer))) BeginPress(pointer);
         if (_pressed && mouse.leftButton.isPressed && (pointer - _pressPosition).sqrMagnitude >= DRAG_THRESHOLD * DRAG_THRESHOLD) { StartHold(false); UpdateHover(pointer); return; }
         if (_pressed && mouse.leftButton.wasReleasedThisFrame) ReleaseClick();
     }
@@ -211,7 +232,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
             case Source.TrialPiece:
                 _heldPiece = _trialPiece; _heldIndex = _trialPieceIndex; _heldRotation = _originRotation = _trialPieceRotation; _origin = _trialPieceAnchor; break;
         }
-        ShowHint(_heldPiece != null ? "내 격자 어디에나 놓아 보세요 · R / 우클릭 회전 · Esc 취소" : "격자나 보관함에 놓으세요 · R / 우클릭 회전 · 버리기 칸에 놓으면 버리기 · Esc 취소");
+        ShowHint(_heldPiece != null ? "내 격자에 놓으세요 · R / 우클릭 회전 · Esc 취소" : "R / 우클릭 회전 · 버리기 칸에 놓아 폐기 · Esc 취소");
         Redraw();
     }
 
@@ -333,7 +354,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
             int spell = _game.PatternRewards[index].Pattern;
             RebuildShown(spell);
             if (_layout.TryAutoPlace(spell, _shown) || _storageLayout.TryAutoPlace(spell, _shown)) { _trialPattern = spell; _trialPatternIndex = index; }
-            else ShowHint("놓을 자리가 없습니다 · 격자나 보관함의 도안을 버리기 칸에 끌어 자리를 만드세요");
+            else ShowHint("빈 자리가 없습니다 · 기존 도안을 옮기거나 버려 자리를 만드세요");
         }
         else
         {
@@ -477,7 +498,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
         float lower = kinds.Count > 0 ? LOWER_WITH_REWARDS : LOWER_WITHOUT_REWARDS;
 
         _title.text = kinds.Count > 0 ? "전투 보상" : "도안 배치";
-        _subtitle.text = kinds.Count > 0 ? "보상을 끌어 놓아 보고 결정하세요 · 받지 않을 보상은 그대로 두고 진행" : "내 격자에 놓인 도안만 다음 전투에 장착됩니다";
+        _subtitle.text = kinds.Count > 0 ? "원하는 보상을 끌어 배치하세요 · 생략하고 진행할 수도 있습니다" : "내 격자에 놓인 도안만 다음 전투에 장착됩니다";
         TopLeft((RectTransform)_title.transform, 0, kinds.Count > 0 ? 24 : 70, 1920, 64);
         TopLeft((RectTransform)_subtitle.transform, 0, kinds.Count > 0 ? 88 : 140, 1920, 36);
 
@@ -543,7 +564,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
             TopLeft((RectTransform)_tabs[i].transform, 960 - total / 2 + i * (width + gap), 0, width, 46);
             _tabs[i].GetComponent<Image>().color = active ? new Color(0.22f, 0.2f, 0.12f, 1f) : PANEL_COLOR;
             Text label = _tabs[i].GetComponentInChildren<Text>();
-            label.text = kind == SpellGame.RewardKind.Piece ? "조각 보상" : kind == SpellGame.RewardKind.Pattern ? "도안 보상" : "인장 보상 · 작업대";
+            label.text = kind == SpellGame.RewardKind.Piece ? "조각 보상" : kind == SpellGame.RewardKind.Pattern ? "도안 보상" : "씰링 보상 · 작업대";
             label.color = active ? ACCENT_COLOR : TEXT_COLOR;
         }
     }

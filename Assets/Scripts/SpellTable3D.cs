@@ -18,6 +18,8 @@ public sealed class SpellTable3D : MonoBehaviour
     private static readonly Vector3 WORLD_ORIGIN = new Vector3(1000, 0, 0);
     private static readonly Color NORMAL_COLOR = new Color(0.77f, 0.82f, 0.84f);
     private static readonly Color CLAY_COLOR = new Color(0.72f, 0.56f, 0.44f);
+    private const float SHADOW_STRENGTH = 0.55f;
+    private const float CAMERA_DISTANCE = 15f;
 
     [Header("테이블 카메라")]
     [SerializeField, Range(55f, 90f)] private float _cameraAngle = 90f;
@@ -91,6 +93,7 @@ public sealed class SpellTable3D : MonoBehaviour
     private Vector2Int _autoCell;
     private bool _hasAutoCell;
     private bool _isAutoRotateLocked;
+    private Vector3 _shakeOffset;
 
     public bool IsDragging { get { return _picked != null || _castSource >= 0 || _dragTemplate >= 0; } }
 
@@ -114,6 +117,8 @@ public sealed class SpellTable3D : MonoBehaviour
         Light light = CreateRoot("Table Key Light", _world).gameObject.AddComponent<Light>();
         light.type = LightType.Directional; light.intensity = 0.8f; light.color = new Color(1f, 0.91f, 0.77f);
         light.cullingMask = 1 << TABLE_LAYER; light.transform.rotation = Quaternion.Euler(52, -25, 0);
+        // 조각이 판과 손패 받침 위에 부드러운 그림자를 드리워 떠 있는 높이가 읽히게 한다.
+        light.shadows = LightShadows.Soft; light.shadowStrength = SHADOW_STRENGTH; light.shadowBias = 0.02f; light.shadowNormalBias = 0.2f;
         _boardRoot = _world.Find("Grid 3 x 4");
         _handRoot = _world.Find("Physical Hand");
         Transform boardSurface = _boardRoot.Find("Board slab");
@@ -262,12 +267,31 @@ public sealed class SpellTable3D : MonoBehaviour
     private void ConfigureCamera()
     {
         _camera.transform.rotation = Quaternion.Euler(_cameraAngle, 0, 0);
-        _camera.transform.position = WORLD_ORIGIN - _camera.transform.forward * 15f;
+        _camera.transform.position = WORLD_ORIGIN - _camera.transform.forward * CAMERA_DISTANCE + _shakeOffset;
         _camera.orthographicSize = _cameraSize;
         _boardRoot.position = ViewportOnTable(ViewportCenter(_screen.Board.rectTransform)) + _boardPan;
         _handRoot.position = ViewportOnTable(ViewportCenter(_screen.HandDropArea));
         FitHandTray();
         _lastAngle = _cameraAngle; _lastAspect = _camera.aspect;
+    }
+
+    /// <summary>화면 흔들림(캔버스 단위)을 카메라에 반영해 3D 판과 손패가 UI와 함께 흔들리게 한다. 0이면 제자리로 돌아온다.</summary>
+    public void SetShake(Vector2 canvasOffset)
+    {
+        if (_camera == null) return;
+        // 캔버스 한 단위가 책상에서 몇 유닛인지 구한다. 화면 세로 전체가 카메라 세로 범위(2 × orthographicSize)다.
+        Canvas canvas = _screen.GetComponentInParent<Canvas>();
+        float canvasHeight = canvas != null && canvas.rootCanvas.scaleFactor > 0 ? Screen.height / canvas.rootCanvas.scaleFactor : 1080f;
+        float unitsPerCanvasUnit = _camera.orthographicSize * 2f / Mathf.Max(1f, canvasHeight);
+        // UI가 오른쪽·위로 움직이면 책상도 그렇게 보이도록 카메라는 반대로 옮긴다.
+        _shakeOffset = -(_camera.transform.right * canvasOffset.x + _camera.transform.up * canvasOffset.y) * unitsPerCanvasUnit;
+        _camera.transform.position = WORLD_ORIGIN - _camera.transform.forward * CAMERA_DISTANCE + _shakeOffset;
+    }
+
+    /// <summary>방금 놓은 조각을 살짝 튀어 오르게 한다.</summary>
+    public void PopPiece(SpellGame.Card card)
+    {
+        if (card != null && _pieces.TryGetValue(card.Id, out SpellPiece3D piece)) piece.Pop();
     }
 
     /// <summary>손패 놓기 영역의 화면 범위를 책상면에 투영해 손패 받침의 가로·세로 길이를 맞춘다.</summary>
@@ -359,6 +383,8 @@ public sealed class SpellTable3D : MonoBehaviour
         for (int i = 0; i < seals.Count; i++) seals[i] = new SpellGame.SealSpot(seals[i].X - anchor.x, seals[i].Y - anchor.y, seals[i].Sector, seals[i].Seal);
         float layer = IsLayered(spell, placement) ? SpellPiece3D.Thickness * _cellSize : 0;
         piece.PlaceOnBoard(spell, placement, cells, seals, PiecePosition(anchor, cells, 0.045f + layer), Quaternion.identity, _cellSize);
+        // 이전 턴에 놓인 조각은 움직일 수 없으므로 어둡게 낮추고 핀을 박아 이번 턴 조각과 구분한다.
+        piece.SetLocked(placement.Turn < _game.Turn, cells, seals);
     }
 
     /// <summary>덧칠 씰링이 있는 조각이 같은 판의 다른 조각과 구역을 공유하는지 반환한다.</summary>
@@ -566,6 +592,43 @@ public sealed class SpellTable3D : MonoBehaviour
         }
     }
 
+    /// <summary>카드의 3D 조각이 화면에서 차지하는 범위(화면 좌표, y 위)를 구한다. 조각이 없으면 false다.</summary>
+    public bool TryPieceScreenRect(SpellGame.Card card, out Rect rect)
+    {
+        rect = default;
+        if (card == null || !_pieces.TryGetValue(card.Id, out SpellPiece3D piece) || !piece.gameObject.activeInHierarchy) return false;
+        Bounds bounds = piece.GetComponent<Renderer>().bounds;
+        Vector2 min = Vector2.positiveInfinity, max = Vector2.negativeInfinity;
+        for (int i = 0; i < 8; i++)
+        {
+            Vector3 corner = bounds.center + Vector3.Scale(bounds.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+            Vector2 screen = _camera.WorldToScreenPoint(corner);
+            min = Vector2.Min(min, screen); max = Vector2.Max(max, screen);
+        }
+        rect = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        return true;
+    }
+
+    /// <summary>판에 놓인 도안이 화면에서 차지하는 범위(화면 좌표, y 위)를 구한다. 놓이지 않았으면 false다.</summary>
+    public bool TryPatternScreenRect(int spell, out Rect rect)
+    {
+        rect = default;
+        if (!_layout.IsPlaced(spell)) return false;
+        Vector2 min = Vector2.positiveInfinity, max = Vector2.negativeInfinity;
+        for (int y = 0; y < SpellPatternLayout.ROWS; y++) for (int x = 0; x < SpellPatternLayout.COLUMNS; x++)
+        {
+            if (_layout.PlacedMask(spell, x, y) == 0) continue;
+            for (int i = 0; i < 4; i++)
+            {
+                Vector2 screen = _camera.WorldToScreenPoint(_boardRoot.TransformPoint(GridLocal(new Vector2(x + (i & 1), y + (i >> 1)))));
+                min = Vector2.Min(min, screen); max = Vector2.Max(max, screen);
+            }
+        }
+        if (min.x > max.x) return false;
+        rect = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        return true;
+    }
+
     /// <summary>격자 위치를 이름표 부모의 왼쪽 위 기준 UI 좌표로 투영한다.</summary>
     private Vector2 OverlayPoint(RectTransform parent, Vector2 grid)
     {
@@ -608,6 +671,8 @@ public sealed class SpellTable3D : MonoBehaviour
         }
         if (Mouse.current == null) return;
         Vector2 pointer = Mouse.current.position.ReadValue();
+        // 온보딩 중에는 강조 영역 밖의 새 누르기를 무시한다. 들고 있는 조각을 내려놓는 누르기는 받는다.
+        if (pressed && _picked == null && !_ui.Onboarding.AllowsPress(_downPosition)) pressed = false;
         if (pressed && _castSource < 0 && _dragTemplate < 0) BeginOverlayInput();
         if (_castSource >= 0) { UpdateCastInput(pointer, released); return; }
         if (_dragTemplate >= 0) { UpdateTemplateInput(pointer, released, rotations); return; }
@@ -616,7 +681,8 @@ public sealed class SpellTable3D : MonoBehaviour
             SpellPiece3D piece = FindPieceForPick(_downPosition);
             if (piece != null)
             {
-                if (piece.IsHand || _game.CanMovePiece(piece.Placement)) BeginPick(piece, _downPosition);
+                // 온보딩 중에는 지금 단계에서 허용한 조각만 집을 수 있다.
+                if ((piece.IsHand || _game.CanMovePiece(piece.Placement)) && _ui.Onboarding.AllowsPick(piece.Card)) BeginPick(piece, _downPosition);
             }
             else if (TryBeginEmptyPatternDrag(_downPosition)) { UpdateTemplateInput(pointer, released, rotations); return; }
         }
@@ -724,12 +790,14 @@ public sealed class SpellTable3D : MonoBehaviour
             RectTransform cast = _screen.CastButtons[spell].Rect;
             if (cast.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(cast, _downPosition, null))
             {
+                if (!_ui.Onboarding.AllowsCast(spell)) return;
                 CancelPick(); _castSource = spell; _isCastDragging = false; return;
             }
             RectTransform tab = _screen.Tabs[spell].Rect;
             if (!tab.gameObject.activeInHierarchy || !RectTransformUtility.RectangleContainsScreenPoint(tab, _downPosition, null)) continue;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(tab, _downPosition, null, out Vector2 local);
             if (local.x - tab.rect.xMin >= tab.rect.width - 40f) return;
+            if (!_ui.Onboarding.AllowsPatternEdit) return;
             CancelPick(); _dragTemplate = spell; _isTemplateDragging = false; _templateGrab = Vector2Int.zero; return;
         }
     }
@@ -737,6 +805,7 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>판 위 도안의 조각이 없는 빈 칸을 눌렀으면 그 도안을 잡은 칸 기준으로 드래그할 준비를 하고 true를 반환한다. 실제 이동은 포인터가 조금 움직인 뒤 시작한다.</summary>
     private bool TryBeginEmptyPatternDrag(Vector2 position)
     {
+        if (!_ui.Onboarding.AllowsPatternEdit) return false;
         if (!ScreenToGrid(position, out Vector2 grid) || !OnGrid(grid)) return false;
         Vector2Int cell = new Vector2Int((int)grid.x, (int)grid.y);
         if (!_layout.TryFindTarget(cell.x, cell.y, Sector(grid), _game.Spells, out int spell)) return false;
@@ -843,7 +912,7 @@ public sealed class SpellTable3D : MonoBehaviour
         {
             foreach (int spell in _game.Spells)
             {
-                if (!_layout.IsPlaced(spell)) continue;
+                if (!_layout.IsPlaced(spell) || !_ui.Onboarding.AllowsPlace(spell)) continue;
                 _layout.GridToLocalPlacement(spell, _picked.Card, _anchor, _rotation, out Vector2Int local, out int localRotation);
                 if (!_game.CanPlace(spell, _picked.Card, local.x, local.y, localRotation, _picked.Board == spell ? _picked.Placement : null)) continue;
                 _destination = spell; _local = local; _localRotation = localRotation; break;
@@ -1021,7 +1090,11 @@ public sealed class SpellTable3D : MonoBehaviour
             if (Mathf.Abs(local.x) < _handSurface.localScale.x * 0.5f && Mathf.Abs(local.z) < _handSurface.localScale.z * 0.5f) changed = _game.Recall(piece.Board, piece.Placement);
         }
         _picked = null; _isClickSelected = _isHolding = false;
+        int placedOn = changed ? _destination : -1;
+        SpellGame.Card placedCard = piece.Card;
         if (changed) _ui.TableChanged(); else RestorePiece(piece);
+        // 도안 위에 놓았으면 놓인 자리에서 반응 연출을 낸다(손패로 되돌린 경우는 제외).
+        if (placedOn >= 0) _ui.PiecePlaced(placedCard, placedOn);
     }
 
     /// <summary>취소한 조각을 모델 위치로 복원하고 손패 조각은 예약 자리에서 다시 내려놓는다.</summary>
