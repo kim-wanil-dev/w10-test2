@@ -337,7 +337,12 @@ public sealed class SpellTable3D : MonoBehaviour
             if (piece.IsHand) continue;
             int slot = FreeSlot(); piece.DropToHand(slot, SlotPosition(slot), _cellSize, _dropHeight + Random.Range(0f, 0.45f));
         }
-        foreach (int spell in _game.Spells) foreach (SpellGame.Placement placement in _game.Boards[spell].Pieces) PlaceOnBoard(GetPiece(placement.Card), spell, placement);
+        HashSet<int> placedIds = new HashSet<int>();
+        foreach (int spell in _game.Spells) foreach (SpellGame.Placement placement in _game.Boards[spell].Pieces)
+        {
+            if (!placedIds.Add(placement.Card.Id)) continue;
+            PlaceOnBoard(GetPiece(placement.Card), spell, placement);
+        }
         RebuildPatterns(); ProjectControls(); RefreshCurseTint();
     }
 
@@ -361,14 +366,25 @@ public sealed class SpellTable3D : MonoBehaviour
         piece.PlaceOnBoard(spell, placement, cells, seals, PiecePosition(anchor, cells, 0.045f + layer), Quaternion.identity, _cellSize);
     }
 
-    /// <summary>덧칠 씰링이 있는 조각이 같은 판의 다른 조각과 구역을 공유하는지 반환한다.</summary>
+    /// <summary>덧칠 씰링이 있는 조각이 공유 격자의 다른 조각과 구역을 공유하는지 반환한다.</summary>
     private bool IsLayered(int spell, SpellGame.Placement placement)
     {
         if (SpellGame.SealCount(placement.Card, SpellGame.Seal.Overpaint) == 0) return false;
-        foreach (SpellGame.Placement other in _game.Boards[spell].Pieces)
+        int[] mine = new int[SpellPatternLayout.COLUMNS * SpellPatternLayout.ROWS];
+        foreach (SpellGame.ShapeCell cell in _layout.PlacementGridCells(spell, placement))
+            if (cell.X >= 0 && cell.X < SpellPatternLayout.COLUMNS && cell.Y >= 0 && cell.Y < SpellPatternLayout.ROWS)
+                mine[cell.Y * SpellPatternLayout.COLUMNS + cell.X] |= cell.Mask;
+        foreach (int otherSpell in _game.Spells)
         {
-            if (other == placement) continue;
-            for (int y = 0; y < SpellGame.LOCAL_SIZE; y++) for (int x = 0; x < SpellGame.LOCAL_SIZE; x++) if ((other.CellMask(x, y) & placement.CellMask(x, y)) != 0) return true;
+            if (!_layout.IsPlaced(otherSpell)) continue;
+            foreach (SpellGame.Placement other in _game.Boards[otherSpell].Pieces)
+            {
+                if (other.Card == placement.Card) continue;
+                foreach (SpellGame.ShapeCell cell in _layout.PlacementGridCells(otherSpell, other))
+                    if (cell.X >= 0 && cell.X < SpellPatternLayout.COLUMNS && cell.Y >= 0 && cell.Y < SpellPatternLayout.ROWS
+                        && (mine[cell.Y * SpellPatternLayout.COLUMNS + cell.X] & cell.Mask) != 0)
+                        return true;
+            }
         }
         return false;
     }
@@ -376,13 +392,13 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>집은 조각을 현재 방향의 칸 모양으로 반환한다. 점토는 한 칸으로 보여 준다.</summary>
     private IReadOnlyList<SpellGame.ShapeCell> HeldCells()
     {
-        return SpellGame.CardCells(_picked.Card, _picked.Card.Shape == SpellGame.Shape.Clay ? 0 : _rotation);
+        return SpellGame.CardCells(_picked.Card, _picked.Card.IsUnique ? 0 : _rotation);
     }
 
     /// <summary>집은 조각의 씰링을 HeldCells와 같은 방향 좌표로 반환한다.</summary>
     private IReadOnlyList<SpellGame.SealSpot> HeldSeals()
     {
-        return SpellGame.SealSpots(_picked.Card, _picked.Card.Shape == SpellGame.Shape.Clay ? 0 : _rotation);
+        return SpellGame.SealSpots(_picked.Card, _picked.Card.IsUnique ? 0 : _rotation);
     }
 
     /// <summary>코팅에 맞는 3D 조각 Material을 반환한다. 코팅이 없으면 기본 조각 Material이다.</summary>
@@ -845,7 +861,7 @@ public sealed class SpellTable3D : MonoBehaviour
             {
                 if (!_layout.IsPlaced(spell)) continue;
                 _layout.GridToLocalPlacement(spell, _picked.Card, _anchor, _rotation, out Vector2Int local, out int localRotation);
-                if (!_game.CanPlace(spell, _picked.Card, local.x, local.y, localRotation, _picked.Board == spell ? _picked.Placement : null)) continue;
+                if (!_game.CanPlace(spell, _picked.Card, local.x, local.y, localRotation, _picked.IsHand ? null : _picked.Placement)) continue;
                 _destination = spell; _local = local; _localRotation = localRotation; break;
             }
             _picked.transform.position = PiecePosition(_anchor, cells, 0.045f) + Vector3.up * 0.22f;
@@ -865,9 +881,9 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>집은 점토를 놓을 수 있는 도안이 있으면 실제로 변할 모양으로 그 자리에 보여 주고, 없으면 원판으로 둔다.</summary>
     private void PreviewClay()
     {
-        int[] mask = _destination < 0 ? null : _game.PreviewMask(_destination, _picked.Card, _local.x, _local.y, _localRotation, _picked.Board == _destination ? _picked.Placement : null);
+        int[] mask = _destination < 0 ? null : _game.PreviewGridMask(_destination, _picked.Card, _local.x, _local.y, _localRotation, _picked.IsHand ? null : _picked.Placement);
         if (mask == null) { _picked.ShowClay(null); return; }
-        List<SpellGame.ShapeCell> cells = _layout.MaskGridCells(_destination, mask, out Vector2Int anchor);
+        List<SpellGame.ShapeCell> cells = _layout.GridMaskCells(mask, out Vector2Int anchor);
         _picked.ShowClay(cells);
         _picked.transform.position = PiecePosition(anchor, cells, 0.045f) + Vector3.up * 0.22f;
     }
@@ -899,7 +915,7 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>점토는 방향 0으로 고정한 HeldCells와 같은 기준으로 지정 방향의 칸 목록을 반환한다.</summary>
     private IReadOnlyList<SpellGame.ShapeCell> CellsAt(int rotation)
     {
-        return SpellGame.CardCells(_picked.Card, _picked.Card.Glued == null && _picked.Card.Shape == SpellGame.Shape.Clay ? 0 : rotation);
+        return SpellGame.CardCells(_picked.Card, _picked.Card.IsUnique ? 0 : rotation);
     }
 
     /// <summary>조각 범위의 중심을 피벗 점으로 정한다. 커서가 가리키는 위치에 조각 중심이 가장 가까운 칸 경계로 맞춰진다.</summary>
@@ -933,7 +949,7 @@ public sealed class SpellTable3D : MonoBehaviour
     /// <summary>커서가 가리키는 격자 칸이 직전 판정 칸과 달라진 경우에만 조각 방향을 다시 판정해 돌린다.</summary>
     private void AutoRotatePick(Vector2 grid)
     {
-        if (_picked.Card.Glued == null && _picked.Card.Shape == SpellGame.Shape.Clay) return;
+        if (_picked.Card.IsUnique) return;
         Vector2Int cell = new Vector2Int(Mathf.FloorToInt(grid.x), Mathf.FloorToInt(grid.y));
         if (_hasAutoCell && _autoCell == cell) return;
         _autoCell = cell; _hasAutoCell = true;
@@ -965,7 +981,7 @@ public sealed class SpellTable3D : MonoBehaviour
         {
             if (!_layout.IsPlaced(spell)) continue;
             _layout.GridToLocalPlacement(spell, _picked.Card, anchor, rotation, out Vector2Int local, out int localRotation);
-            if (_game.CanPlace(spell, _picked.Card, local.x, local.y, localRotation, _picked.Board == spell ? _picked.Placement : null)) return true;
+            if (_game.CanPlace(spell, _picked.Card, local.x, local.y, localRotation, _picked.IsHand ? null : _picked.Placement)) return true;
         }
         return false;
     }
@@ -992,12 +1008,14 @@ public sealed class SpellTable3D : MonoBehaviour
     private void FillOverlapCounts()
     {
         System.Array.Clear(_overlapCounts, 0, _overlapCounts.Length);
+        HashSet<int> seen = new HashSet<int>();
         foreach (int spell in _game.Spells)
         {
             if (!_layout.IsPlaced(spell)) continue;
             foreach (SpellGame.Placement piece in _game.Boards[spell].Pieces)
             {
-                if (!_picked.IsHand && piece == _picked.Placement) continue;
+                if (!_picked.IsHand && piece.Card == _picked.Card) continue;
+                if (!seen.Add(piece.Card.Id)) continue;
                 List<SpellGame.ShapeCell> cells = _layout.PlacementGridCells(spell, piece);
                 foreach (SpellGame.ShapeCell cell in cells)
                 {

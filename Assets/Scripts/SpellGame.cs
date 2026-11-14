@@ -11,7 +11,7 @@ public sealed class SpellGame
     private const int STRONG_CONTAMINATION_COUNT = 3;
     public const int CONTAMINATION_PENALTY = 2;
 
-    public enum Shape { Square, Triangle, Rectangle, QuarterTriangle, Diamond, Parallelogram, MediumTriangle, House, LargeTriangle, LShape, Clay }
+    public enum Shape { Square, Triangle, Rectangle, QuarterTriangle, EighthTriangle, Diamond, Parallelogram, MediumTriangle, House, LargeTriangle, LShape, Clay }
     public enum Effect { None, Period, Resonance }
     public enum Seal { None, Recall, Shard, Refill, Overpaint }
     public enum Coating { None, Guard, Amplify, Cog }
@@ -120,6 +120,7 @@ public sealed class SpellGame
     public sealed class Card
     {
         internal readonly List<SealSpot> SealList = new List<SealSpot>();
+        internal ShapeCell[][] CustomCells;
 
         public int Id { get; internal set; }
         public Shape Shape { get; internal set; }
@@ -130,7 +131,8 @@ public sealed class SpellGame
         public bool IsContaminated { get; internal set; }
         // 회수 씰링으로 손패에 들어온 이번 전투 임시 복사본이다. 시전에 쓰이거나 턴이 끝나 버려지면 버림 더미에 가지 않고 사라진다.
         public bool IsRecallCopy { get; internal set; }
-        public bool IsUnique { get { return Glued == null && Shape == Shape.Clay; } }
+        public bool IsCustomSplit { get { return CustomCells != null; } }
+        public bool IsUnique { get { return Glued == null && CustomCells == null && Shape == Shape.Clay; } }
     }
 
     public sealed class GluedShape
@@ -174,6 +176,7 @@ public sealed class SpellGame
     public sealed class Placement
     {
         internal int[] Mask = new int[CELL_COUNT];
+        internal int[] GridMask;
 
         public Card Card { get; internal set; }
         public int X { get; internal set; }
@@ -181,6 +184,9 @@ public sealed class SpellGame
         public int Rotation { get; internal set; }
         public int Turn { get; internal set; }
         public bool CanRefund { get; internal set; }
+        public UnityEngine.Vector2Int GridAnchor { get; internal set; }
+        public int GridRotation { get; internal set; }
+        public bool HasGridPlacement { get { return GridMask != null; } }
 
         /// <summary>도안 기준 칸 (x, y)에서 이 조각이 차지한 구역 마스크를 반환한다.</summary>
         public int CellMask(int x, int y) { return x < 0 || x >= LOCAL_SIZE || y < 0 || y >= LOCAL_SIZE ? 0 : Mask[y * LOCAL_SIZE + x]; }
@@ -300,6 +306,7 @@ public sealed class SpellGame
     private readonly List<Reward> _patternRewards = new List<Reward>();
 
     private readonly Board[] _boards = CreateBoards();
+    public SpellPatternLayout Layout { get; } = new SpellPatternLayout();
     private bool _hasSealerEncounter;
     private bool _hasThiefEncounter;
     private bool _hasCurserEncounter;
@@ -358,7 +365,15 @@ public sealed class SpellGame
     public int LastAcquiredPattern { get; private set; } = -1;
     public int DrawCount { get { return _draw.Count; } }
     public int DiscardCount { get { return _discard.Count; } }
-    public int CraftCount { get { int count = 0; foreach (Board board in Boards) count += board.Pieces.Count; return count; } }
+    public int CraftCount
+    {
+        get
+        {
+            HashSet<Card> unique = new HashSet<Card>();
+            foreach (Board board in Boards) foreach (Placement piece in board.Pieces) unique.Add(piece.Card);
+            return unique.Count;
+        }
+    }
     public static int PatternCount { get { return PATTERNS.Length; } }
 
     /// <summary>Resources의 도안·조각 JSON을 읽어 도안 정보, 도안 칸, 도형 칸·이름·회전 방식, 보상 도형과 네 방향 칸을 채운다. 데이터 오류는 예외로 전달한다.</summary>
@@ -520,6 +535,17 @@ public sealed class SpellGame
     {
         List<SealSpot> result = new List<SealSpot>();
         rotation = (rotation % 4 + 4) % 4;
+        if (card.CustomCells != null)
+        {
+            IReadOnlyList<ShapeCell> baseCells = card.CustomCells[0], cells = card.CustomCells[rotation];
+            foreach (SealSpot seal in card.Seals)
+                for (int i = 0; i < baseCells.Count; i++)
+                {
+                    if (baseCells[i].X != seal.X || baseCells[i].Y != seal.Y) continue;
+                    result.Add(new SealSpot(cells[i].X, cells[i].Y, (seal.Sector + rotation) % 4, seal.Seal)); break;
+                }
+            return result;
+        }
         if (card.Glued == null)
         {
             IReadOnlyList<ShapeCell> baseCells = ShapeCells(card.Shape, 0), cells = ShapeCells(card.Shape, rotation);
@@ -659,6 +685,7 @@ public sealed class SpellGame
     private static string CardKey(Card card)
     {
         if (card.Glued != null) return "Glued:" + card.Id;
+        if (card.CustomCells != null) return "Split:" + card.Id;
         List<string> seals = new List<string>();
         foreach (SealSpot seal in card.Seals) seals.Add($"{seal.X},{seal.Y},{seal.Sector},{seal.Seal}");
         seals.Sort(StringComparer.Ordinal);
@@ -691,6 +718,7 @@ public sealed class SpellGame
         // 기본 덱은 조각 데이터(pieces.json)의 도형별 starterCount 장수로 만든다.
         for (int shape = 0; shape < STARTER_COUNTS.Length; shape++)
             for (int i = 0; i < STARTER_COUNTS[shape]; i++) AddCard((Shape)shape, Effect.None);
+        Layout.Reset(); Layout.EnsurePlaced(_spells);
         StartBattle();
     }
 
@@ -706,7 +734,7 @@ public sealed class SpellGame
     /// <summary>원본 도형·효과·오염·코팅·씰링과 접착 구성을 새 ID로 복사한다. keepRecall이 false면 회수 씰링만 뺀다.</summary>
     private Card CopyCard(Card source, bool keepRecall)
     {
-        Card copy = new Card { Id = ++_nextId, Shape = source.Shape, Effect = source.Effect, Coating = source.Coating, IsContaminated = source.IsContaminated };
+        Card copy = new Card { Id = ++_nextId, Shape = source.Shape, Effect = source.Effect, Coating = source.Coating, IsContaminated = source.IsContaminated, CustomCells = source.CustomCells };
         foreach (SealSpot seal in source.Seals) if (keepRecall || seal.Seal != Seal.Recall) copy.SealList.Add(seal);
         if (source.Glued != null)
         {
@@ -766,6 +794,7 @@ public sealed class SpellGame
         if (CurrentPhase != Phase.Combat || spell < 0 || spell >= PatternCount || _spells.Contains(spell)) return false;
         if (!_ownedSpells.Contains(spell)) _ownedSpells.Add(spell);
         _spells.Add(spell);
+        if (!Layout.IsPlaced(spell)) Layout.TryAutoPlace(spell, _spells);
         return true;
     }
 
@@ -798,6 +827,7 @@ public sealed class SpellGame
 
     private void StartBattle()
     {
+        Layout.EnsurePlaced(_spells);
         Curse = null; LastCurseDamage = 0;
         _hasPendingCurse = false;
         LastContaminationAdded = 0;
@@ -1288,56 +1318,141 @@ public sealed class SpellGame
         int[] coverage = new int[CELL_COUNT * 4];
         foreach (Placement piece in board.Pieces)
         {
-            if (piece == ignored) continue;
+            if (piece == ignored || (ignored != null && piece.Card == ignored.Card)) continue;
             for (int i = 0; i < CELL_COUNT; i++) for (int s = 0; s < 4; s++) if ((piece.Mask[i] & (1 << s)) != 0) coverage[i * 4 + s]++;
         }
         return coverage;
     }
 
+    /// <summary>배치된 모든 도안 판의 공유 격자 구역별 겹침 수를 칸·구역 순서로 반환한다. 같은 카드는 한 번만 센다.</summary>
+    private int[] GridCoverage(Placement ignored)
+    {
+        int[] coverage = new int[CELL_COUNT * 4];
+        HashSet<Card> counted = new HashSet<Card>();
+        foreach (int spell in _spells)
+        {
+            if (!Layout.IsPlaced(spell)) continue;
+            foreach (Placement piece in Boards[spell].Pieces)
+            {
+                if (piece == ignored || (ignored != null && piece.Card == ignored.Card) || !counted.Add(piece.Card)) continue;
+                int[] gridMask = piece.HasGridPlacement ? piece.GridMask : LocalMaskToGridMask(spell, piece.Mask);
+                for (int i = 0; i < CELL_COUNT; i++) for (int s = 0; s < 4; s++) if ((gridMask[i] & (1 << s)) != 0) coverage[i * 4 + s]++;
+            }
+        }
+        return coverage;
+    }
+
+    /// <summary>배치된 미봉인 도안들이 공유 격자에서 차지하는 전체 구역 마스크를 반환한다.</summary>
+    private int[] CombinedAllowedGridMask()
+    {
+        int[] allowed = new int[CELL_COUNT];
+        foreach (int spell in _spells)
+        {
+            if (IsSealed(spell) || !Layout.IsPlaced(spell)) continue;
+            int[] boardMask = LocalMaskToGridMask(spell, SPELL_MASKS[spell]);
+            for (int i = 0; i < CELL_COUNT; i++) allowed[i] |= boardMask[i];
+        }
+        return allowed;
+    }
+
+    /// <summary>도안 기준 마스크를 공유 격자 칸별 마스크로 변환한다.</summary>
+    private int[] LocalMaskToGridMask(int spell, int[] localMask)
+    {
+        int[] grid = new int[CELL_COUNT];
+        int patternRot = Layout.Rotation(spell);
+        for (int ly = 0; ly < LOCAL_SIZE; ly++)
+            for (int lx = 0; lx < LOCAL_SIZE; lx++)
+            {
+                int lm = localMask[ly * LOCAL_SIZE + lx];
+                if (lm == 0) continue;
+                UnityEngine.Vector2Int g = Layout.LocalToGrid(spell, new UnityEngine.Vector2Int(lx, ly));
+                if (g.x < 0 || g.x >= SpellPatternLayout.COLUMNS || g.y < 0 || g.y >= SpellPatternLayout.ROWS) continue;
+                grid[g.y * SpellPatternLayout.COLUMNS + g.x] |= SpellPatternLayout.RotateMask(lm, patternRot);
+            }
+        return grid;
+    }
+
+    /// <summary>공유 격자 마스크에서 지정 도안에 속하는 도안 기준 칸별 마스크를 추출한다.</summary>
+    private int[] ExtractLocalMask(int spell, int[] gridMask)
+    {
+        int[] local = new int[CELL_COUNT];
+        int patternRot = Layout.Rotation(spell);
+        int[] allowed = SPELL_MASKS[spell];
+        for (int ly = 0; ly < LOCAL_SIZE; ly++)
+            for (int lx = 0; lx < LOCAL_SIZE; lx++)
+            {
+                int allowedMask = allowed[ly * LOCAL_SIZE + lx];
+                if (allowedMask == 0) continue;
+                UnityEngine.Vector2Int g = Layout.LocalToGrid(spell, new UnityEngine.Vector2Int(lx, ly));
+                if (g.x < 0 || g.x >= SpellPatternLayout.COLUMNS || g.y < 0 || g.y >= SpellPatternLayout.ROWS) continue;
+                int gm = gridMask[g.y * SpellPatternLayout.COLUMNS + g.x];
+                if (gm == 0) continue;
+                local[ly * LOCAL_SIZE + lx] = SpellPatternLayout.RotateMask(gm, -patternRot) & allowedMask;
+            }
+        return local;
+    }
+
+    private static bool HasAnyBit(int[] mask)
+    {
+        for (int i = 0; i < mask.Length; i++) if (mask[i] != 0) return true;
+        return false;
+    }
+
+    /// <summary>카드를 도안 기준 앵커와 방향으로 놓았을 때의 공유 격자 칸별 마스크를 반환한다. 격자를 벗어나거나 점토가 채울 곳이 없으면 null이다.</summary>
+    private int[] CandidateGridMask(int boardIndex, Card card, int x, int y, int rotation, Placement ignored)
+    {
+        if (card.IsUnique) return ClayGridMask(boardIndex, x, y, ignored);
+        int patternSpell = Boards[boardIndex].Spell;
+        int patternRot = Layout.Rotation(patternSpell);
+        int[] gridMask = new int[CELL_COUNT];
+        bool any = false;
+        foreach (ShapeCell cell in CardCells(card, rotation))
+        {
+            UnityEngine.Vector2Int g = Layout.LocalToGrid(patternSpell, new UnityEngine.Vector2Int(x + cell.X, y + cell.Y));
+            if (g.x < 0 || g.x >= SpellPatternLayout.COLUMNS || g.y < 0 || g.y >= SpellPatternLayout.ROWS) return null;
+            gridMask[g.y * SpellPatternLayout.COLUMNS + g.x] |= SpellPatternLayout.RotateMask(cell.Mask, patternRot);
+            any = true;
+        }
+        return any ? gridMask : null;
+    }
+
     /// <summary>카드를 도안 기준 앵커와 방향으로 놓았을 때의 칸별 마스크를 반환한다. 범위를 벗어나거나 점토가 채울 곳이 없으면 null이다.</summary>
     private int[] CandidateMask(Board board, Card card, int x, int y, int rotation, Placement ignored)
     {
-        int[] mask = new int[CELL_COUNT];
-        if (card.Glued == null && card.Shape == Shape.Clay) return ClayMask(board, x, y, ignored);
-        foreach (ShapeCell cell in CardCells(card, rotation))
-        {
-            int cx = x + cell.X, cy = y + cell.Y;
-            if (cx < 0 || cx >= LOCAL_SIZE || cy < 0 || cy >= LOCAL_SIZE) return null;
-            mask[cy * LOCAL_SIZE + cx] = cell.Mask;
-        }
-        return mask;
+        int[] gridMask = CandidateGridMask(board.Spell, card, x, y, rotation, ignored);
+        return gridMask == null ? null : ExtractLocalMask(board.Spell, gridMask);
     }
 
-    /// <summary>점토를 도안 칸 (x, y)에 놓을 때 그 칸을 덮으면서 도안의 빈 구역에만 들어가는 1칸 넓이 모양의 마스크를 고른다. 도안을 완성하는 모양, 가리킨 칸을 많이 채우는 모양, CLAY_FORMS 순서 순으로 우선한다. 들어갈 모양이 없으면 null이다.</summary>
-    private int[] ClayMask(Board board, int x, int y, Placement ignored)
+    /// <summary>점토를 도안 칸 (x, y)에 놓을 때 공유 격자 기준 그 칸을 덮으면서 배치된 도안들의 빈 구역에 들어가는 모양의 격자 마스크를 고른다.</summary>
+    private int[] ClayGridMask(int boardIndex, int x, int y, Placement ignored)
     {
-        if (x < 0 || x >= LOCAL_SIZE || y < 0 || y >= LOCAL_SIZE) return null;
-        int[] allowed = SPELL_MASKS[board.Spell], coverage = Coverage(board, ignored), filled = new int[CELL_COUNT];
-        foreach (Placement piece in board.Pieces)
-        {
-            if (piece == ignored) continue;
-            for (int i = 0; i < CELL_COUNT; i++) filled[i] |= piece.Mask[i];
-        }
+        Board board = Boards[boardIndex];
+        UnityEngine.Vector2Int gridPoint = Layout.LocalToGrid(board.Spell, new UnityEngine.Vector2Int(x, y));
+        if (gridPoint.x < 0 || gridPoint.x >= SpellPatternLayout.COLUMNS || gridPoint.y < 0 || gridPoint.y >= SpellPatternLayout.ROWS) return null;
+        int[] allowed = CombinedAllowedGridMask(), boardAllowed = LocalMaskToGridMask(board.Spell, SPELL_MASKS[board.Spell]);
+        int[] coverage = GridCoverage(ignored), filled = new int[CELL_COUNT];
+        for (int i = 0; i < CELL_COUNT; i++) for (int s = 0; s < 4; s++) if (coverage[i * 4 + s] > 0) filled[i] |= 1 << s;
         int[] best = null; int bestScore = -1;
         foreach (ShapeCell[] form in CLAY_FORMS)
             foreach (ShapeCell pivot in form)
             {
-                int ox = x - pivot.X, oy = y - pivot.Y; int[] mask = new int[CELL_COUNT]; bool fits = true;
+                int ox = gridPoint.x - pivot.X, oy = gridPoint.y - pivot.Y; int[] mask = new int[CELL_COUNT]; bool fits = true, touchesBoard = false;
                 foreach (ShapeCell cell in form)
                 {
-                    int cx = ox + cell.X, cy = oy + cell.Y, index = cy * LOCAL_SIZE + cx;
-                    if (cx < 0 || cx >= LOCAL_SIZE || cy < 0 || cy >= LOCAL_SIZE || (cell.Mask & ~allowed[index]) != 0) { fits = false; break; }
+                    int cx = ox + cell.X, cy = oy + cell.Y, index = cy * SpellPatternLayout.COLUMNS + cx;
+                    if (cx < 0 || cx >= SpellPatternLayout.COLUMNS || cy < 0 || cy >= SpellPatternLayout.ROWS || (cell.Mask & ~allowed[index]) != 0) { fits = false; break; }
                     for (int s = 0; s < 4 && fits; s++) if ((cell.Mask & (1 << s)) != 0 && coverage[index * 4 + s] > 0) fits = false;
                     if (!fits) break;
                     mask[index] = cell.Mask;
+                    if ((cell.Mask & boardAllowed[index]) != 0) touchesBoard = true;
                 }
-                if (!fits) continue;
+                if (!fits || !touchesBoard) continue;
                 bool completes = true;
-                for (int i = 0; i < CELL_COUNT; i++) if ((filled[i] | mask[i]) != allowed[i]) completes = false;
+                for (int i = 0; i < CELL_COUNT; i++) if (((filled[i] | mask[i]) & boardAllowed[i]) != boardAllowed[i]) completes = false;
                 int score = (completes ? 100 : 0) + BitCount(pivot.Mask);
                 if (score > bestScore) { best = mask; bestScore = score; }
             }
-        return best ?? ClayGapMask(allowed, coverage, x, y);
+        return best ?? ClayGapMask(allowed, coverage, gridPoint.x, gridPoint.y);
     }
 
     /// <summary>1칸 모양이 들어가지 않을 때, 칸 (x, y)에 닿은 빈 구역 덩어리 중 1칸(4구역) 이하인 가장 큰 덩어리를 그대로 채우는 마스크를 반환한다. 없으면 null이다.</summary>
@@ -1414,8 +1529,15 @@ public sealed class SpellGame
     /// <summary>카드를 도안 기준 앵커와 방향으로 놓았을 때의 칸별 마스크 사본을 반환한다. 점토는 실제로 변할 모양이다. 놓을 수 없으면 null이다.</summary>
     public int[] PreviewMask(int boardIndex, Card card, int x, int y, int rotation, Placement ignored = null)
     {
+        int[] gridMask = PreviewGridMask(boardIndex, card, x, y, rotation, ignored);
+        return gridMask == null ? null : ExtractLocalMask(Boards[boardIndex].Spell, gridMask);
+    }
+
+    /// <summary>카드를 도안 기준 앵커와 방향으로 놓았을 때의 공유 격자 칸별 마스크를 반환한다. 놓을 수 없으면 null이다.</summary>
+    public int[] PreviewGridMask(int boardIndex, Card card, int x, int y, int rotation, Placement ignored = null)
+    {
         if (!CanPlace(boardIndex, card, x, y, rotation, ignored)) return null;
-        return CandidateMask(Boards[boardIndex], card, x, y, rotation, ignored);
+        return CandidateGridMask(boardIndex, card, x, y, rotation, ignored);
     }
 
     /// <summary>카드 전체를 회전한 뒤 점유하는 격자 너비를 반환한다.</summary>
@@ -1423,7 +1545,7 @@ public sealed class SpellGame
     {
         if (card.Glued != null) return (rotation & 1) == 0 ? card.Glued.Width : card.Glued.Height;
         int width = 0;
-        foreach (ShapeCell cell in ShapeCells(card.Shape, rotation)) width = Math.Max(width, cell.X + 1);
+        foreach (ShapeCell cell in CardCells(card, rotation)) width = Math.Max(width, cell.X + 1);
         return width;
     }
 
@@ -1432,7 +1554,7 @@ public sealed class SpellGame
     {
         if (card.Glued != null) return (rotation & 1) == 0 ? card.Glued.Height : card.Glued.Width;
         int height = 0;
-        foreach (ShapeCell cell in ShapeCells(card.Shape, rotation)) height = Math.Max(height, cell.Y + 1);
+        foreach (ShapeCell cell in CardCells(card, rotation)) height = Math.Max(height, cell.Y + 1);
         return height;
     }
 
@@ -1440,7 +1562,13 @@ public sealed class SpellGame
     public static int CellMask(Card card, int rotation, int x, int y)
     {
         rotation = (rotation % 4 + 4) % 4;
-        return card.Glued != null ? card.Glued.RotatedCell(rotation, x, y) : ShapeMaskAt(card.Shape, 0, 0, rotation, x, y);
+        if (card.Glued != null) return card.Glued.RotatedCell(rotation, x, y);
+        if (card.CustomCells != null)
+        {
+            foreach (ShapeCell cell in card.CustomCells[rotation]) if (cell.X == x && cell.Y == y) return cell.Mask;
+            return 0;
+        }
+        return ShapeMaskAt(card.Shape, 0, 0, rotation, x, y);
     }
 
     /// <summary>기존 조각과 도안 영역을 고려해 배치 가능 여부를 반환한다.</summary>
@@ -1455,15 +1583,18 @@ public sealed class SpellGame
         if (CurrentPhase != Phase.Combat || boardIndex < 0 || boardIndex >= Boards.Count || card == null) return "지금은 배치할 수 없습니다";
         if (!Spells.Contains(Boards[boardIndex].Spell)) return "장착하지 않은 도안입니다";
         if (IsSealed(Boards[boardIndex].Spell)) return "봉인된 도안에는 조각을 놓을 수 없습니다";
-        Board board = Boards[boardIndex]; int[] candidate = CandidateMask(board, card, x, y, rotation, ignored);
-        if (candidate == null) return card.Glued == null && card.Shape == Shape.Clay ? "점토가 채울 빈 구역이 없습니다" : "도형이 도안 범위를 벗어납니다";
-        int[] allowed = SPELL_MASKS[board.Spell];
-        for (int i = 0; i < CELL_COUNT; i++) if ((candidate[i] & ~allowed[i]) != 0) return "도안 밖으로 벗어납니다";
-        int[] coverage = Coverage(board, ignored);
+        Board board = Boards[boardIndex];
+        Layout.EnsurePlaced(_spells);
+        int[] gridCandidate = CandidateGridMask(boardIndex, card, x, y, rotation, ignored);
+        if (gridCandidate == null) return card.IsUnique ? "점토가 채울 빈 구역이 없습니다" : "도형이 도안 범위를 벗어납니다";
+        int[] allowed = CombinedAllowedGridMask();
+        for (int i = 0; i < CELL_COUNT; i++) if ((gridCandidate[i] & ~allowed[i]) != 0) return "도안 밖으로 벗어납니다";
+        if (!HasAnyBit(ExtractLocalMask(board.Spell, gridCandidate))) return "도안 밖으로 벗어납니다";
+        int[] coverage = GridCoverage(ignored);
         bool overpaint = SealCount(card, Seal.Overpaint) > 0;
         for (int i = 0; i < CELL_COUNT; i++) for (int s = 0; s < 4; s++)
         {
-            if ((candidate[i] & (1 << s)) == 0) continue;
+            if ((gridCandidate[i] & (1 << s)) == 0) continue;
             if (overpaint && coverage[i * 4 + s] >= 2) return "덧칠은 한 겹까지만 올릴 수 있습니다";
             if (!overpaint && coverage[i * 4 + s] >= 1) return "다른 조각과 겹칩니다";
         }
@@ -1475,30 +1606,103 @@ public sealed class SpellGame
     {
         if (!CanPlace(boardIndex, card, x, y, rotation, ignored)) return false;
         Board board = Boards[boardIndex];
-        int[] filled = CandidateMask(board, card, x, y, rotation, ignored);
+        int[] gridCandidate = CandidateGridMask(boardIndex, card, x, y, rotation, ignored);
+        if (gridCandidate == null) return false;
+        int[] filled = ExtractLocalMask(board.Spell, gridCandidate);
         foreach (Placement piece in board.Pieces)
         {
-            if (piece == ignored) continue;
+            if (piece == ignored || (ignored != null && piece.Card == ignored.Card)) continue;
             for (int i = 0; i < CELL_COUNT; i++) filled[i] |= piece.Mask[i];
         }
         for (int i = 0; i < CELL_COUNT; i++) if (filled[i] != SPELL_MASKS[board.Spell][i]) return false;
         return true;
     }
 
-    /// <summary>손패 카드를 도안의 유효한 위치에 배치한다.</summary>
+    /// <summary>손패 카드를 도안의 유효한 위치에 배치한다. 다른 도안까지 걸치면 겹친 모든 도안에 배치를 등록한다.</summary>
     public bool Place(int board, Card card, int x, int y, int rotation)
     {
         if (!Hand.Contains(card) || !CanPlace(board, card, x, y, rotation)) return false;
-        Placement placement = new Placement { Card = card, Turn = Turn, CanRefund = true };
-        SetPosition(Boards[board], placement, x, y, rotation);
-        _hand.Remove(card); Boards[board].MutablePieces.Add(placement); UpdateCompleter(Boards[board], placement); return true;
+        int[] gridMask = CandidateGridMask(board, card, x, y, rotation, null);
+        _hand.Remove(card);
+        AddPlacementsForGrid(board, card, x, y, rotation, gridMask, Turn, true);
+        return true;
     }
 
-    /// <summary>배치 위치·방향과 점유 마스크를 설정한다. 호출 전에 배치 가능 여부를 확인한다.</summary>
-    private void SetPosition(Board board, Placement placement, int x, int y, int rotation)
+    /// <summary>공유 격자 점유 마스크를 기준으로 겹친 모든 장착 도안 판에 배치를 추가한다.</summary>
+    private void AddPlacementsForGrid(int primaryBoardIndex, Card card, int x, int y, int rotation, int[] gridMask, int turn, bool canRefund)
     {
-        placement.Mask = CandidateMask(board, placement.Card, x, y, rotation, placement);
-        placement.X = x; placement.Y = y; placement.Rotation = placement.Card.Shape == Shape.Clay ? 0 : (rotation % 4 + 4) % 4;
+        List<ShapeCell> gridCells = Layout.GridMaskCells(gridMask, out UnityEngine.Vector2Int gridAnchor);
+        int normalizedRot = (rotation % 4 + 4) % 4;
+        int gridRotation = card.IsUnique ? 0 : SpellPatternLayout.MatchOrientation(card, gridCells, (normalizedRot + Layout.Rotation(Boards[primaryBoardIndex].Spell)) % 4);
+        foreach (int spell in _spells)
+        {
+            if (IsSealed(spell) || !Layout.IsPlaced(spell)) continue;
+            int[] localMask = ExtractLocalMask(spell, gridMask);
+            if (!HasAnyBit(localMask)) continue;
+            int lx, ly, lrot;
+            if (spell == primaryBoardIndex)
+            {
+                lx = x; ly = y; lrot = card.IsUnique ? 0 : normalizedRot;
+            }
+            else
+            {
+                Layout.GridToLocalPlacement(spell, card, gridAnchor, gridRotation, out UnityEngine.Vector2Int local, out lrot);
+                lx = local.x; ly = local.y;
+            }
+            Placement placement = new Placement
+            {
+                Card = card,
+                X = lx,
+                Y = ly,
+                Rotation = lrot,
+                Turn = turn,
+                CanRefund = canRefund,
+                Mask = localMask,
+                GridMask = (int[])gridMask.Clone(),
+                GridAnchor = gridAnchor,
+                GridRotation = gridRotation,
+            };
+            Boards[spell].MutablePieces.Add(placement);
+            UpdateCompleter(Boards[spell], placement);
+        }
+    }
+
+    /// <summary>지정 카드의 배치를 모든 도안 판에서 제거하고 완성 상태를 갱신한다.</summary>
+    private void RemoveCardPlacements(Card card)
+    {
+        foreach (Board b in Boards)
+        {
+            bool removed = false;
+            for (int i = b.MutablePieces.Count - 1; i >= 0; i--)
+            {
+                if (b.MutablePieces[i].Card != card) continue;
+                b.MutablePieces.RemoveAt(i);
+                removed = true;
+            }
+            if (removed) UpdateCompleter(b, null);
+        }
+    }
+
+    /// <summary>배치 조각이 둘 이상의 도안에 걸쳐 있는지 반환한다.</summary>
+    public bool IsCrossPatternPiece(Placement piece)
+    {
+        if (piece == null || piece.Card == null) return false;
+        int count = 0;
+        foreach (Board b in Boards) foreach (Placement p in b.Pieces) if (p.Card == piece.Card) { count++; break; }
+        return count > 1;
+    }
+
+    /// <summary>도안이 이동하거나 회전된 뒤 해당 도안 위 조각들의 공유 격자 좌표를 다시 맞춘다.</summary>
+    public void SyncBoardLayout(int spell)
+    {
+        if (spell < 0 || spell >= Boards.Count || !Layout.IsPlaced(spell)) return;
+        foreach (Placement p in Boards[spell].MutablePieces)
+        {
+            p.GridMask = LocalMaskToGridMask(spell, p.Mask);
+            List<ShapeCell> gridCells = Layout.GridMaskCells(p.GridMask, out UnityEngine.Vector2Int anchor);
+            p.GridAnchor = anchor;
+            p.GridRotation = p.Card.IsUnique ? 0 : SpellPatternLayout.MatchOrientation(p.Card, gridCells, (p.Rotation + Layout.Rotation(spell)) % 4);
+        }
     }
 
     /// <summary>판이 막 완성되면 그 조각을 완성 조각으로 기록하고, 미완성이 되면 기록을 지운다.</summary>
@@ -1514,28 +1718,42 @@ public sealed class SpellGame
     /// <summary>배치된 조각을 비용 없이 다른 위치 또는 판으로 옮긴다.</summary>
     public bool Move(int source, Placement piece, int destination, int x, int y, int rotation)
     {
-        if (source < 0 || source >= Boards.Count || !CanMovePiece(piece) || !Boards[source].Pieces.Contains(piece) || !CanPlace(destination, piece.Card, x, y, rotation, source == destination ? piece : null)) return false;
-        Boards[source].MutablePieces.Remove(piece); SetPosition(Boards[destination], piece, x, y, rotation); Boards[destination].MutablePieces.Add(piece);
-        UpdateCompleter(Boards[source], null); UpdateCompleter(Boards[destination], piece); return true;
+        if (source < 0 || source >= Boards.Count || !CanMovePiece(piece) || !Boards[source].Pieces.Contains(piece) || !CanPlace(destination, piece.Card, x, y, rotation, piece)) return false;
+        int[] gridMask = CandidateGridMask(destination, piece.Card, x, y, rotation, piece);
+        Card card = piece.Card; int turn = piece.Turn; bool canRefund = piece.CanRefund;
+        RemoveCardPlacements(card);
+        AddPlacementsForGrid(destination, card, x, y, rotation, gridMask, turn, canRefund);
+        return true;
     }
 
     /// <summary>현재 턴의 미시전 조각을 손패로 회수한다.</summary>
     public bool Recall(int board, Placement piece)
     {
-        if (CurrentPhase != Phase.Combat || board < 0 || board >= Boards.Count || !CanMovePiece(piece) || Hand.Count >= MAX_HAND || !Boards[board].MutablePieces.Remove(piece)) return false;
-        _hand.Add(piece.Card); UpdateCompleter(Boards[board], null); return true;
+        if (CurrentPhase != Phase.Combat || board < 0 || board >= Boards.Count || !CanMovePiece(piece) || Hand.Count >= MAX_HAND || !Boards[board].Pieces.Contains(piece)) return false;
+        RemoveCardPlacements(piece.Card);
+        _hand.Add(piece.Card);
+        return true;
     }
 
-    /// <summary>판의 현재 턴 조각은 회수하고 이전 턴 조각은 버린다.</summary>
+    /// <summary>판의 현재 턴 단일 도안 조각은 회수하고, 이전 턴 조각은 버리며, 다른 도안과 걸친 조각은 경계면으로 쪼개어 이 도안 쪽을 버리고 남은 쪽은 고정한다.</summary>
     public bool Abandon(int board)
     {
         if (CurrentPhase != Phase.Combat || board < 0 || board >= Boards.Count) return false;
-        Board b = Boards[board]; int current = 0; foreach (Placement p in b.Pieces) if (CanMovePiece(p)) current++;
+        Board b = Boards[board]; int current = 0; foreach (Placement p in b.Pieces) if (CanMovePiece(p) && !IsCrossPatternPiece(p)) current++;
         if (Hand.Count + current > MAX_HAND) return false;
-        foreach (Placement p in b.Pieces)
+        List<Placement> pieces = new List<Placement>(b.Pieces);
+        foreach (Placement p in pieces)
         {
-            if (CanMovePiece(p)) { _hand.Add(p.Card); }
-            else Discard(p.Card);
+            if (!IsCrossPatternPiece(p))
+            {
+                if (CanMovePiece(p)) _hand.Add(p.Card);
+                else Discard(p.Card);
+                b.MutablePieces.Remove(p);
+                continue;
+            }
+            List<Card> sideCards = new List<Card>();
+            SplitCrossPieceFromBoard(b, p, sideCards);
+            foreach (Card sideCard in sideCards) Discard(sideCard);
         }
         b.MutablePieces.Clear(); b.Completer = null; return true;
     }
@@ -1551,8 +1769,10 @@ public sealed class SpellGame
         foreach (Enemy enemy in Enemies) if (enemy.IsThief && enemy.Health > 0) { owner = enemy; break; }
         if (owner == null) return false;
         int index = _random.Next(CraftCount);
+        HashSet<Card> seen = new HashSet<Card>();
         foreach (Board board in Boards) foreach (Placement piece in board.Pieces)
         {
+            if (!seen.Add(piece.Card)) continue;
             if (index-- != 0) continue;
             _theftOwner = owner; TheftTarget = piece.Card; return true;
         }
@@ -1574,8 +1794,10 @@ public sealed class SpellGame
         if (CraftCount > 0)
         {
             int index = _random.Next(CraftCount);
+            HashSet<Card> seen = new HashSet<Card>();
             for (int i = 0; i < Boards.Count; i++) foreach (Placement piece in Boards[i].Pieces)
             {
+                if (!seen.Add(piece.Card)) continue;
                 if (index-- != 0) continue;
                 TheftTarget = piece.Card; boardIndex = i; placement = piece; return true;
             }
@@ -1591,8 +1813,9 @@ public sealed class SpellGame
     {
         int board; Placement piece;
         if (!TryGetTheftPlacement(out board, out piece)) { CancelTheft(); return false; }
-        Boards[board].MutablePieces.Remove(piece); UpdateCompleter(Boards[board], null);
-        _stolen.Add(piece.Card);
+        Card stolen = piece.Card;
+        RemoveCardPlacements(stolen);
+        _stolen.Add(stolen);
         CancelTheft(); return true;
     }
 
@@ -1664,10 +1887,10 @@ public sealed class SpellGame
                 foreach (Placement other in board.Pieces) if (other != p && Touches(p, other)) touching++;
                 cog += Math.Min(COG_LIMIT, touching);
             }
-            e.Draws += SealCount(p.Card, Seal.Refill);
-            e.ShardHits += SealCount(p.Card, Seal.Shard);
-            e.Recalls += SealCount(p.Card, Seal.Recall);
-            overpaint += SealCount(p.Card, Seal.Overpaint);
+            e.Draws += PlacementSealCount(boardIndex, p, Seal.Refill);
+            e.ShardHits += PlacementSealCount(boardIndex, p, Seal.Shard);
+            e.Recalls += PlacementSealCount(boardIndex, p, Seal.Recall);
+            overpaint += PlacementSealCount(boardIndex, p, Seal.Overpaint);
             resonance += EffectCount(p.Card, Effect.Resonance);
         }
         bool attack = e.Kind != SpellKind.Block && e.Kind != SpellKind.None;
@@ -1740,13 +1963,26 @@ public sealed class SpellGame
         _isRecordingHits = false;
         bool alive = false; for (int i = 0; i < Enemies.Count; i++) if (Enemies[i].Health > 0) { if (!alive && Enemies[Target].Health <= 0) Target = i; alive = true; }
         List<Card> recalled = new List<Card>();
-        for (int i = board.Pieces.Count - 1; i >= 0; i--)
+        List<Placement> castPieces = new List<Placement>(board.Pieces);
+        foreach (Placement piece in castPieces)
         {
-            Placement piece = board.Pieces[i];
             ResolveCurse(piece.Card, CurseResolution.Spell);
-            int recalls = SealCount(piece.Card, Seal.Recall);
-            for (int k = 0; k < recalls; k++) { Card copy = CopyCard(piece.Card, false); copy.IsRecallCopy = true; recalled.Add(copy); }
-            Discard(piece.Card); board.MutablePieces.RemoveAt(i);
+            if (!IsCrossPatternPiece(piece))
+            {
+                int recalls = PlacementSealCount(boardIndex, piece, Seal.Recall);
+                for (int k = 0; k < recalls; k++) { Card copy = CopyCard(piece.Card, false); copy.IsRecallCopy = true; recalled.Add(copy); }
+                Discard(piece.Card);
+                board.MutablePieces.Remove(piece);
+                continue;
+            }
+            List<Card> boardSideCards = new List<Card>();
+            SplitCrossPieceFromBoard(board, piece, boardSideCards);
+            foreach (Card sideCard in boardSideCards)
+            {
+                int recalls = SealCount(sideCard, Seal.Recall);
+                for (int k = 0; k < recalls; k++) { Card copy = CopyCard(sideCard, false); copy.IsRecallCopy = true; recalled.Add(copy); }
+                Discard(sideCard);
+            }
         }
         board.Completer = null;
         // 회수 복사본은 이번 전투에만 쓰는 임시 카드라 보유 덱에 넣지 않고, 손패 한도도 무시한다.
@@ -1758,6 +1994,206 @@ public sealed class SpellGame
             FinishCombat(Phase.Reward); EnterReward();
         }
         return true;
+    }
+
+    /// <summary>배치 조각이 지정 도안 판 안에 실제로 포함하고 있는 특정 씰링 개수를 반환한다.</summary>
+    private int PlacementSealCount(int boardIndex, Placement piece, Seal seal)
+    {
+        int spell = Boards[boardIndex].Spell;
+        if (piece.HasGridPlacement)
+        {
+            int count = 0;
+            foreach (SealSpot spot in Layout.PlacementGridSeals(spell, piece))
+            {
+                if (spot.Seal != seal) continue;
+                Layout.GridToLocal(spell, spot.X, spot.Y, spot.Sector, out UnityEngine.Vector2Int local, out int localSector);
+                if ((piece.CellMask(local.x, local.y) & (1 << localSector)) != 0) count++;
+            }
+            return count;
+        }
+        int fallback = 0;
+        foreach (SealSpot spot in SealSpots(piece.Card, piece.Rotation))
+        {
+            if (spot.Seal != seal) continue;
+            if ((piece.CellMask(piece.X + spot.X, piece.Y + spot.Y) & (1 << spot.Sector)) != 0) fallback++;
+        }
+        return fallback;
+    }
+
+    /// <summary>여러 도안에 걸친 배치를 지정 도안의 경계면으로 쪼개고, 이 도안 쪽 분할 카드는 boardSideCards에 담고 남은 쪽은 다른 도안에 고정 재배치한다.</summary>
+    private void SplitCrossPieceFromBoard(Board board, Placement piece, List<Card> boardSideCards)
+    {
+        int boardIndex = board.Spell;
+        int[] insideGridMask = LocalMaskToGridMask(boardIndex, piece.Mask);
+        int[] fullGridMask = piece.HasGridPlacement ? piece.GridMask : insideGridMask;
+        int[] outsideGridMask = new int[CELL_COUNT];
+        for (int i = 0; i < CELL_COUNT; i++) outsideGridMask[i] = fullGridMask[i] & ~insideGridMask[i];
+        List<SealSpot> sourceGridSeals = Layout.PlacementGridSeals(boardIndex, piece);
+        foreach (int[] insideComp in ConnectedComponents(insideGridMask))
+            boardSideCards.Add(CreateSplitCard(piece.Card, insideComp, sourceGridSeals, out _, out _));
+        for (int bi = 0; bi < Boards.Count; bi++)
+        {
+            Board other = Boards[bi];
+            for (int j = other.MutablePieces.Count - 1; j >= 0; j--)
+            {
+                if (other.MutablePieces[j].Card != piece.Card) continue;
+                if (other.Completer == other.MutablePieces[j]) other.Completer = null;
+                other.MutablePieces.RemoveAt(j);
+            }
+        }
+        foreach (int[] compMask in ConnectedComponents(outsideGridMask))
+        {
+            Card remCard = CreateSplitCard(piece.Card, compMask, sourceGridSeals, out UnityEngine.Vector2Int remAnchor, out int remGridRot);
+            foreach (int spell in _spells)
+            {
+                if (spell == boardIndex || !Layout.IsPlaced(spell)) continue;
+                int[] localMask = ExtractLocalMask(spell, compMask);
+                if (!HasAnyBit(localMask)) continue;
+                Layout.GridToLocalPlacement(spell, remCard, remAnchor, remGridRot, out UnityEngine.Vector2Int remLocal, out int remLocalRot);
+                Placement remPlacement = new Placement
+                {
+                    Card = remCard,
+                    X = remLocal.x,
+                    Y = remLocal.y,
+                    Rotation = remLocalRot,
+                    Turn = piece.Turn,
+                    CanRefund = false,
+                    Mask = localMask,
+                    GridMask = (int[])compMask.Clone(),
+                    GridAnchor = remAnchor,
+                    GridRotation = remGridRot,
+                };
+                Boards[spell].MutablePieces.Add(remPlacement);
+                UpdateCompleter(Boards[spell], remPlacement);
+            }
+        }
+    }
+
+    /// <summary>공유 격자 점유 마스크를 변으로 이어진 연결 요소별로 나눈다.</summary>
+    private static List<int[]> ConnectedComponents(int[] gridMask)
+    {
+        List<int[]> components = new List<int[]>();
+        bool[] visited = new bool[CELL_COUNT * 4];
+        for (int cell = 0; cell < CELL_COUNT; cell++)
+        {
+            if (gridMask[cell] == 0) continue;
+            for (int s = 0; s < 4; s++)
+            {
+                int start = cell * 4 + s;
+                if ((gridMask[cell] & (1 << s)) == 0 || visited[start]) continue;
+                int[] comp = new int[CELL_COUNT];
+                Queue<int> queue = new Queue<int>();
+                queue.Enqueue(start);
+                visited[start] = true;
+                while (queue.Count > 0)
+                {
+                    int node = queue.Dequeue();
+                    int ci = node / 4, cs = node % 4;
+                    int cx = ci % SpellPatternLayout.COLUMNS, cy = ci / SpellPatternLayout.COLUMNS;
+                    comp[ci] |= 1 << cs;
+                    for (int dir = 0; dir < 3; dir++)
+                    {
+                        SpellPatternLayout.Neighbor(cx, cy, cs, dir, out int nx, out int ny, out int ns);
+                        if (nx < 0 || nx >= SpellPatternLayout.COLUMNS || ny < 0 || ny >= SpellPatternLayout.ROWS) continue;
+                        int ni = ny * SpellPatternLayout.COLUMNS + nx;
+                        int next = ni * 4 + ns;
+                        if ((gridMask[ni] & (1 << ns)) != 0 && !visited[next]) { visited[next] = true; queue.Enqueue(next); }
+                    }
+                }
+                components.Add(comp);
+            }
+        }
+        return components;
+    }
+
+    /// <summary>잘린 연결 요소로부터 이번 전투용 분할 카드를 생성한다. 등록 도형과 같으면 해당 도형을 쓰고, 아니면 잘린 모양을 그대로 유지한다.</summary>
+    private Card CreateSplitCard(Card source, int[] compGridMask, List<SealSpot> sourceGridSeals, out UnityEngine.Vector2Int gridAnchor, out int gridRotation)
+    {
+        int minX = int.MaxValue, minY = int.MaxValue;
+        for (int y = 0; y < SpellPatternLayout.ROWS; y++)
+            for (int x = 0; x < SpellPatternLayout.COLUMNS; x++)
+                if (compGridMask[y * SpellPatternLayout.COLUMNS + x] != 0)
+                {
+                    minX = Math.Min(minX, x);
+                    minY = Math.Min(minY, y);
+                }
+        gridAnchor = new UnityEngine.Vector2Int(minX, minY);
+        List<ShapeCell> normCells = new List<ShapeCell>();
+        ulong targetBits = 0;
+        for (int y = minY; y < SpellPatternLayout.ROWS; y++)
+            for (int x = minX; x < SpellPatternLayout.COLUMNS; x++)
+            {
+                int mask = compGridMask[y * SpellPatternLayout.COLUMNS + x];
+                if (mask == 0) continue;
+                int nx = x - minX, ny = y - minY;
+                normCells.Add(new ShapeCell(nx, ny, mask));
+                if (nx < LOCAL_SIZE && ny < LOCAL_SIZE) targetBits |= (ulong)mask << ((ny * LOCAL_SIZE + nx) * 4);
+            }
+        Shape matchedShape = Shape.Clay;
+        int matchedRot = 0;
+        foreach (Shape shape in Enum.GetValues(typeof(Shape)))
+        {
+            if (shape == Shape.Clay) continue;
+            for (int rot = 0; rot < 4; rot++)
+            {
+                if (ShapeBits(shape, rot) != targetBits) continue;
+                matchedShape = shape;
+                matchedRot = rot;
+                break;
+            }
+            if (matchedShape != Shape.Clay) break;
+        }
+        if (matchedShape != Shape.Clay)
+        {
+            Card card = new Card
+            {
+                Id = ++_nextId,
+                Shape = matchedShape,
+                Effect = source.Effect,
+                Coating = source.Coating,
+                IsContaminated = source.IsContaminated,
+                IsRecallCopy = source.IsRecallCopy,
+            };
+            IReadOnlyList<ShapeCell> rotCells = ShapeCells(matchedShape, matchedRot), baseCells = ShapeCells(matchedShape, 0);
+            foreach (SealSpot seal in sourceGridSeals)
+            {
+                if ((compGridMask[seal.Y * SpellPatternLayout.COLUMNS + seal.X] & (1 << seal.Sector)) == 0) continue;
+                int rx = seal.X - minX, ry = seal.Y - minY;
+                for (int i = 0; i < rotCells.Count; i++)
+                {
+                    if (rotCells[i].X != rx || rotCells[i].Y != ry || (rotCells[i].Mask & (1 << seal.Sector)) == 0) continue;
+                    for (int baseSector = 0; baseSector < 4; baseSector++)
+                        if (RotateSector(matchedShape, matchedRot, baseSector) == seal.Sector)
+                        {
+                            card.SealList.Add(new SealSpot(baseCells[i].X, baseCells[i].Y, baseSector, seal.Seal));
+                            break;
+                        }
+                    break;
+                }
+            }
+            gridRotation = matchedRot;
+            return card;
+        }
+        ShapeCell[] customBase = normCells.ToArray();
+        ShapeCell[][] customOrientations = new ShapeCell[4][];
+        for (int rot = 0; rot < 4; rot++) customOrientations[rot] = Rotate(customBase, rot);
+        Card custom = new Card
+        {
+            Id = ++_nextId,
+            Shape = Shape.EighthTriangle,
+            Effect = source.Effect,
+            Coating = source.Coating,
+            IsContaminated = source.IsContaminated,
+            IsRecallCopy = source.IsRecallCopy,
+            CustomCells = customOrientations,
+        };
+        foreach (SealSpot seal in sourceGridSeals)
+        {
+            if ((compGridMask[seal.Y * SpellPatternLayout.COLUMNS + seal.X] & (1 << seal.Sector)) == 0) continue;
+            custom.SealList.Add(new SealSpot(seal.X - minX, seal.Y - minY, seal.Sector, seal.Seal));
+        }
+        gridRotation = 0;
+        return custom;
     }
 
     /// <summary>조각 보상과 전투 2회마다 제공할 도안 후보를 생성하고 보상 단계로 전환한다. 인장 보상은 비활성 상태를 유지한다.</summary>
@@ -1936,6 +2372,14 @@ public sealed class SpellGame
     /// <summary>원본 조각 영역을 카드 회전에 맞춰 변환해 접착 카드 표시 좌표 계산에 사용한다.</summary>
     private static SealSpot RotateSealSpot(Card card, int rotation, SealSpot spot)
     {
+        if (card.CustomCells != null)
+        {
+            rotation = (rotation % 4 + 4) % 4;
+            IReadOnlyList<ShapeCell> original = card.CustomCells[0], rotated = card.CustomCells[rotation];
+            for (int i = 0; i < original.Count; i++)
+                if (original[i].X == spot.X && original[i].Y == spot.Y)
+                    return new SealSpot(rotated[i].X, rotated[i].Y, (spot.Sector + rotation) % 4, spot.Seal);
+        }
         if (card.Glued == null)
         {
             IReadOnlyList<ShapeCell> original = ShapeCells(card.Shape, 0), rotated = ShapeCells(card.Shape, rotation);
@@ -1976,6 +2420,7 @@ public sealed class SpellGame
             ActiveReward = RewardKind.None;
             return true;
         }
+        Layout.EnsurePlaced(_spells);
         StartBattle(); return true;
     }
 
@@ -2003,6 +2448,7 @@ public sealed class SpellGame
     /// <summary>기본·복합 카드의 지정 회전에서 점유하는 칸 목록을 반환한다.</summary>
     public static IReadOnlyList<ShapeCell> CardCells(Card card, int rotation)
     {
+        if (card.CustomCells != null) return card.CustomCells[(rotation % 4 + 4) % 4];
         if (card.Glued == null) return ShapeCells(card.Shape, rotation);
         List<ShapeCell> cells = new List<ShapeCell>();
         for (int y = 0; y < ShapeHeight(card, rotation); y++) for (int x = 0; x < ShapeWidth(card, rotation); x++)

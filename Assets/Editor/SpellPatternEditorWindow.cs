@@ -185,7 +185,7 @@ public sealed class SpellPatternEditorWindow : EditorWindow
         Rect grid = GUILayoutUtility.GetRect(SpellGridDrawer.CELL_SIZE * SpellDataStore.GRID_SIZE, SpellGridDrawer.CELL_SIZE * SpellDataStore.GRID_SIZE, GUILayout.ExpandWidth(false));
         isChanged |= SpellGridDrawer.DrawEditable(grid, pattern.Cells, color, false);
         EditorGUILayout.LabelField($"구역 {CountSectors(pattern.Cells)}개", EditorStyles.miniLabel);
-        EditorGUILayout.LabelField("클릭: 가까운 꼭짓점 쪽 1/4 삼각형 · Shift+클릭: 칸 전체 · 우클릭: 칸 비우기", EditorStyles.wordWrappedMiniLabel);
+        EditorGUILayout.LabelField("클릭: 1/8 삼각형 구역 토글 · Shift+클릭: 칸 전체 · 우클릭: 칸 비우기", EditorStyles.wordWrappedMiniLabel);
         EditorGUILayout.EndVertical();
         GUILayout.Space(16);
         EditorGUILayout.BeginVertical();

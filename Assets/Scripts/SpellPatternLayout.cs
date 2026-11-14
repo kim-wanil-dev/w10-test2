@@ -127,7 +127,7 @@ public sealed class SpellPatternLayout
     }
 
     /// <summary>위·오른쪽·아래·왼쪽 구역 비트를 시계 방향으로 rotation번 돌린 마스크를 반환한다.</summary>
-    private static int RotateMask(int mask, int rotation)
+    public static int RotateMask(int mask, int rotation)
     {
         int r = Wrap(rotation);
         return ((mask << r) | (mask >> (4 - r))) & FULL_MASK;
@@ -257,15 +257,42 @@ public sealed class SpellPatternLayout
     /// <summary>배치된 조각의 격자 기준 앵커 칸(범위 왼쪽 위)과 화면 방향을 반환한다.</summary>
     public void PieceToGrid(int spell, SpellGame.Placement piece, out Vector2Int anchor, out int gridRotation)
     {
+        if (piece.HasGridPlacement)
+        {
+            anchor = piece.GridAnchor;
+            gridRotation = piece.Card.IsUnique ? 0 : piece.GridRotation;
+            return;
+        }
         List<SpellGame.ShapeCell> cells = PlacementGridCells(spell, piece);
         anchor = Normalize(cells);
-        gridRotation = piece.Card.Shape == SpellGame.Shape.Clay ? 0 : MatchOrientation(piece.Card, cells, Wrap(piece.Rotation + _rotations[spell]));
+        gridRotation = piece.Card.IsUnique ? 0 : MatchOrientation(piece.Card, cells, Wrap(piece.Rotation + _rotations[spell]));
     }
 
     /// <summary>배치된 조각이 격자에서 차지하는 칸과 구역 마스크를 격자 좌표로 반환한다.</summary>
     public List<SpellGame.ShapeCell> PlacementGridCells(int spell, SpellGame.Placement piece)
     {
+        if (piece.HasGridPlacement) return RawGridMaskCells(piece.GridMask);
         return LocalMaskGridCells(spell, piece.Mask);
+    }
+
+    /// <summary>공유 격자 기준 칸별 마스크를 정규화된 격자 칸 목록으로 바꾸고 원래 왼쪽 위 격자 좌표를 anchor로 반환한다.</summary>
+    public List<SpellGame.ShapeCell> GridMaskCells(int[] gridMask, out Vector2Int anchor)
+    {
+        List<SpellGame.ShapeCell> cells = RawGridMaskCells(gridMask);
+        anchor = Normalize(cells);
+        return cells;
+    }
+
+    /// <summary>공유 격자 기준 칸별 마스크(COLUMNS×ROWS)를 격자 좌표 칸 목록으로 바꾼다.</summary>
+    private static List<SpellGame.ShapeCell> RawGridMaskCells(int[] gridMask)
+    {
+        List<SpellGame.ShapeCell> cells = new List<SpellGame.ShapeCell>();
+        for (int y = 0; y < ROWS; y++) for (int x = 0; x < COLUMNS; x++)
+        {
+            int mask = gridMask[y * COLUMNS + x];
+            if (mask != 0) cells.Add(new SpellGame.ShapeCell(x, y, mask));
+        }
+        return cells;
     }
 
     /// <summary>도안 기준 칸별 마스크를 격자 칸 목록으로 바꾸고, 범위 왼쪽 위가 (0, 0)이 되게 옮긴 뒤 원래 왼쪽 위 격자 좌표를 anchor로 반환한다.</summary>
@@ -294,6 +321,13 @@ public sealed class SpellPatternLayout
     public List<SpellGame.SealSpot> PlacementGridSeals(int spell, SpellGame.Placement piece)
     {
         List<SpellGame.SealSpot> seals = new List<SpellGame.SealSpot>();
+        if (piece.HasGridPlacement)
+        {
+            int rot = piece.Card.IsUnique ? 0 : piece.GridRotation;
+            foreach (SpellGame.SealSpot seal in SpellGame.SealSpots(piece.Card, rot))
+                seals.Add(new SpellGame.SealSpot(piece.GridAnchor.x + seal.X, piece.GridAnchor.y + seal.Y, seal.Sector, seal.Seal));
+            return seals;
+        }
         foreach (SpellGame.SealSpot seal in SpellGame.SealSpots(piece.Card, piece.Rotation))
         {
             Vector2Int grid = LocalToGrid(spell, new Vector2Int(piece.X + seal.X, piece.Y + seal.Y));
@@ -343,7 +377,7 @@ public sealed class SpellPatternLayout
     public void GridToLocalPlacement(int spell, SpellGame.Card card, Vector2Int anchor, int gridRotation, out Vector2Int local, out int localRotation)
     {
         int patternRotation = _rotations[spell];
-        if (card.Glued == null && card.Shape == SpellGame.Shape.Clay)
+        if (card.IsUnique)
         {
             local = UnrotateCell(spell, patternRotation, anchor - _origins[spell]); localRotation = 0; return;
         }
@@ -357,7 +391,7 @@ public sealed class SpellPatternLayout
         localRotation = MatchOrientation(card, cells, Wrap(gridRotation - patternRotation));
     }
     /// <summary>카드의 전체 점유 칸과 일치하는 회전을 반환한다. 대칭 도형에서도 씰링 위치가 유지되도록 회전 합으로 구한 fallback을 먼저 확인한다.</summary>
-    private static int MatchOrientation(SpellGame.Card card, List<SpellGame.ShapeCell> cells, int fallback)
+    public static int MatchOrientation(SpellGame.Card card, List<SpellGame.ShapeCell> cells, int fallback)
     {
         for (int i = 0; i < 4; i++)
         {

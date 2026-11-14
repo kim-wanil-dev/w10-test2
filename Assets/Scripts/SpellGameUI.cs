@@ -235,7 +235,7 @@ public sealed class SpellGameUI : MonoBehaviour
     void Awake()
     {
         _game = new SpellGame();
-        _layout = new SpellPatternLayout();
+        _layout = _game.Layout;
         _patternColorValues = new Color[SpellGame.PatternCount];
         for (int i = 0; i < _patternColorValues.Length; i++) SpellDataStore.ParseColor(SpellGame.PatternColorCode(i), out _patternColorValues[i]);
         _font = Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 24);
@@ -1463,7 +1463,7 @@ public sealed class SpellGameUI : MonoBehaviour
         SpellPatternTooltipView.Content c = new SpellPatternTooltipView.Content
         {
             Name = DisplayName(card),
-            KindLabel = card.IsUnique ? "고유 조각" : card.Glued != null ? "접착 조각" : "조각",
+            KindLabel = card.IsUnique ? "고유 조각" : card.Glued != null ? "접착 조각" : card.IsCustomSplit ? "분할 조각" : "조각",
             Entries = entries,
             Accent = accent,
             ValueColor = _textColor,
@@ -1677,15 +1677,16 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         if (!CanMovePattern(spell)) { _message = "고정된 조각이 있는 도안은 이동할 수 없습니다"; Render(); return; }
         string issue = _layout.MoveIssue(spell, origin, rotation, _game.Spells);
-        if (issue == null) { _layout.Place(spell, origin, rotation); _message = ""; }
+        if (issue == null) { _layout.Place(spell, origin, rotation); _game.SyncBoardLayout(spell); _message = ""; }
         else _message = issue + " · 원래 자리로 돌아갑니다";
         Render();
     }
 
-    /// <summary>도안에 고정된 이전 턴 조각이 없는지 확인한다.</summary>
+    /// <summary>도안에 고정된 이전 턴 조각이나 다른 도안과 걸친 조각이 없는지 확인한다.</summary>
     public bool CanMovePattern(int spell)
     {
-        foreach (SpellGame.Placement piece in _game.Boards[spell].Pieces) if (!_game.CanMovePiece(piece)) return false;
+        foreach (SpellGame.Placement piece in _game.Boards[spell].Pieces)
+            if (!_game.CanMovePiece(piece) || _game.IsCrossPatternPiece(piece)) return false;
         return true;
     }
 
@@ -1880,6 +1881,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>목록에 쓸 도형 이름을 반환한다. 접착 카드는 두 원본 도형을 함께 적는다.</summary>
     private static string DisplayName(SpellGame.Card card)
     {
+        if (card.IsCustomSplit) return card.IsContaminated ? "오염된 쪼개진 조각" : "쪼개진 조각";
         if (card.IsContaminated) return "오염된 " + SpellGame.ShapeName(card.Shape);
         if (card.Glued != null) return "접착 " + SpellGame.ShapeName(card.Glued.First.Shape) + " + " + SpellGame.ShapeName(card.Glued.Second.Shape);
         return SpellGame.ShapeName(card.Shape);
@@ -2025,8 +2027,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_selectedCard == null) { _message = "먼저 손패 또는 배치된 조각을 선택하세요"; Render(); return; }
         int x, y, rotation;
         ToLocalPlacement(board, anchor, out x, out y, out rotation);
-        SpellGame.Placement ignored = _selectedBoard == board ? _selectedPiece : null;
-        bool completes = CanPreviewGrid(board, anchor) && _game.WouldComplete(board, _selectedCard, x, y, rotation, ignored);
+        bool completes = CanPreviewGrid(board, anchor) && _game.WouldComplete(board, _selectedCard, x, y, rotation, _selectedPiece);
         bool success = _selectedPiece == null ? _game.Place(board, _selectedCard, x, y, rotation) : _game.Move(_selectedBoard, _selectedPiece, board, x, y, rotation);
         if (success) { ClearSelection(); _message = ""; if (completes) SetNotice($"{SpellGame.PatternName(board)} 완성 · 시전 버튼을 누르세요", PatternColor(board)); } else _message = PlacementIssue(board, anchor) ?? "이 위치에는 놓을 수 없습니다";
         Render();
@@ -2038,7 +2039,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_selectedCard == null) return false;
         int x, y, rotation;
         ToLocalPlacement(board, anchor, out x, out y, out rotation);
-        return _game.CanPlace(board, _selectedCard, x, y, rotation, _selectedBoard == board ? _selectedPiece : null);
+        return _game.CanPlace(board, _selectedCard, x, y, rotation, _selectedPiece);
     }
 
     /// <summary>현재 선택 조각을 격자 앵커 칸에 놓을 수 없는 이유를 반환한다.</summary>
@@ -2047,7 +2048,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_selectedCard == null) return "먼저 조각을 선택하세요";
         int x, y, rotation;
         ToLocalPlacement(board, anchor, out x, out y, out rotation);
-        return _game.PlacementIssue(board, _selectedCard, x, y, rotation, _selectedBoard == board ? _selectedPiece : null);
+        return _game.PlacementIssue(board, _selectedCard, x, y, rotation, _selectedPiece);
     }
 
     /// <summary>포인터가 가리킨 격자 앵커 칸의 배치 가능 상태와 도안 완성 여부를 커서 안내로 쓴다. board가 음수면 기본 안내를 쓴다.</summary>
@@ -2059,7 +2060,7 @@ public sealed class SpellGameUI : MonoBehaviour
             int x, y, rotation;
             ToLocalPlacement(board, anchor, out x, out y, out rotation);
             bool valid = CanPreviewGrid(board, anchor);
-            bool complete = valid && _game.WouldComplete(board, _selectedCard, x, y, rotation, _selectedBoard == board ? _selectedPiece : null);
+            bool complete = valid && _game.WouldComplete(board, _selectedCard, x, y, rotation, _selectedPiece);
             hint = complete ? $"놓으면 {SpellGame.PatternName(board)} 완성" : valid ? $"배치 가능  ·  {RemainingText(board)}" : PlacementIssue(board, anchor);
         }
         _hintText = hint;
@@ -2521,7 +2522,7 @@ public sealed class SpellGameUI : MonoBehaviour
         _hammerMarker = Panel(_hammerOverlay, 880, 446, 80, 6, Color.white);
         Label(_hammerOverlay, "강한 타격", 856, 140, 130, 30, 17);
         Label(_hammerOverlay, "약한 타격", 856, 460, 130, 30, 17);
-        Label(_hammerOverlay, "기본 분해는 항상 성공\n강할수록 추가 분해 확률 증가\n최소 1/4 · 결과는 덱에 저장", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
+        Label(_hammerOverlay, "기본 분해는 항상 성공\n강할수록 추가 분해 확률 증가\n최소 1/8 · 결과는 덱에 저장", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
         Label(_hammerOverlay, _hammerMessage, 800, 495, 440, 75, 17);
         RectTransform hint = Element("Hammer Preview", _hammerOverlay, 980, 360, 240, 120);
         _hammerHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();

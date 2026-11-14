@@ -156,7 +156,7 @@ public sealed class SpellPieceEditorWindow : EditorWindow
         if (isLocked) EditorGUILayout.HelpBox("점토는 전용 변형 규칙을 사용하므로 칸을 편집할 수 없습니다.", MessageType.Info);
         Rect grid = GUILayoutUtility.GetRect(SpellGridDrawer.CELL_SIZE * SpellDataStore.GRID_SIZE, SpellGridDrawer.CELL_SIZE * SpellDataStore.GRID_SIZE, GUILayout.ExpandWidth(false));
         isChanged |= SpellGridDrawer.DrawEditable(grid, piece.Cells, PIECE_COLOR, isLocked);
-        if (!isLocked) EditorGUILayout.LabelField("클릭: 가까운 꼭짓점 쪽 1/4 삼각형 · Shift+클릭: 칸 전체 · 우클릭: 칸 비우기", EditorStyles.wordWrappedMiniLabel);
+        if (!isLocked) EditorGUILayout.LabelField("클릭: 1/8 삼각형 구역 토글 · Shift+클릭: 칸 전체 · 우클릭: 칸 비우기", EditorStyles.wordWrappedMiniLabel);
 
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("회전 미리보기", EditorStyles.boldLabel);

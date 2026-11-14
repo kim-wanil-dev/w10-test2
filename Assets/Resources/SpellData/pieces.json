@@ -112,6 +112,21 @@
       "starterCount": 6
     },
     {
+      "shape": "EighthTriangle",
+      "decompositionPriority": 0,
+      "name": "1/8 삼각형",
+      "cells": [
+        {
+          "x": 0,
+          "y": 0,
+          "mask": 4
+        }
+      ],
+      "rotation": "Rotate",
+      "isInRewardPool": true,
+      "starterCount": 0
+    },
+    {
       "shape": "Diamond",
       "name": "정사각형",
       "cells": [
