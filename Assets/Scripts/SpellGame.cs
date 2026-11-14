@@ -356,6 +356,7 @@ public sealed class SpellGame
     public IReadOnlyList<Reward> PatternRewards { get { return _patternRewards; } }
 
     public Phase CurrentPhase { get; private set; } = Phase.Title;
+    public RunSaveData StageSnapshot { get; private set; }
     public int Health { get; private set; }
     public int MaxHealth { get; private set; } = START_HEALTH;
     public bool IsDeveloperMode { get; private set; }
@@ -730,6 +731,7 @@ public sealed class SpellGame
         for (int shape = 0; shape < STARTER_COUNTS.Length; shape++)
             for (int i = 0; i < STARTER_COUNTS[shape]; i++) AddCard((Shape)shape, Effect.None);
         Layout.Reset(); Layout.EnsurePlaced(_spells);
+        if (IsDeveloperMode) StageSnapshot = null;
         StartBattle();
     }
 
@@ -839,6 +841,7 @@ public sealed class SpellGame
     private void StartBattle()
     {
         Layout.EnsurePlaced(_spells);
+        if (!IsDeveloperMode) CaptureStageSnapshot(Phase.Combat, Battle);
         Curse = null; LastCurseDamage = 0;
         _hasPendingCurse = false;
         LastContaminationAdded = 0;
@@ -1221,6 +1224,7 @@ public sealed class SpellGame
         foreach (Board board in Boards) { board.MutablePieces.Clear(); board.Completer = null; }
         _draw.AddRange(_owned);
         CurrentPhase = phase;
+        if (phase == Phase.Victory || phase == Phase.Defeat) StageSnapshot = null;
     }
 
     /// <summary>손패 한도를 지키며 지정 수만큼 카드를 뽑는다.</summary>
@@ -2246,6 +2250,7 @@ public sealed class SpellGame
         if (_patternRewards.Count > patternCount) _patternRewards.RemoveRange(patternCount, _patternRewards.Count - patternCount);
         HasPatternReward &= _patternRewards.Count > 0;
         CurrentPhase = Phase.Reward;
+        if (!IsDeveloperMode) CaptureStageSnapshot(Phase.Reward, Battle);
     }
 
     /// <summary>보상 조각에 붙일 것. Random은 씰링·코팅 중 반반, Seal·Coating은 해당 종류만, Both는 씰링 1개와 코팅을 함께 붙인다.</summary>
@@ -2285,6 +2290,8 @@ public sealed class SpellGame
             HasSealReward = false;
             RewardSeal = Seal.None;
             ActiveReward = RewardKind.None;
+            if (CurrentPhase == Phase.Victory) StageSnapshot = null;
+            else if (!IsDeveloperMode) CaptureStageSnapshot(Phase.Loadout, Battle);
             return true;
         }
         IReadOnlyList<Reward> choices = ActiveRewardChoices;
@@ -2443,6 +2450,7 @@ public sealed class SpellGame
             HasSealReward = IsSealEvent;
             RewardSeal = HasSealReward ? (Seal)(1 + _random.Next(SEAL_KIND_COUNT)) : Seal.None;
             ActiveReward = RewardKind.None;
+            if (!IsDeveloperMode) CaptureStageSnapshot(CurrentPhase, Battle);
             return true;
         }
         Layout.EnsurePlaced(_spells);
@@ -2484,5 +2492,287 @@ public sealed class SpellGame
         return cells;
     }
 
+    [Serializable]
+    public sealed class SavedSealSpot
+    {
+        public int X;
+        public int Y;
+        public int Sector;
+        public Seal Seal;
+    }
+
+    [Serializable]
+    public sealed class SavedGluedShape
+    {
+        public SavedCard First;
+        public SavedCard Second;
+        public int FirstRotation;
+        public int SecondRotation;
+        public int RelativeX;
+        public int RelativeY;
+    }
+
+    [Serializable]
+    public sealed class SavedCard
+    {
+        public int Id;
+        public Shape Shape;
+        public Effect Effect;
+        public Coating Coating;
+        public bool IsContaminated;
+        public List<SavedSealSpot> Seals = new List<SavedSealSpot>();
+        public SavedGluedShape Glued;
+    }
+
+    [Serializable]
+    public sealed class SavedPatternPlacement
+    {
+        public int Spell;
+        public int OriginX;
+        public int OriginY;
+        public int Rotation;
+        public bool Placed;
+    }
+
+    [Serializable]
+    public sealed class RunSaveData
+    {
+        public Phase Phase;
+        public int Battle;
+        public int Health;
+        public int MaxHealth;
+        public int NextId;
+        public bool IsOnboarding;
+        public bool HasSealerEncounter;
+        public bool HasThiefEncounter;
+        public bool HasCurserEncounter;
+        public bool HasContaminatorEncounter;
+        public int LastAcquiredPattern;
+        public List<SavedCard> OwnedCards = new List<SavedCard>();
+        public List<int> OwnedSpells = new List<int>();
+        public List<int> Spells = new List<int>();
+        public List<SavedPatternPlacement> LayoutPlacements = new List<SavedPatternPlacement>();
+        public bool HasPieceReward;
+        public bool HasPatternReward;
+        public bool HasSealReward;
+        public Seal RewardSeal;
+        public RewardKind ActiveReward;
+        public List<SavedCard> PieceRewards = new List<SavedCard>();
+        public List<int> PatternRewards = new List<int>();
+    }
+
+    /// <summary>카드를 직렬화 가능한 저장 데이터로 변환한다.</summary>
+    private static SavedCard ToSavedCard(Card card)
+    {
+        if (card == null) return null;
+        SavedCard saved = new SavedCard
+        {
+            Id = card.Id,
+            Shape = card.Shape,
+            Effect = card.Effect,
+            Coating = card.Coating,
+            IsContaminated = card.IsContaminated,
+        };
+        foreach (SealSpot spot in card.Seals)
+            saved.Seals.Add(new SavedSealSpot { X = spot.X, Y = spot.Y, Sector = spot.Sector, Seal = spot.Seal });
+        if (card.Glued != null)
+        {
+            saved.Glued = new SavedGluedShape
+            {
+                First = ToSavedCard(card.Glued.First),
+                Second = ToSavedCard(card.Glued.Second),
+                FirstRotation = card.Glued.FirstRotation,
+                SecondRotation = card.Glued.SecondRotation,
+                RelativeX = card.Glued.RelativeX,
+                RelativeY = card.Glued.RelativeY,
+            };
+        }
+        return saved;
+    }
+
+    /// <summary>저장된 카드 데이터를 실제 카드 객체로 복원한다.</summary>
+    private static Card FromSavedCard(SavedCard saved)
+    {
+        if (saved == null) return null;
+        Card card = new Card
+        {
+            Id = saved.Id,
+            Shape = saved.Shape,
+            Effect = saved.Effect,
+            Coating = saved.Coating,
+            IsContaminated = saved.IsContaminated,
+        };
+        if (saved.Seals != null)
+        {
+            foreach (SavedSealSpot spot in saved.Seals)
+                card.SealList.Add(new SealSpot(spot.X, spot.Y, spot.Sector, spot.Seal));
+        }
+        if (saved.Glued != null && saved.Glued.First != null && saved.Glued.Second != null)
+        {
+            Card first = FromSavedCard(saved.Glued.First);
+            Card second = FromSavedCard(saved.Glued.Second);
+            card.Glued = new GluedShape(first, saved.Glued.FirstRotation, second, saved.Glued.SecondRotation, saved.Glued.RelativeX, saved.Glued.RelativeY);
+        }
+        return card;
+    }
+
+    /// <summary>현재 단계 진입 시점의 런 상태를 이어하기용 스냅샷으로 저장한다.</summary>
+    private void CaptureStageSnapshot(Phase phase, int battle)
+    {
+        RunSaveData save = new RunSaveData
+        {
+            Phase = phase,
+            Battle = battle,
+            Health = Health,
+            MaxHealth = MaxHealth,
+            NextId = _nextId,
+            IsOnboarding = IsOnboarding,
+            HasSealerEncounter = _hasSealerEncounter,
+            HasThiefEncounter = _hasThiefEncounter,
+            HasCurserEncounter = _hasCurserEncounter,
+            HasContaminatorEncounter = _hasContaminatorEncounter,
+            LastAcquiredPattern = LastAcquiredPattern,
+            HasPieceReward = phase == Phase.Reward && HasPieceReward,
+            HasPatternReward = phase == Phase.Reward && HasPatternReward,
+            HasSealReward = (phase == Phase.Reward || phase == Phase.Event) && HasSealReward,
+            RewardSeal = RewardSeal,
+            ActiveReward = phase == Phase.Reward ? ActiveReward : RewardKind.None,
+        };
+        foreach (Card card in _owned) save.OwnedCards.Add(ToSavedCard(card));
+        save.OwnedSpells.AddRange(_ownedSpells);
+        save.Spells.AddRange(_spells);
+        for (int i = 0; i < PatternCount; i++)
+        {
+            UnityEngine.Vector2Int origin = Layout.Origin(i);
+            save.LayoutPlacements.Add(new SavedPatternPlacement
+            {
+                Spell = i,
+                OriginX = origin.x,
+                OriginY = origin.y,
+                Rotation = Layout.Rotation(i),
+                Placed = Layout.IsPlaced(i),
+            });
+        }
+        if (phase == Phase.Reward)
+        {
+            foreach (Reward reward in _rewards) save.PieceRewards.Add(ToSavedCard(reward.Piece));
+            foreach (Reward reward in _patternRewards) save.PatternRewards.Add(reward.Pattern);
+        }
+        StageSnapshot = save;
+    }
+
+    /// <summary>저장된 스냅샷을 복원해 진행하던 전투나 이벤트·단계의 처음 상태로 이어한다.</summary>
+    public bool RestoreSave(RunSaveData data)
+    {
+        if (data == null || data.OwnedCards == null || data.OwnedCards.Count == 0
+            || data.OwnedSpells == null || data.OwnedSpells.Count == 0
+            || data.Spells == null || data.Spells.Count == 0)
+            return false;
+        if (data.Phase != Phase.Combat && data.Phase != Phase.Event && data.Phase != Phase.Rest
+            && data.Phase != Phase.Reward && data.Phase != Phase.Loadout)
+            return false;
+
+        IsDeveloperMode = false;
+        IsOnboarding = data.IsOnboarding;
+        _hasSealerEncounter = data.HasSealerEncounter;
+        _hasThiefEncounter = data.HasThiefEncounter;
+        _hasCurserEncounter = data.HasCurserEncounter;
+        _hasContaminatorEncounter = data.HasContaminatorEncounter;
+        MaxHealth = data.MaxHealth > 0 ? data.MaxHealth : START_HEALTH;
+        Health = Math.Max(1, Math.Min(MaxHealth, data.Health));
+        Battle = data.Battle;
+        LastAcquiredPattern = data.LastAcquiredPattern;
+
+        _owned.Clear();
+        int maxId = data.NextId;
+        foreach (SavedCard savedCard in data.OwnedCards)
+        {
+            Card card = FromSavedCard(savedCard);
+            if (card == null) continue;
+            if (card.Id <= 0) card.Id = ++maxId;
+            else if (card.Id > maxId) maxId = card.Id;
+            _owned.Add(card);
+        }
+        if (_owned.Count == 0) return false;
+        _nextId = maxId;
+
+        _ownedSpells.Clear();
+        foreach (int spell in data.OwnedSpells)
+            if (spell >= 0 && spell < PatternCount && !_ownedSpells.Contains(spell)) _ownedSpells.Add(spell);
+        _spells.Clear();
+        foreach (int spell in data.Spells)
+            if (_ownedSpells.Contains(spell) && !_spells.Contains(spell)) _spells.Add(spell);
+        if (_ownedSpells.Count == 0 || _spells.Count == 0) return false;
+
+        Layout.Reset();
+        if (data.LayoutPlacements != null)
+        {
+            foreach (SavedPatternPlacement placement in data.LayoutPlacements)
+            {
+                if (placement.Spell < 0 || placement.Spell >= PatternCount) continue;
+                if (placement.Placed) Layout.Place(placement.Spell, new UnityEngine.Vector2Int(placement.OriginX, placement.OriginY), placement.Rotation);
+                else Layout.Unplace(placement.Spell);
+            }
+        }
+        Layout.EnsurePlaced(_spells);
+
+        Curse = null; LastCurseDamage = 0; _hasPendingCurse = false; LastContaminationAdded = 0;
+        CancelTheft(); _stolen.Clear();
+        Block = 0; Turn = 0; Target = 0;
+        _enemies.Clear(); _hand.Clear(); _discard.Clear(); _draw.Clear();
+        _rewards.Clear(); _patternRewards.Clear();
+        foreach (Board board in Boards) { board.MutablePieces.Clear(); board.Completer = null; }
+
+        if (data.Phase == Phase.Combat)
+        {
+            StartBattle();
+            return true;
+        }
+
+        _draw.AddRange(_owned);
+        _hasUsedWorkshop = false;
+        _hasRested = false;
+        if (data.Phase == Phase.Event || data.Phase == Phase.Rest)
+        {
+            CurrentPhase = data.Phase;
+            HasPieceReward = false;
+            HasPatternReward = false;
+            HasSealReward = IsSealEvent && data.HasSealReward;
+            RewardSeal = HasSealReward ? data.RewardSeal : Seal.None;
+            ActiveReward = RewardKind.None;
+            CaptureStageSnapshot(CurrentPhase, Battle);
+            return true;
+        }
+        if (data.Phase == Phase.Reward)
+        {
+            CurrentPhase = Phase.Reward;
+            HasPieceReward = data.HasPieceReward;
+            HasPatternReward = data.HasPatternReward;
+            HasSealReward = data.HasSealReward;
+            RewardSeal = data.RewardSeal;
+            ActiveReward = data.ActiveReward;
+            if (data.PieceRewards != null)
+                foreach (SavedCard savedPiece in data.PieceRewards)
+                {
+                    Card piece = FromSavedCard(savedPiece);
+                    if (piece != null) _rewards.Add(new Reward { Pattern = -1, Piece = piece });
+                }
+            if (data.PatternRewards != null)
+                foreach (int pattern in data.PatternRewards)
+                    if (pattern >= 0 && pattern < PatternCount && !_ownedSpells.Contains(pattern))
+                        _patternRewards.Add(new Reward { Pattern = pattern });
+            CaptureStageSnapshot(Phase.Reward, Battle);
+            return true;
+        }
+
+        CurrentPhase = Phase.Loadout;
+        HasPieceReward = false;
+        HasPatternReward = false;
+        HasSealReward = false;
+        RewardSeal = Seal.None;
+        ActiveReward = RewardKind.None;
+        CaptureStageSnapshot(Phase.Loadout, Battle);
+        return true;
+    }
 }
 

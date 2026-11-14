@@ -15,6 +15,10 @@ public sealed class SpellJuice : MonoBehaviour
     private const float BANNER_IN = 0.18f;
     private const float BANNER_OUT = 0.28f;
     private const float SHAKE_FREQUENCY = 38f;
+    private const string SCREEN_SHAKE_KEY = "SpellShape.ScreenShake";
+
+    private static bool _hasLoadedShakePreference;
+    private static bool _screenShakeEnabled = true;
 
     /// <summary>떠오르는 글자 하나다.</summary>
     private sealed class FloatText
@@ -37,6 +41,32 @@ public sealed class SpellJuice : MonoBehaviour
     }
 
     public static SpellJuice Instance { get; private set; }
+    public static bool ScreenShakeEnabled
+    {
+        get
+        {
+            if (!_hasLoadedShakePreference)
+            {
+                _screenShakeEnabled = PlayerPrefs.GetInt(SCREEN_SHAKE_KEY, 1) != 0;
+                _hasLoadedShakePreference = true;
+            }
+            return _screenShakeEnabled;
+        }
+    }
+
+    /// <summary>화면 흔들림 사용 여부를 저장하고 꺼질 때는 진행 중인 흔들림을 즉시 멈춘다.</summary>
+    public static void SetScreenShakeEnabled(bool enabled)
+    {
+        _hasLoadedShakePreference = true;
+        _screenShakeEnabled = enabled;
+        PlayerPrefs.SetInt(SCREEN_SHAKE_KEY, enabled ? 1 : 0);
+        PlayerPrefs.Save();
+        if (!enabled && Instance != null)
+        {
+            Instance._shakeAmplitude = 0;
+            Instance.ApplyShake(Vector2.zero);
+        }
+    }
 
     private RectTransform _content;
     private RectTransform _layer;
@@ -81,6 +111,7 @@ public sealed class SpellJuice : MonoBehaviour
     /// <summary>화면을 pixels(캔버스 단위)만큼 seconds초 동안 흔든다. 진행 중인 흔들림보다 약하면 무시한다.</summary>
     public void Shake(float pixels, float seconds)
     {
+        if (!ScreenShakeEnabled) return;
         float remaining = CurrentShake();
         if (pixels < remaining) return;
         _shakeAmplitude = pixels; _shakeStart = Time.unscaledTime; _shakeDuration = Mathf.Max(0.05f, seconds);

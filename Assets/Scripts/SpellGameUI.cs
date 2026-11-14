@@ -7,6 +7,8 @@ using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
+using Newtonsoft.Json;
+
 /// <summary>주문 조각 PoC의 화면과 입력을 전투 상태에 연결한다.</summary>
 public sealed class SpellGameUI : MonoBehaviour
 {
@@ -26,6 +28,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private const float TOOLTIP_POINTER_GAP = 18f;
     private const float TOOLTIP_STACK_GAP = 6f;
     private const float TOOLTIP_TAG_ROOM = 258f;
+    private const string SAVE_RUN_KEY = "SpellShape.SavedRun";
     private static readonly Vector2[] THEFT_START_POINTS = { new Vector2(1180, 130), new Vector2(1180, 430), new Vector2(640, 65), new Vector2(80, 65) };
     private static readonly Vector2 MESSAGE_POSITION = new Vector2(705, -480);
     private static readonly Vector2 FEEDBACK_POSITION = new Vector2(960, -100);
@@ -162,6 +165,11 @@ public sealed class SpellGameUI : MonoBehaviour
     private RectTransform _glueDeckArea;
     private SpellPileView _rewardDeckView;
     private bool _showPauseMenu;
+    private SpellButtonView _continueButton;
+    private SpellButtonView _titleSettingsButton;
+    private SpellButtonView _screenShakeButton;
+    private SpellGame.RunSaveData _savedRun;
+    private SpellGame.RunSaveData _lastPersistedSnapshot;
     private int _pendingCast = -1;
     private int _rightClickUsedFrame = -1;
     private bool _castDragging;
@@ -260,6 +268,9 @@ public sealed class SpellGameUI : MonoBehaviour
             () => _showPauseMenu || _showHelp || _openPile >= 0 || _showDebugRemote || _glueOverlay != null || _hammerPhase != HammerPhase.None || _sealWorkbench != null,
             () => _pendingCast, Render);
         SetupReplayTutorialButton();
+        SetupPauseScreenShakeButton();
+        LoadSavedRun();
+        SetupTitleMenuButtons();
         SetupDebugRemote();
         SetupCastEffects();
         SpellTagTooltip.Create(_content, _font);
@@ -397,6 +408,112 @@ public sealed class SpellGameUI : MonoBehaviour
             SpellOnboarding.ResetProgress();
             replay.SetLabel(_onboarding.Ui("replayDone"));
         });
+    }
+
+    /// <summary>일시정지 메뉴의 맨 아래 버튼 아래에 화면 흔들림 설정 토글 버튼을 추가한다.</summary>
+    private void SetupPauseScreenShakeButton()
+    {
+        const float STEP = 100f;
+        RectTransform quit = (RectTransform)_pauseMenu.Quit.transform, panel = (RectTransform)quit.parent;
+        _screenShakeButton = Instantiate(_pauseMenu.Quit, panel);
+        _screenShakeButton.name = "Screen Shake";
+        ((RectTransform)_screenShakeButton.transform).anchoredPosition = quit.anchoredPosition + Vector2.down * (STEP * 2f);
+        Transform hint = panel.Find("Hint");
+        if (hint != null) ((RectTransform)hint).anchoredPosition += Vector2.down * STEP;
+        panel.sizeDelta += Vector2.up * STEP; panel.anchoredPosition += Vector2.up * STEP / 2;
+        UpdateScreenShakeButtonLabel();
+        _screenShakeButton.SetAction(() =>
+        {
+            SpellJuice.SetScreenShakeEnabled(!SpellJuice.ScreenShakeEnabled);
+            UpdateScreenShakeButtonLabel();
+        });
+    }
+
+    /// <summary>현재 화면 흔들림 설정 상태에 맞춰 버튼 문구를 갱신한다.</summary>
+    private void UpdateScreenShakeButtonLabel()
+    {
+        if (_screenShakeButton == null) return;
+        _screenShakeButton.SetLabel(SpellJuice.ScreenShakeEnabled ? "화면 흔들림: 켜짐" : "화면 흔들림: 꺼짐");
+    }
+
+    /// <summary>타이틀 화면에 이어하기·새로하기·설정 버튼을 구성한다.</summary>
+    private void SetupTitleMenuButtons()
+    {
+        const float STEP = 84f;
+        SpellButtonView start = _titleScreen.StartButton;
+        RectTransform startRect = (RectTransform)start.transform;
+        Vector2 basePos = startRect.anchoredPosition;
+
+        _continueButton = Instantiate(start, startRect.parent);
+        _continueButton.name = "Continue Game";
+        ((RectTransform)_continueButton.transform).anchoredPosition = basePos;
+        _continueButton.SetLabel("이어하기");
+        _continueButton.SetAction(ContinueSavedGame);
+
+        startRect.anchoredPosition = basePos + Vector2.down * STEP;
+        start.SetLabel("새로하기");
+        start.SetAction(StartNewGame);
+
+        _titleSettingsButton = Instantiate(start, startRect.parent);
+        _titleSettingsButton.name = "Title Settings";
+        ((RectTransform)_titleSettingsButton.transform).anchoredPosition = basePos + Vector2.down * (STEP * 2f);
+        _titleSettingsButton.SetLabel("설정");
+        _titleSettingsButton.SetAction(() => { OpenPauseState(); Render(); });
+
+        RefreshTitleButtons();
+    }
+
+    /// <summary>저장된 진행 상태 유무에 따라 타이틀 화면의 이어하기 버튼 활성 상태를 갱신한다.</summary>
+    private void RefreshTitleButtons()
+    {
+        if (_continueButton == null) return;
+        bool hasSave = _savedRun != null;
+        UnityEngine.UI.Button button = _continueButton.GetComponent<UnityEngine.UI.Button>();
+        if (button != null) button.interactable = hasSave;
+        CanvasGroup group = _continueButton.GetComponent<CanvasGroup>();
+        if (group == null) group = _continueButton.gameObject.AddComponent<CanvasGroup>();
+        group.alpha = hasSave ? 1f : 0.35f;
+    }
+
+    /// <summary>저장된 런 데이터를 PlayerPrefs에서 불러온다.</summary>
+    private void LoadSavedRun()
+    {
+        string raw = PlayerPrefs.GetString(SAVE_RUN_KEY, "");
+        if (string.IsNullOrEmpty(raw)) { _savedRun = null; return; }
+        try
+        {
+            _savedRun = JsonConvert.DeserializeObject<SpellGame.RunSaveData>(raw);
+        }
+        catch
+        {
+            _savedRun = null;
+            PlayerPrefs.DeleteKey(SAVE_RUN_KEY);
+        }
+    }
+
+    /// <summary>저장된 런 데이터를 삭제한다.</summary>
+    private void ClearSavedRun()
+    {
+        _savedRun = null;
+        _lastPersistedSnapshot = null;
+        PlayerPrefs.DeleteKey(SAVE_RUN_KEY);
+        PlayerPrefs.Save();
+    }
+
+    /// <summary>현재 단계 진입 스냅샷이 바뀌었거나 런이 끝났으면 저장 상태를 갱신한다.</summary>
+    private void SyncSavedRun()
+    {
+        if (_game.CurrentPhase == SpellGame.Phase.Victory || _game.CurrentPhase == SpellGame.Phase.Defeat)
+        {
+            if (_savedRun != null || PlayerPrefs.HasKey(SAVE_RUN_KEY)) ClearSavedRun();
+            return;
+        }
+        if (_game.IsDeveloperMode || _game.CurrentPhase == SpellGame.Phase.Title || _game.StageSnapshot == null) return;
+        if (_game.StageSnapshot == _lastPersistedSnapshot) return;
+        _lastPersistedSnapshot = _game.StageSnapshot;
+        _savedRun = _game.StageSnapshot;
+        PlayerPrefs.SetString(SAVE_RUN_KEY, JsonConvert.SerializeObject(_savedRun));
+        PlayerPrefs.Save();
     }
 
     /// <summary>일시정지 메뉴를 열면서 조준·선택·드래그를 정리한다.</summary>
@@ -578,6 +695,8 @@ public sealed class SpellGameUI : MonoBehaviour
         _combatScreen.gameObject.SetActive(combat);
         _table.SetVisible(combat);
         _titleScreen.gameObject.SetActive(phase == SpellGame.Phase.Title);
+        SyncSavedRun();
+        if (phase == SpellGame.Phase.Title) RefreshTitleButtons();
         bool sealWorkbench = (phase == SpellGame.Phase.Reward || _game.IsSealEvent) && _game.ActiveReward == SpellGame.RewardKind.Seal;
         // 보상 선택과 도안 배치는 한 화면(보상·배치 통합 화면)에서 한다. 인장 보상만 인장 작업대를 쓴다.
         bool loadout = (phase == SpellGame.Phase.Reward && !sealWorkbench) || phase == SpellGame.Phase.Loadout;
@@ -765,9 +884,27 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>새 게임을 시작하고 도안 배치와 선택을 초기화한다.</summary>
     private void StartNewGame()
     {
+        ClearSavedRun();
         ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = _isContaminatorRun = false;
         _game.StartGame(isOnboarding: SpellOnboarding.ShouldRun); ResetPatterns(); ClearSelection();
         _onboarding.Begin(_game.IsOnboarding); Render();
+    }
+
+    /// <summary>저장된 진행 상태에서 현재 이벤트나 전투의 처음 시점으로 이어한다.</summary>
+    private void ContinueSavedGame()
+    {
+        if (_savedRun == null || !_game.RestoreSave(_savedRun))
+        {
+            ClearSavedRun();
+            Render();
+            return;
+        }
+        _lastPersistedSnapshot = _game.StageSnapshot;
+        ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = _isContaminatorRun = false;
+        ClearSelection();
+        _message = "";
+        _onboarding.Begin(_game.Battle == 1 && _game.IsOnboarding);
+        Render();
     }
 
     /// <summary>개발자 전투를 시작하고 판에 들어가는 만큼 모든 도안을 배치한다.</summary>
@@ -1064,6 +1201,11 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         _helpPanel.gameObject.SetActive(_showHelp);
         _pauseMenu.gameObject.SetActive(_showPauseMenu);
+        if (_showPauseMenu)
+        {
+            _pauseMenu.Title.gameObject.SetActive(_game.CurrentPhase != SpellGame.Phase.Title);
+            UpdateScreenShakeButtonLabel();
+        }
         _rewardDeckView.Bind(_game.OwnedCards.Count);
         _rewardDeckButton.gameObject.SetActive(_game.CurrentPhase == SpellGame.Phase.Reward && _game.ActiveReward != SpellGame.RewardKind.Seal);
         if (_rewardDeckButton.gameObject.activeSelf) _rewardDeckButton.SetAsLastSibling();
