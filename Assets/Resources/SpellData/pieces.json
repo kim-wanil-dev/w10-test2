@@ -3,7 +3,6 @@
   "pieces": [
     {
       "shape": "Square",
-      "decompositionPriority": 0,
       "name": "마름모",
       "cells": [
         {
@@ -28,12 +27,12 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true,
-      "starterCount": 0
+      "isInRewardPool": false,
+      "starterCount": 0,
+      "decompositionPriority": 0
     },
     {
       "shape": "Triangle",
-      "decompositionPriority": 0,
       "name": "한 칸 삼각형",
       "cells": [
         {
@@ -49,11 +48,11 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": true,
-      "starterCount": 3
+      "starterCount": 2,
+      "decompositionPriority": 0
     },
     {
       "shape": "Rectangle",
-      "decompositionPriority": 0,
       "name": "직사각형",
       "cells": [
         {
@@ -94,11 +93,11 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": false,
-      "starterCount": 0
+      "starterCount": 0,
+      "decompositionPriority": 0
     },
     {
       "shape": "QuarterTriangle",
-      "decompositionPriority": 0,
       "name": "반 칸 삼각형",
       "cells": [
         {
@@ -109,11 +108,11 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": true,
-      "starterCount": 6
+      "starterCount": 4,
+      "decompositionPriority": 0
     },
     {
       "shape": "EighthTriangle",
-      "decompositionPriority": 0,
       "name": "1/8 삼각형",
       "cells": [
         {
@@ -124,7 +123,8 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": true,
-      "starterCount": 0
+      "starterCount": 6,
+      "decompositionPriority": 0
     },
     {
       "shape": "Diamond",
@@ -138,7 +138,8 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": true,
-      "starterCount": 4
+      "starterCount": 2,
+      "decompositionPriority": 1
     },
     {
       "shape": "Parallelogram",
@@ -157,7 +158,8 @@
       ],
       "rotation": "MirrorAlternate",
       "isInRewardPool": true,
-      "starterCount": 3
+      "starterCount": 2,
+      "decompositionPriority": 1
     },
     {
       "shape": "MediumTriangle",
@@ -180,8 +182,9 @@
         }
       ],
       "rotation": "Rotate",
-      "isInRewardPool": true,
-      "starterCount": 0
+      "isInRewardPool": false,
+      "starterCount": 0,
+      "decompositionPriority": 1
     },
     {
       "shape": "House",
@@ -210,7 +213,8 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": false,
-      "starterCount": 0
+      "starterCount": 0,
+      "decompositionPriority": 1
     },
     {
       "shape": "LargeTriangle",
@@ -249,7 +253,8 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": false,
-      "starterCount": 0
+      "starterCount": 0,
+      "decompositionPriority": 1
     },
     {
       "shape": "LShape",
@@ -308,7 +313,8 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": false,
-      "starterCount": 0
+      "starterCount": 0,
+      "decompositionPriority": 1
     },
     {
       "shape": "Clay",
@@ -322,7 +328,8 @@
       ],
       "rotation": "Rotate",
       "isInRewardPool": true,
-      "starterCount": 0
+      "starterCount": 0,
+      "decompositionPriority": 1
     }
   ]
 }
