@@ -78,8 +78,8 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "\uB3C4\uD615 \uB4DC\uB798\uADF8 \u2192 \uB3C4\uC548 \uC644\uC131 \u2192
-    \uC2DC\uC804 \uBC84\uD2BC\nR \uB610\uB294 \uC6B0\uD074\uB9AD\uC73C\uB85C \uD68C\uC804"
+  m_Text: "\uC870\uAC01\uC744 \uB04C\uC5B4 \uB3C4\uC548 \uCC44\uC6B0\uAE30 \u2192
+    \uC2DC\uC804\nR \uB610\uB294 \uC6B0\uD074\uB9AD\uC73C\uB85C \uD68C\uC804"
 --- !u!1 &3420611739656013710
 GameObject:
   m_ObjectHideFlags: 0

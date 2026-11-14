@@ -42,6 +42,11 @@ public sealed class SpellGame
     private const int REWARD_PIECE_COUNT = 3;
     private const int REWARD_PATTERN_COUNT = 3;
     private const double REWARD_SEAL_CHANCE = 0.5;
+    // 이 전투 보상부터 조각에 씰링과 코팅이 함께 붙을 수 있고, 그 확률이다.
+    private const int BOTH_EXTRAS_FROM_BATTLE = 4;
+    private const double BOTH_EXTRAS_CHANCE = 1.0 / 3.0;
+    // 첫 전투 첫 손패(뽑는 순서). 정사각형+1/4 삼각형 → 불씨, 정사각형 → 방벽, 1/4 삼각형 → 도안에 남겨 고정 체험, 평행사변형 → 손패에 남아 버려짐 체험.
+    private static readonly Shape[] OPENING_HAND = { Shape.Diamond, Shape.QuarterTriangle, Shape.Diamond, Shape.QuarterTriangle, Shape.Parallelogram };
     private const int PERIOD_BONUS = 3;
     private const int RESONANCE_BONUS = 3;
     private const int RESONANCE_COUNT = 3;
@@ -254,18 +259,18 @@ public sealed class SpellGame
             string text;
             switch (NextAction)
             {
-                case EnemyAction.Defend: text = $"방어 쌓기 · 방어 {ActionAmount} 획득"; break;
-                case EnemyAction.Curse: text = $"조각 저주 · 다음 손패 1장 / 미해결 HP -{CURSE_FAILURE_AMOUNT}"; break;
-                case EnemyAction.Charge: text = $"힘 모으기 · 다음 공격 +{ActionAmount}"; break;
+                case EnemyAction.Defend: text = $"방어도 +{ActionAmount}"; break;
+                case EnemyAction.Curse: text = $"저주 예고 · 미해제 시 체력 -{CURSE_FAILURE_AMOUNT}"; break;
+                case EnemyAction.Charge: text = $"충전 · 다음 공격 +{ActionAmount}"; break;
                 default:
                     string strength = IsThief || IsContaminator ? (ActionCount % _pattern.Length == 0 ? "약한 " : "강한 ") : IsCurser ? "강한 " : "";
                     text = $"{strength}{(IsContaminator ? "오염 공격" : "공격")} · 피해 {Intent}";
                     if (ContaminationCount > 0) text += $" / 오염 {ContaminationCount}장";
                     break;
             }
-            if (Block > 0) text += $"\n현재 방어 {Block}";
+            if (Block > 0) text += $"\n현재 방어도 {Block}";
             if (Charge > 0) text += $"\n충전 +{Charge}";
-            if (IsThief) text += "\n패시브 · 약 15초마다 조각 절도";
+            if (IsThief) text += "\n상시 · 일정 시간마다 손패 조각 강탈";
             return text;
         }
     }
@@ -293,6 +298,7 @@ public sealed class SpellGame
     // 마지막 시전에서 실제로 피해를 준 적 번호를 타격 순서대로 기록한다. 연출이 죽은 적을 치지 않도록 쓴다.
     private readonly List<int> _lastCastHits = new List<int>();
     private readonly List<HitSource> _lastCastHitSources = new List<HitSource>();
+    private readonly List<int> _lastCastHitDamages = new List<int>();
     private bool _isRecordingHits;
     private HitSource _hitSource;
     private readonly List<Card> _draw = new List<Card>();
@@ -332,6 +338,8 @@ public sealed class SpellGame
     public IReadOnlyList<int> LastCastHits { get { return _lastCastHits; } }
     // LastCastHits와 같은 순서로 각 타격의 출처를 담는다.
     public IReadOnlyList<HitSource> LastCastHitSources { get { return _lastCastHitSources; } }
+    // LastCastHits와 같은 순서로 각 타격이 적 방어를 뚫고 체력에 준 피해를 담는다. 방어에 모두 막혔으면 0이다.
+    public IReadOnlyList<int> LastCastHitDamages { get { return _lastCastHitDamages; } }
     public static IReadOnlyList<Card> DebugPieces { get { return Array.AsReadOnly(DEBUG_PIECES); } }
     public ReadOnlyCollection<Enemy> Enemies { get; }
     public ReadOnlyCollection<int> Spells { get; }
@@ -351,6 +359,8 @@ public sealed class SpellGame
     public int Health { get; private set; }
     public int MaxHealth { get; private set; } = START_HEALTH;
     public bool IsDeveloperMode { get; private set; }
+    /// <summary>온보딩을 진행하는 판인지다. 첫 전투 첫 손패와 첫 조각 보상을 시나리오에 맞춰 고정한다.</summary>
+    public bool IsOnboarding { get; private set; }
     public int Block { get; private set; }
     public int Battle { get; private set; }
     public int Turn { get; private set; }
@@ -700,8 +710,9 @@ public sealed class SpellGame
     }
 
     /// <summary>개발자 모드와 테스트 적 선택으로 새 게임의 체력·덱·도안을 초기화하고 첫 전투를 시작한다.</summary>
-    public void StartGame(bool isDeveloperMode = false, bool withSealer = false, bool withThief = false, bool withCurser = false, bool withContaminator = false)
+    public void StartGame(bool isDeveloperMode = false, bool withSealer = false, bool withThief = false, bool withCurser = false, bool withContaminator = false, bool isOnboarding = false)
     {
+        IsOnboarding = isOnboarding && !isDeveloperMode;
         _hasSealerEncounter = withSealer;
         _hasThiefEncounter = withThief;
         _hasCurserEncounter = withCurser;
@@ -835,7 +846,12 @@ public sealed class SpellGame
         Battle++; Turn = 0; Block = 0; Target = 0; _enemies.Clear(); _hand.Clear(); _discard.Clear(); _draw.Clear();
         foreach (Board board in Boards) { board.MutablePieces.Clear(); board.Completer = null; }
         _draw.AddRange(_owned); Shuffle(_draw);
-        GuaranteeOpeningShape(Shape.Square, _draw.Count - 1); GuaranteeOpeningShape(Shape.QuarterTriangle, _draw.Count - 2);
+        if (Battle == 1 && IsOnboarding)
+        {
+            // 온보딩 중 첫 전투 첫 손패는 온보딩 시나리오에 맞춰 고정한다. 뒤에서부터 뽑으므로 맨 뒤가 첫 장이다.
+            for (int i = 0; i < OPENING_HAND.Length; i++) GuaranteeOpeningShape(OPENING_HAND[i], _draw.Count - 1 - i);
+        }
+        else { GuaranteeOpeningShape(Shape.Square, _draw.Count - 1); GuaranteeOpeningShape(Shape.QuarterTriangle, _draw.Count - 2); }
         if (IsDeveloperMode)
         {
             for (int i = 0; i < 3; i++) _enemies.Add(new Enemy("잉크 하수인", DEVELOPER_HEALTH, new[] { 4 }));
@@ -939,9 +955,9 @@ public sealed class SpellGame
         if (!IsWorkshopEvent) return "이벤트 또는 휴식에서만 분해할 수 있습니다";
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 분해할 조각 하나를 선택하세요";
-        if (card.IsUnique) return "고유 조각은 쪼갤 수 없습니다";
+        if (card.IsUnique) return "고유 조각은 분해할 수 없습니다";
         int firstSplit = card.Glued != null ? 2 : SplitOnce(new Fragment(card.Shape, 0, 0, 0)).Length;
-        if (firstSplit == 0) return "현재 도형으로 빈틈없이 나눌 수 없는 최소 조각입니다";
+        if (firstSplit == 0) return "더 작게 나눌 수 없는 조각입니다";
         return null;
     }
 
@@ -1138,7 +1154,7 @@ public sealed class SpellGame
         if (!IsWorkshopEvent) return "이벤트 또는 휴식에서만 접착할 수 있습니다";
         if (!CanUseWorkshop) return "이번 이벤트의 작업을 이미 완료했습니다";
         if (card == null || !_owned.Contains(card)) return "덱에서 조각을 선택하세요";
-        if (card.IsContaminated) return "오염 조각은 이번 프로토타입에서 접착할 수 없습니다";
+        if (card.IsContaminated) return "오염 조각은 접착할 수 없습니다";
         if (card.IsUnique) return "고유 조각은 접착할 수 없습니다";
         return null;
     }
@@ -1167,7 +1183,7 @@ public sealed class SpellGame
                 if ((CellMask(second, secondRotation, nx - relativeX, ny - relativeY) & (1 << ((side + 2) % 4))) != 0) touching = true;
             }
         }
-        return touching ? null : "실제 도형의 변을 맞대세요. 꼭짓점만 닿으면 접착할 수 없습니다";
+        return touching ? null : "두 조각의 변을 맞대세요. 꼭짓점만 닿으면 접착할 수 없습니다";
     }
 
     /// <summary>두 조각에 서로 다른 코팅이 있어 붙이기 전에 유지할 코팅을 골라야 하는지 반환한다.</summary>
@@ -1290,7 +1306,7 @@ public sealed class SpellGame
             int index = _random.Next(Spells.Count - (Spells.Count > 1 && previousIndex >= 0 ? 1 : 0));
             if (Spells.Count > 1 && previousIndex >= 0 && index >= previousIndex) index++;
             enemy.SealedSpell = Spells[index]; enemy.PreviousSealedSpell = enemy.SealedSpell;
-            SealNotice = "형상 봉인자가 주문 도안을 봉인했습니다. 피해를 주면 해제됩니다";
+            SealNotice = "형상 봉인자가 도안을 봉인했습니다. 봉인자에게 피해를 주면 풀립니다";
         }
     }
 
@@ -1298,9 +1314,9 @@ public sealed class SpellGame
     private void DamageEnemy(Enemy enemy, int damage)
     {
         if (enemy.Health <= 0 || damage <= 0) return;
-        if (_isRecordingHits) { _lastCastHits.Add(_enemies.IndexOf(enemy)); _lastCastHitSources.Add(_hitSource); }
         int absorbed = Math.Min(enemy.Block, damage);
         enemy.Block -= absorbed; damage -= absorbed;
+        if (_isRecordingHits) { _lastCastHits.Add(_enemies.IndexOf(enemy)); _lastCastHitSources.Add(_hitSource); _lastCastHitDamages.Add(damage); }
         int before = enemy.Health;
         enemy.Health -= damage;
         if (enemy == _theftOwner && enemy.Health < before) CancelTheft();
@@ -1308,7 +1324,7 @@ public sealed class SpellGame
         if (enemy.IsSealer && enemy.Health < before && enemy.SealedSpell >= 0)
         {
             enemy.SealedSpell = -1;
-            SealNotice = "형상 봉인자가 피해를 받아 봉인이 해제되었습니다!";
+            SealNotice = "형상 봉인자가 피해를 입어 봉인이 풀렸습니다!";
         }
     }
 
@@ -1923,7 +1939,7 @@ public sealed class SpellGame
         {
             e.Value = Math.Max(0, e.Value - contamination);
             e.Block = Math.Max(0, e.Block - contamination);
-            e.Terms.Add($"오염 -{contamination} (하한 0)");
+            e.Terms.Add($"오염 -{contamination}");
         }
         return e;
     }
@@ -1951,7 +1967,7 @@ public sealed class SpellGame
         Board board = Boards[boardIndex];
         SpellEvaluation e = Evaluate(boardIndex);
         Block += e.Block;
-        _lastCastHits.Clear(); _lastCastHitSources.Clear(); _isRecordingHits = true; _hitSource = HitSource.Spell;
+        _lastCastHits.Clear(); _lastCastHitSources.Clear(); _lastCastHitDamages.Clear(); _isRecordingHits = true; _hitSource = HitSource.Spell;
         if (e.Kind == SpellKind.Single) DamageEnemy(Enemies[Target], e.Value);
         else if (e.Kind == SpellKind.All) { foreach (Enemy enemy in Enemies) if (enemy.Health > 0) DamageEnemy(enemy, e.Value); }
         // 산탄 타격은 매번 그 순간 살아 있는 적 중에서 고르므로, 앞 타격으로 쓰러진 적은 다음 타격 대상이 아니다.
@@ -2210,7 +2226,11 @@ public sealed class SpellGame
         bool hasClay = false;
         for (int i = 0; i < REWARD_PIECE_COUNT; i++)
         {
-            Card piece = RandomRewardPiece(!hasClay);
+            // 온보딩 중 첫 조각 보상은 씰링·코팅 안내를 위해 씰링만 붙은 조각과 코팅만 붙은 조각을 하나씩 보장한다.
+            RewardExtra extra = Battle != 1 || !IsOnboarding ? RewardExtra.Random : i == 0 ? RewardExtra.Seal : i == 1 ? RewardExtra.Coating : RewardExtra.Random;
+            // 4번째 전투부터는 보상 조각마다 1/3 확률로 씰링과 코팅을 함께 붙인다. 이때는 아무것도 붙지 않는 점토를 뽑지 않는다.
+            if (extra == RewardExtra.Random && Battle >= BOTH_EXTRAS_FROM_BATTLE && _random.NextDouble() < BOTH_EXTRAS_CHANCE) extra = RewardExtra.Both;
+            Card piece = RandomRewardPiece(!hasClay && extra == RewardExtra.Random, extra);
             hasClay |= piece.IsUnique;
             _rewards.Add(new Reward { Pattern = -1, Piece = piece });
         }
@@ -2228,8 +2248,11 @@ public sealed class SpellGame
         CurrentPhase = Phase.Reward;
     }
 
-    /// <summary>보상용 랜덤 조각을 만든다. 도형을 고른 뒤 반반 확률로 무작위 1/4 구역에 씰링 1개 또는 코팅 1개를 붙인다. 고유 조각 점토는 아무것도 붙이지 않는다.</summary>
-    private Card RandomRewardPiece(bool canBeClay)
+    /// <summary>보상 조각에 붙일 것. Random은 씰링·코팅 중 반반, Seal·Coating은 해당 종류만, Both는 씰링 1개와 코팅을 함께 붙인다.</summary>
+    private enum RewardExtra { Random, Seal, Coating, Both }
+
+    /// <summary>보상용 랜덤 조각을 만든다. 도형을 고른 뒤 extra에 따라 무작위 1/4 구역에 씰링 1개, 코팅 1개 또는 둘 다를 붙인다. 고유 조각 점토는 아무것도 붙이지 않는다.</summary>
+    private Card RandomRewardPiece(bool canBeClay, RewardExtra extra = RewardExtra.Random)
     {
         // 점토를 뺄 때는 보상 도형 목록에서 점토를 제외한 칸 중에서 뽑는다.
         int clayIndex = canBeClay ? -1 : Array.IndexOf(REWARD_SHAPES, Shape.Clay);
@@ -2238,7 +2261,9 @@ public sealed class SpellGame
         Shape shape = REWARD_SHAPES[pick];
         Card card = new Card { Shape = shape };
         if (card.IsUnique) return card;
-        if (_random.NextDouble() < REWARD_SEAL_CHANCE)
+        bool seal = extra == RewardExtra.Seal || extra == RewardExtra.Both || (extra == RewardExtra.Random && _random.NextDouble() < REWARD_SEAL_CHANCE);
+        bool coating = extra == RewardExtra.Coating || extra == RewardExtra.Both || (extra == RewardExtra.Random && !seal);
+        if (seal)
         {
             List<SealSpot> sectors = new List<SealSpot>();
             foreach (ShapeCell cell in ShapeCells(shape, 0))
@@ -2246,7 +2271,7 @@ public sealed class SpellGame
             SealSpot spot = sectors[_random.Next(sectors.Count)];
             card.SealList.Add(new SealSpot(spot.X, spot.Y, spot.Sector, (Seal)(1 + _random.Next(SEAL_KIND_COUNT))));
         }
-        else card.Coating = (Coating)(1 + _random.Next(COATING_KIND_COUNT));
+        if (coating) card.Coating = (Coating)(1 + _random.Next(COATING_KIND_COUNT));
         return card;
     }
 
