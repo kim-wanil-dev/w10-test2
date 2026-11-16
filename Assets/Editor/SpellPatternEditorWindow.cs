@@ -76,6 +76,7 @@ public sealed class SpellPatternEditorWindow : EditorWindow
             EditorGUILayout.HelpBox(_loadError, MessageType.Error);
             return;
         }
+        DrawPresetBar();
         EditorGUILayout.BeginHorizontal();
         DrawList();
         DrawDetail();
@@ -103,13 +104,86 @@ public sealed class SpellPatternEditorWindow : EditorWindow
         GUILayout.Label(SpellDataStore.PATTERNS_ASSET_PATH + (hasUnsavedChanges ? "  * 저장 안 됨" : ""), EditorStyles.miniLabel);
         GUILayout.FlexibleSpace();
         using (new EditorGUI.DisabledScope(_table == null || !hasUnsavedChanges || _errors.Count > 0))
-            if (GUILayout.Button("저장", EditorStyles.toolbarButton)) Save();
+            if (GUILayout.Button("저장 (게임 적용)", EditorStyles.toolbarButton)) Save();
         if (GUILayout.Button("파일에서 다시 읽기", EditorStyles.toolbarButton)
             && (!hasUnsavedChanges || EditorUtility.DisplayDialog("도안 에디터", "저장하지 않은 변경을 버리고 파일에서 다시 읽을까요?", "다시 읽기", "취소")))
             LoadFromFile();
         EditorGUILayout.EndHorizontal();
         if (_isChangedOutside) EditorGUILayout.HelpBox("파일이 외부에서 바뀌었습니다. 저장하면 외부 변경을 덮어씁니다.", MessageType.Warning);
         if (EditorApplication.isPlaying) EditorGUILayout.HelpBox("Play 중 저장한 값은 다음 Play부터 반영됩니다.", MessageType.Info);
+    }
+
+    /// <summary>프리셋 선택·이름 편집·복제·삭제 바를 그린다. 선택한 프리셋이 저장 시 게임에 적용된다.</summary>
+    private void DrawPresetBar()
+    {
+        if (_table == null) return;
+        SpellDataStore.EnsurePresetsInitialized(_table);
+        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+        GUILayout.Label("적용 프리셋", GUILayout.Width(72f));
+        for (int i = 0; i < _table.Presets.Count; i++)
+        {
+            bool active = i == _table.ActivePreset;
+            if (GUILayout.Toggle(active, $"{i + 1}. {_table.Presets[i].Name}", EditorStyles.miniButton, GUILayout.ExpandWidth(false)) && !active)
+                SelectPreset(i);
+        }
+        GUILayout.FlexibleSpace();
+        SpellPatternPreset current = _table.Presets[_table.ActivePreset];
+        EditorGUI.BeginChangeCheck();
+        string editedName = EditorGUILayout.TextField(current.Name, GUILayout.Width(130f));
+        if (EditorGUI.EndChangeCheck()) { current.Name = editedName; MarkDirty(); }
+        if (GUILayout.Button("복제해 새 프리셋", EditorStyles.miniButton, GUILayout.Width(112f))) DuplicateActivePreset();
+        using (new EditorGUI.DisabledScope(_table.Presets.Count <= 1))
+            if (GUILayout.Button("프리셋 삭제", EditorStyles.miniButton, GUILayout.Width(82f))) DeleteActivePreset();
+        EditorGUILayout.EndHorizontal();
+    }
+
+    /// <summary>현재 편집 중인 도안 목록을 활성 프리셋에 반영한다.</summary>
+    private void SyncActivePreset()
+    {
+        if (_table == null) return;
+        SpellDataStore.EnsurePresetsInitialized(_table);
+        _table.Presets[_table.ActivePreset].Patterns = SpellDataStore.Clone(_table.Patterns);
+    }
+
+    /// <summary>지정 번호 프리셋으로 전환해 편집·게임 적용 대상으로 삼는다.</summary>
+    private void SelectPreset(int index)
+    {
+        if (_table == null || index < 0 || index >= _table.Presets.Count || index == _table.ActivePreset) return;
+        SyncActivePreset();
+        _table.ActivePreset = index;
+        _table.Patterns = SpellDataStore.Clone(_table.Presets[index].Patterns);
+        _selected = Mathf.Clamp(_selected, 0, Math.Max(0, _table.Patterns.Count - 1));
+        GUI.FocusControl(null);
+        MarkDirty();
+    }
+
+    /// <summary>현재 프리셋을 복제한 새 프리셋을 만들어 전환한다.</summary>
+    private void DuplicateActivePreset()
+    {
+        SyncActivePreset();
+        int nextNumber = _table.Presets.Count + 1;
+        _table.Presets.Add(new SpellPatternPreset
+        {
+            Name = $"{nextNumber}번 프리셋",
+            Patterns = SpellDataStore.Clone(_table.Patterns)
+        });
+        _table.ActivePreset = _table.Presets.Count - 1;
+        GUI.FocusControl(null);
+        MarkDirty();
+    }
+
+    /// <summary>현재 프리셋을 삭제하고 인접 프리셋으로 전환한다.</summary>
+    private void DeleteActivePreset()
+    {
+        if (_table.Presets.Count <= 1) return;
+        string name = _table.Presets[_table.ActivePreset].Name;
+        if (!EditorUtility.DisplayDialog("도안 에디터", $"'{name}' 프리셋을 삭제할까요?", "삭제", "취소")) return;
+        _table.Presets.RemoveAt(_table.ActivePreset);
+        _table.ActivePreset = Mathf.Clamp(_table.ActivePreset, 0, _table.Presets.Count - 1);
+        _table.Patterns = SpellDataStore.Clone(_table.Presets[_table.ActivePreset].Patterns);
+        _selected = Mathf.Clamp(_selected, 0, Math.Max(0, _table.Patterns.Count - 1));
+        GUI.FocusControl(null);
+        MarkDirty();
     }
 
     /// <summary>도안 목록과 추가·복제·삭제·순서 이동 버튼을 그리고 선택 도안을 바꾼다.</summary>
@@ -278,6 +352,7 @@ public sealed class SpellPatternEditorWindow : EditorWindow
         try
         {
             _table = SpellDataStore.ParsePatterns(File.ReadAllText(SpellDataStore.PATTERNS_ASSET_PATH));
+            SpellDataStore.EnsurePresetsInitialized(_table);
             _fileTime = File.GetLastWriteTimeUtc(SpellDataStore.PATTERNS_ASSET_PATH);
         }
         catch (Exception exception)
@@ -294,7 +369,7 @@ public sealed class SpellPatternEditorWindow : EditorWindow
     /// <summary>도메인 리로드 전에 보존한 편집본 JSON을 복원한다. 복원하면 미저장 상태로 두고 true를 반환한다.</summary>
     private bool TryRestoreDraft(string draft)
     {
-        try { _table = SpellDataStore.ParsePatterns(draft); }
+        try { _table = SpellDataStore.ParsePatterns(draft); SpellDataStore.EnsurePresetsInitialized(_table); }
         catch (Exception) { SessionState.EraseString(DRAFT_KEY); return false; }
         _loadError = null;
         if (File.Exists(SpellDataStore.PATTERNS_ASSET_PATH)) _fileTime = File.GetLastWriteTimeUtc(SpellDataStore.PATTERNS_ASSET_PATH);
@@ -306,8 +381,11 @@ public sealed class SpellPatternEditorWindow : EditorWindow
     /// <summary>편집본 복사본의 칸을 정규화해 검증하고, 오류가 없으면 파일에 쓰고 가져오기를 갱신한다. 저장하면 true를 반환한다.</summary>
     private bool Save()
     {
+        SyncActivePreset();
         SpellPatternTable normalized = SpellDataStore.Clone(_table);
         foreach (SpellPatternData pattern in normalized.Patterns) SpellDataStore.Normalize(pattern.Cells);
+        foreach (SpellPatternPreset preset in normalized.Presets)
+            foreach (SpellPatternData pattern in preset.Patterns) SpellDataStore.Normalize(pattern.Cells);
         List<string> errors = new List<string>();
         SpellDataStore.ValidatePatterns(normalized, errors, null);
         if (errors.Count > 0)
@@ -331,8 +409,11 @@ public sealed class SpellPatternEditorWindow : EditorWindow
     private void Validate()
     {
         _errors.Clear(); _warnings.Clear();
+        SyncActivePreset();
         SpellPatternTable normalized = SpellDataStore.Clone(_table);
         foreach (SpellPatternData pattern in normalized.Patterns) SpellDataStore.Normalize(pattern.Cells);
+        foreach (SpellPatternPreset preset in normalized.Presets)
+            foreach (SpellPatternData pattern in preset.Patterns) SpellDataStore.Normalize(pattern.Cells);
         SpellDataStore.ValidatePatterns(normalized, _errors, _warnings);
         _isValidationDirty = false;
     }

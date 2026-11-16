@@ -325,7 +325,11 @@ public sealed class SpellPatternLayout
         {
             int rot = piece.Card.IsUnique ? 0 : piece.GridRotation;
             foreach (SpellGame.SealSpot seal in SpellGame.SealSpots(piece.Card, rot))
-                seals.Add(new SpellGame.SealSpot(piece.GridAnchor.x + seal.X, piece.GridAnchor.y + seal.Y, seal.Sector, seal.Seal));
+            {
+                int x = piece.GridAnchor.x + seal.X, y = piece.GridAnchor.y + seal.Y;
+                if (x < 0 || x >= COLUMNS || y < 0 || y >= ROWS || (piece.GridMask[y * COLUMNS + x] & (1 << seal.Sector)) == 0) continue;
+                seals.Add(new SpellGame.SealSpot(x, y, seal.Sector, seal.Seal));
+            }
             return seals;
         }
         foreach (SpellGame.SealSpot seal in SpellGame.SealSpots(piece.Card, piece.Rotation))

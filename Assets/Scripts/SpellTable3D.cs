@@ -388,8 +388,8 @@ public sealed class SpellTable3D : MonoBehaviour
         for (int i = 0; i < seals.Count; i++) seals[i] = new SpellGame.SealSpot(seals[i].X - anchor.x, seals[i].Y - anchor.y, seals[i].Sector, seals[i].Seal);
         float layer = IsLayered(spell, placement) ? SpellPiece3D.Thickness * _cellSize : 0;
         piece.PlaceOnBoard(spell, placement, cells, seals, PiecePosition(anchor, cells, 0.045f + layer), Quaternion.identity, _cellSize);
-        // 이전 턴에 놓인 조각은 움직일 수 없으므로 어둡게 낮추고 핀을 박아 이번 턴 조각과 구분한다.
-        piece.SetLocked(placement.Turn < _game.Turn, cells, seals);
+        // 이전 턴 조각과 일부 시전한 조각은 어둡게 낮추고 핀을 박아 이동 가능한 조각과 구분한다.
+        piece.SetLocked(!_game.CanMovePiece(placement), cells, seals);
     }
 
     /// <summary>덧칠 씰링이 있는 조각이 공유 격자의 다른 조각과 구역을 공유하는지 반환한다.</summary>

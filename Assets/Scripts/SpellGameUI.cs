@@ -2778,7 +2778,7 @@ public sealed class SpellGameUI : MonoBehaviour
         _hammerMarker = Panel(_hammerOverlay, 880, 446, 80, 6, Color.white);
         Label(_hammerOverlay, "강한 타격", 856, 140, 130, 30, 17);
         Label(_hammerOverlay, "약한 타격", 856, 460, 130, 30, 17);
-        Label(_hammerOverlay, "기본 분해는 항상 성공\n강할수록 추가 분해 확률 증가\n최소 1/8 · 결과는 덱에 저장", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
+        Label(_hammerOverlay, "기본 분해는 항상 성공\n강할수록 추가 분해 확률 증가\n최소 1/4 · 결과는 덱에 저장", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
         Label(_hammerOverlay, _hammerMessage, 800, 495, 440, 75, 17);
         RectTransform hint = Element("Hammer Preview", _hammerOverlay, 980, 360, 240, 120);
         _hammerHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();
