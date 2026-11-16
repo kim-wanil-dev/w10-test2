@@ -19,6 +19,7 @@ public sealed class SpellPatternTabView : MonoBehaviour
     public void Setup(SpellGameUI ui, int spell, Action onMore)
     {
         _drag.Setup(ui, spell);
+        _more.SetLabel("×");
         _more.SetAction(onMore);
     }
 

@@ -7,6 +7,8 @@ using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
+using Newtonsoft.Json;
+
 /// <summary>주문 조각 PoC의 화면과 입력을 전투 상태에 연결한다.</summary>
 public sealed class SpellGameUI : MonoBehaviour
 {
@@ -26,6 +28,7 @@ public sealed class SpellGameUI : MonoBehaviour
     private const float TOOLTIP_POINTER_GAP = 18f;
     private const float TOOLTIP_STACK_GAP = 6f;
     private const float TOOLTIP_TAG_ROOM = 258f;
+    private const string SAVE_RUN_KEY = "SpellShape.SavedRun";
     private static readonly Vector2[] THEFT_START_POINTS = { new Vector2(1180, 130), new Vector2(1180, 430), new Vector2(640, 65), new Vector2(80, 65) };
     private static readonly Vector2 MESSAGE_POSITION = new Vector2(705, -480);
     private static readonly Vector2 FEEDBACK_POSITION = new Vector2(960, -100);
@@ -162,6 +165,11 @@ public sealed class SpellGameUI : MonoBehaviour
     private RectTransform _glueDeckArea;
     private SpellPileView _rewardDeckView;
     private bool _showPauseMenu;
+    private SpellButtonView _continueButton;
+    private SpellButtonView _titleSettingsButton;
+    private SpellButtonView _screenShakeButton;
+    private SpellGame.RunSaveData _savedRun;
+    private SpellGame.RunSaveData _lastPersistedSnapshot;
     private int _pendingCast = -1;
     private int _rightClickUsedFrame = -1;
     private bool _castDragging;
@@ -238,7 +246,7 @@ public sealed class SpellGameUI : MonoBehaviour
     void Awake()
     {
         _game = new SpellGame();
-        _layout = new SpellPatternLayout();
+        _layout = _game.Layout;
         _patternColorValues = new Color[SpellGame.PatternCount];
         for (int i = 0; i < _patternColorValues.Length; i++) SpellDataStore.ParseColor(SpellGame.PatternColorCode(i), out _patternColorValues[i]);
         // 코드로 만드는 요소도 프리팹 화면과 같은 글꼴·둥근 판 그림을 쓰도록 먼저 찾아 둔다. 못 찾으면 시스템 글꼴을 쓴다.
@@ -260,6 +268,9 @@ public sealed class SpellGameUI : MonoBehaviour
             () => _showPauseMenu || _showHelp || _openPile >= 0 || _showDebugRemote || _glueOverlay != null || _hammerPhase != HammerPhase.None || _sealWorkbench != null,
             () => _pendingCast, Render);
         SetupReplayTutorialButton();
+        SetupPauseScreenShakeButton();
+        LoadSavedRun();
+        SetupTitleMenuButtons();
         SetupDebugRemote();
         SetupCastEffects();
         SpellTagTooltip.Create(_content, _font);
@@ -399,6 +410,112 @@ public sealed class SpellGameUI : MonoBehaviour
         });
     }
 
+    /// <summary>일시정지 메뉴의 맨 아래 버튼 아래에 화면 흔들림 설정 토글 버튼을 추가한다.</summary>
+    private void SetupPauseScreenShakeButton()
+    {
+        const float STEP = 100f;
+        RectTransform quit = (RectTransform)_pauseMenu.Quit.transform, panel = (RectTransform)quit.parent;
+        _screenShakeButton = Instantiate(_pauseMenu.Quit, panel);
+        _screenShakeButton.name = "Screen Shake";
+        ((RectTransform)_screenShakeButton.transform).anchoredPosition = quit.anchoredPosition + Vector2.down * (STEP * 2f);
+        Transform hint = panel.Find("Hint");
+        if (hint != null) ((RectTransform)hint).anchoredPosition += Vector2.down * STEP;
+        panel.sizeDelta += Vector2.up * STEP; panel.anchoredPosition += Vector2.up * STEP / 2;
+        UpdateScreenShakeButtonLabel();
+        _screenShakeButton.SetAction(() =>
+        {
+            SpellJuice.SetScreenShakeEnabled(!SpellJuice.ScreenShakeEnabled);
+            UpdateScreenShakeButtonLabel();
+        });
+    }
+
+    /// <summary>현재 화면 흔들림 설정 상태에 맞춰 버튼 문구를 갱신한다.</summary>
+    private void UpdateScreenShakeButtonLabel()
+    {
+        if (_screenShakeButton == null) return;
+        _screenShakeButton.SetLabel(SpellJuice.ScreenShakeEnabled ? "화면 흔들림: 켜짐" : "화면 흔들림: 꺼짐");
+    }
+
+    /// <summary>타이틀 화면에 이어하기·새로하기·설정 버튼을 구성한다.</summary>
+    private void SetupTitleMenuButtons()
+    {
+        const float STEP = 84f;
+        SpellButtonView start = _titleScreen.StartButton;
+        RectTransform startRect = (RectTransform)start.transform;
+        Vector2 basePos = startRect.anchoredPosition;
+
+        _continueButton = Instantiate(start, startRect.parent);
+        _continueButton.name = "Continue Game";
+        ((RectTransform)_continueButton.transform).anchoredPosition = basePos;
+        _continueButton.SetLabel("이어하기");
+        _continueButton.SetAction(ContinueSavedGame);
+
+        startRect.anchoredPosition = basePos + Vector2.down * STEP;
+        start.SetLabel("새로하기");
+        start.SetAction(StartNewGame);
+
+        _titleSettingsButton = Instantiate(start, startRect.parent);
+        _titleSettingsButton.name = "Title Settings";
+        ((RectTransform)_titleSettingsButton.transform).anchoredPosition = basePos + Vector2.down * (STEP * 2f);
+        _titleSettingsButton.SetLabel("설정");
+        _titleSettingsButton.SetAction(() => { OpenPauseState(); Render(); });
+
+        RefreshTitleButtons();
+    }
+
+    /// <summary>저장된 진행 상태 유무에 따라 타이틀 화면의 이어하기 버튼 활성 상태를 갱신한다.</summary>
+    private void RefreshTitleButtons()
+    {
+        if (_continueButton == null) return;
+        bool hasSave = _savedRun != null;
+        UnityEngine.UI.Button button = _continueButton.GetComponent<UnityEngine.UI.Button>();
+        if (button != null) button.interactable = hasSave;
+        CanvasGroup group = _continueButton.GetComponent<CanvasGroup>();
+        if (group == null) group = _continueButton.gameObject.AddComponent<CanvasGroup>();
+        group.alpha = hasSave ? 1f : 0.35f;
+    }
+
+    /// <summary>저장된 런 데이터를 PlayerPrefs에서 불러온다.</summary>
+    private void LoadSavedRun()
+    {
+        string raw = PlayerPrefs.GetString(SAVE_RUN_KEY, "");
+        if (string.IsNullOrEmpty(raw)) { _savedRun = null; return; }
+        try
+        {
+            _savedRun = JsonConvert.DeserializeObject<SpellGame.RunSaveData>(raw);
+        }
+        catch
+        {
+            _savedRun = null;
+            PlayerPrefs.DeleteKey(SAVE_RUN_KEY);
+        }
+    }
+
+    /// <summary>저장된 런 데이터를 삭제한다.</summary>
+    private void ClearSavedRun()
+    {
+        _savedRun = null;
+        _lastPersistedSnapshot = null;
+        PlayerPrefs.DeleteKey(SAVE_RUN_KEY);
+        PlayerPrefs.Save();
+    }
+
+    /// <summary>현재 단계 진입 스냅샷이 바뀌었거나 런이 끝났으면 저장 상태를 갱신한다.</summary>
+    private void SyncSavedRun()
+    {
+        if (_game.CurrentPhase == SpellGame.Phase.Victory || _game.CurrentPhase == SpellGame.Phase.Defeat)
+        {
+            if (_savedRun != null || PlayerPrefs.HasKey(SAVE_RUN_KEY)) ClearSavedRun();
+            return;
+        }
+        if (_game.IsDeveloperMode || _game.CurrentPhase == SpellGame.Phase.Title || _game.StageSnapshot == null) return;
+        if (_game.StageSnapshot == _lastPersistedSnapshot) return;
+        _lastPersistedSnapshot = _game.StageSnapshot;
+        _savedRun = _game.StageSnapshot;
+        PlayerPrefs.SetString(SAVE_RUN_KEY, JsonConvert.SerializeObject(_savedRun));
+        PlayerPrefs.Save();
+    }
+
     /// <summary>일시정지 메뉴를 열면서 조준·선택·드래그를 정리한다.</summary>
     private void OpenPauseState()
     {
@@ -506,6 +623,8 @@ public sealed class SpellGameUI : MonoBehaviour
     private RectTransform Button(RectTransform parent, string caption, float x, float y, float width, float height, Action action, Color? color = null, int fontSize = 18)
     {
         RectTransform rect = Panel(parent, x, y, width, height, color ?? SpellStyle.PanelRaised);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(x + width * 0.5f, -(y + height * 0.5f));
         SpellStyle.Round(rect.GetComponent<UnityEngine.UI.Image>(), SpellStyle.Round8, color ?? SpellStyle.PanelRaised);
         SpellStyle.AddRing(rect, SpellStyle.Ring8, SpellStyle.Line);
         UnityEngine.UI.Button button = rect.gameObject.AddComponent<UnityEngine.UI.Button>();
@@ -578,6 +697,8 @@ public sealed class SpellGameUI : MonoBehaviour
         _combatScreen.gameObject.SetActive(combat);
         _table.SetVisible(combat);
         _titleScreen.gameObject.SetActive(phase == SpellGame.Phase.Title);
+        SyncSavedRun();
+        if (phase == SpellGame.Phase.Title) RefreshTitleButtons();
         bool sealWorkbench = (phase == SpellGame.Phase.Reward || _game.IsSealEvent) && _game.ActiveReward == SpellGame.RewardKind.Seal;
         // 보상 선택과 도안 배치는 한 화면(보상·배치 통합 화면)에서 한다. 인장 보상만 인장 작업대를 쓴다.
         bool loadout = (phase == SpellGame.Phase.Reward && !sealWorkbench) || phase == SpellGame.Phase.Loadout;
@@ -666,8 +787,8 @@ public sealed class SpellGameUI : MonoBehaviour
                 _openPile = 2; Render();
             });
         _rewardDeckButton.anchorMin = _rewardDeckButton.anchorMax = new Vector2(0, 0);
-        _rewardDeckButton.pivot = new Vector2(0, 0);
-        _rewardDeckButton.anchoredPosition = new Vector2(40, 35);
+        _rewardDeckButton.pivot = new Vector2(0.5f, 0.5f);
+        _rewardDeckButton.anchoredPosition = new Vector2(40 + _rewardDeckButton.sizeDelta.x * 0.5f, 35 + _rewardDeckButton.sizeDelta.y * 0.5f);
         _loadoutScreen.Setup(_game, _layout, PatternColor, ShapeTint, card => HasTraits(card) ? AccentColor(card) : _subColor, TraitDescriptionText, SealColor,
             () => { ClearSelection(); _message = ""; Render(); }, ContinueFromLoadout);
     }
@@ -765,9 +886,27 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>새 게임을 시작하고 도안 배치와 선택을 초기화한다.</summary>
     private void StartNewGame()
     {
+        ClearSavedRun();
         ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = _isContaminatorRun = false;
         _game.StartGame(isOnboarding: SpellOnboarding.ShouldRun); ResetPatterns(); ClearSelection();
         _onboarding.Begin(_game.IsOnboarding); Render();
+    }
+
+    /// <summary>저장된 진행 상태에서 현재 이벤트나 전투의 처음 시점으로 이어한다.</summary>
+    private void ContinueSavedGame()
+    {
+        if (_savedRun == null || !_game.RestoreSave(_savedRun))
+        {
+            ClearSavedRun();
+            Render();
+            return;
+        }
+        _lastPersistedSnapshot = _game.StageSnapshot;
+        ResetTheft(); _isSealerRun = _isThiefRun = _isCurserRun = _isContaminatorRun = false;
+        ClearSelection();
+        _message = "";
+        _onboarding.Begin(_game.Battle == 1 && _game.IsOnboarding);
+        Render();
     }
 
     /// <summary>개발자 전투를 시작하고 판에 들어가는 만큼 모든 도안을 배치한다.</summary>
@@ -1064,6 +1203,11 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         _helpPanel.gameObject.SetActive(_showHelp);
         _pauseMenu.gameObject.SetActive(_showPauseMenu);
+        if (_showPauseMenu)
+        {
+            _pauseMenu.Title.gameObject.SetActive(_game.CurrentPhase != SpellGame.Phase.Title);
+            UpdateScreenShakeButtonLabel();
+        }
         _rewardDeckView.Bind(_game.OwnedCards.Count);
         _rewardDeckButton.gameObject.SetActive(_game.CurrentPhase == SpellGame.Phase.Reward && _game.ActiveReward != SpellGame.RewardKind.Seal);
         if (_rewardDeckButton.gameObject.activeSelf) _rewardDeckButton.SetAsLastSibling();
@@ -1562,7 +1706,7 @@ public sealed class SpellGameUI : MonoBehaviour
         SpellPatternTooltipView.Content c = new SpellPatternTooltipView.Content
         {
             Name = DisplayName(card),
-            KindLabel = card.IsUnique ? "고유 조각" : card.Glued != null ? "접착 조각" : "조각",
+            KindLabel = card.IsUnique ? "고유 조각" : card.Glued != null ? "접착 조각" : card.IsCustomSplit ? "분할 조각" : "조각",
             Entries = entries,
             Accent = accent,
             ValueColor = _textColor,
@@ -1773,16 +1917,17 @@ public sealed class SpellGameUI : MonoBehaviour
     {
         if (!CanMovePattern(spell)) { _message = "고정된 조각이 있는 도안은 이동할 수 없습니다"; Render(); return; }
         string issue = _layout.MoveIssue(spell, origin, rotation, _game.Spells);
-        if (issue == null) { _layout.Place(spell, origin, rotation); _message = ""; }
+        if (issue == null) { _layout.Place(spell, origin, rotation); _game.SyncBoardLayout(spell); _message = ""; }
         else _message = issue + " · 원래 자리로 돌아갑니다";
         Render();
     }
 
-    /// <summary>도안에 고정된 이전 턴 조각이 없는지 확인한다.</summary>
+    /// <summary>도안에 고정된 이전 턴 조각이나 다른 도안과 걸친 조각이 없는지 확인한다.</summary>
     public bool CanMovePattern(int spell)
     {
         if (!_onboarding.AllowsPatternEdit) return false;
-        foreach (SpellGame.Placement piece in _game.Boards[spell].Pieces) if (!_game.CanMovePiece(piece)) return false;
+        foreach (SpellGame.Placement piece in _game.Boards[spell].Pieces)
+            if (!_game.CanMovePiece(piece) || _game.IsCrossPatternPiece(piece)) return false;
         return true;
     }
 
@@ -1995,6 +2140,7 @@ public sealed class SpellGameUI : MonoBehaviour
     /// <summary>목록에 쓸 도형 이름을 반환한다. 접착 카드는 두 원본 도형을 함께 적는다.</summary>
     private static string DisplayName(SpellGame.Card card)
     {
+        if (card.IsCustomSplit) return card.IsContaminated ? "오염된 쪼개진 조각" : "쪼개진 조각";
         if (card.IsContaminated) return "오염된 " + SpellGame.ShapeName(card.Shape);
         if (card.Glued != null) return "접착 " + SpellGame.ShapeName(card.Glued.First.Shape) + " + " + SpellGame.ShapeName(card.Glued.Second.Shape);
         return SpellGame.ShapeName(card.Shape);
@@ -2140,8 +2286,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_selectedCard == null) { _message = "먼저 손패나 격자 위의 조각을 고르세요"; Render(); return; }
         int x, y, rotation;
         ToLocalPlacement(board, anchor, out x, out y, out rotation);
-        SpellGame.Placement ignored = _selectedBoard == board ? _selectedPiece : null;
-        bool completes = CanPreviewGrid(board, anchor) && _game.WouldComplete(board, _selectedCard, x, y, rotation, ignored);
+        bool completes = CanPreviewGrid(board, anchor) && _game.WouldComplete(board, _selectedCard, x, y, rotation, _selectedPiece);
         bool success = _selectedPiece == null ? _game.Place(board, _selectedCard, x, y, rotation) : _game.Move(_selectedBoard, _selectedPiece, board, x, y, rotation);
         if (success) { ClearSelection(); _message = ""; if (completes) SetNotice($"{SpellGame.PatternName(board)} 완성 · 시전 버튼을 누르세요", PatternColor(board)); } else _message = PlacementIssue(board, anchor) ?? "이 위치에는 놓을 수 없습니다";
         Render();
@@ -2153,7 +2298,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_selectedCard == null) return false;
         int x, y, rotation;
         ToLocalPlacement(board, anchor, out x, out y, out rotation);
-        return _game.CanPlace(board, _selectedCard, x, y, rotation, _selectedBoard == board ? _selectedPiece : null);
+        return _game.CanPlace(board, _selectedCard, x, y, rotation, _selectedPiece);
     }
 
     /// <summary>현재 선택 조각을 격자 앵커 칸에 놓을 수 없는 이유를 반환한다.</summary>
@@ -2162,7 +2307,7 @@ public sealed class SpellGameUI : MonoBehaviour
         if (_selectedCard == null) return "먼저 조각을 선택하세요";
         int x, y, rotation;
         ToLocalPlacement(board, anchor, out x, out y, out rotation);
-        return _game.PlacementIssue(board, _selectedCard, x, y, rotation, _selectedBoard == board ? _selectedPiece : null);
+        return _game.PlacementIssue(board, _selectedCard, x, y, rotation, _selectedPiece);
     }
 
     /// <summary>포인터가 가리킨 격자 앵커 칸의 배치 가능 상태와 도안 완성 여부를 커서 안내로 쓴다. board가 음수면 기본 안내를 쓴다.</summary>
@@ -2174,8 +2319,8 @@ public sealed class SpellGameUI : MonoBehaviour
             int x, y, rotation;
             ToLocalPlacement(board, anchor, out x, out y, out rotation);
             bool valid = CanPreviewGrid(board, anchor);
-            bool complete = valid && _game.WouldComplete(board, _selectedCard, x, y, rotation, _selectedBoard == board ? _selectedPiece : null);
-            hint = complete ? $"놓으면 {SpellGame.PatternName(board)} 완성" : valid ? $"놓을 수 있음  ·  {RemainingText(board)}" : PlacementIssue(board, anchor);
+            bool complete = valid && _game.WouldComplete(board, _selectedCard, x, y, rotation, _selectedPiece);
+            hint = complete ? $"놓으면 {SpellGame.PatternName(board)} 완성" : valid ? $"배치 가능  ·  {RemainingText(board)}" : PlacementIssue(board, anchor);
         }
         _hintText = hint;
     }
@@ -2633,7 +2778,7 @@ public sealed class SpellGameUI : MonoBehaviour
         _hammerMarker = Panel(_hammerOverlay, 880, 446, 80, 6, Color.white);
         Label(_hammerOverlay, "강한 타격", 856, 140, 130, 30, 17);
         Label(_hammerOverlay, "약한 타격", 856, 460, 130, 30, 17);
-        Label(_hammerOverlay, "세게 내려칠수록 조각이 한 번 더 나뉠 확률이 오릅니다.\n(최소 크기: 반 칸 삼각형)", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
+        Label(_hammerOverlay, "기본 분해는 항상 성공\n강할수록 추가 분해 확률 증가\n최소 1/4 · 결과는 덱에 저장", 990, 210, 220, 150, 17, TextAnchor.UpperLeft);
         Label(_hammerOverlay, _hammerMessage, 800, 495, 440, 75, 17);
         RectTransform hint = Element("Hammer Preview", _hammerOverlay, 980, 360, 240, 120);
         _hammerHint = hint.gameObject.AddComponent<UnityEngine.UI.Text>();

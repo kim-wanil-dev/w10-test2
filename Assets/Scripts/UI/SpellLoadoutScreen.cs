@@ -670,7 +670,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
         Stretch((RectTransform)_trashLabel.transform);
 
         RectTransform start = (RectTransform)_start.transform;
-        start.anchorMin = start.anchorMax = new Vector2(1, 0); start.pivot = new Vector2(1, 0); start.anchoredPosition = new Vector2(-70, 50);
+        start.anchorMin = start.anchorMax = new Vector2(1, 0); start.pivot = new Vector2(0.5f, 0.5f); start.anchoredPosition = new Vector2(-70 - start.sizeDelta.x * 0.5f, 50 + start.sizeDelta.y * 0.5f);
 
         _ghost = new GameObject("Held Ghost", typeof(RectTransform), typeof(CanvasRenderer)).GetComponent<RectTransform>();
         _ghost.SetParent(transform, false); _ghost.anchorMin = _ghost.anchorMax = _ghost.pivot = new Vector2(0.5f, 0.5f);
@@ -698,7 +698,7 @@ public sealed class SpellLoadoutScreen : MonoBehaviour
         foreach (var (button, x) in new[] { (yes, -130f), (no, 130f) })
         {
             RectTransform rect = (RectTransform)button.transform;
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0); rect.sizeDelta = new Vector2(220, 64); rect.anchoredPosition = new Vector2(x, 28);
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0); rect.pivot = new Vector2(0.5f, 0.5f); rect.sizeDelta = new Vector2(220, 64); rect.anchoredPosition = new Vector2(x, 28 + 32f);
         }
         _confirm.gameObject.SetActive(false);
     }

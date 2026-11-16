@@ -174,17 +174,48 @@ public static class SpellDataStore
         }
     }
 
+    /// <summary>프리셋 목록이 비어 있으면 현재 도안 목록으로 1번·2번 프리셋을 초기화하고 활성 인덱스를 맞춘다.</summary>
+    public static void EnsurePresetsInitialized(SpellPatternTable table)
+    {
+        if (table == null) return;
+        if (table.Patterns == null) table.Patterns = new List<SpellPatternData>();
+        if (table.Presets == null) table.Presets = new List<SpellPatternPreset>();
+        if (table.Presets.Count == 0)
+        {
+            table.Presets.Add(new SpellPatternPreset { Name = "1번 프리셋", Patterns = Clone(table.Patterns) });
+            table.Presets.Add(new SpellPatternPreset { Name = "2번 프리셋", Patterns = Clone(table.Patterns) });
+            table.ActivePreset = 0;
+        }
+        if (table.ActivePreset < 0 || table.ActivePreset >= table.Presets.Count) table.ActivePreset = 0;
+    }
+
     /// <summary>도안 표를 검사해 오류와 경고 문구를 목록에 추가한다. warnings가 null이면 경고 검사를 건너뛴다.</summary>
     public static void ValidatePatterns(SpellPatternTable table, List<string> errors, List<string> warnings)
     {
-        if (table.Patterns == null || table.Patterns.Count == 0) { errors.Add("도안이 하나 이상 있어야 합니다"); return; }
         if (table.Version != CURRENT_VERSION) errors.Add($"지원하지 않는 도안 JSON 버전입니다: {table.Version}");
+        ValidatePatternList("", table.Patterns, errors, warnings, table);
+        if (table.Presets == null || table.Presets.Count == 0) return;
+        if (table.ActivePreset < 0 || table.ActivePreset >= table.Presets.Count)
+            errors.Add($"활성 프리셋 번호가 범위를 벗어납니다: {table.ActivePreset}");
+        for (int p = 0; p < table.Presets.Count; p++)
+        {
+            SpellPatternPreset preset = table.Presets[p];
+            string prefix = $"[프리셋 {p + 1}: {preset.Name}] ";
+            if (string.IsNullOrWhiteSpace(preset.Name)) errors.Add($"프리셋 {p + 1}: 이름이 비어 있습니다");
+            ValidatePatternList(prefix, preset.Patterns, errors, null, null);
+        }
+    }
+
+    /// <summary>도안 목록 하나의 유효성과 시작·보상 조건을 검사한다.</summary>
+    private static void ValidatePatternList(string prefix, List<SpellPatternData> patterns, List<string> errors, List<string> warnings, SpellPatternTable warningTable)
+    {
+        if (patterns == null || patterns.Count == 0) { errors.Add($"{prefix}도안이 하나 이상 있어야 합니다"); return; }
         HashSet<string> ids = new HashSet<string>();
         bool hasStarter = false;
-        for (int i = 0; i < table.Patterns.Count; i++)
+        for (int i = 0; i < patterns.Count; i++)
         {
-            SpellPatternData pattern = table.Patterns[i];
-            string label = $"도안 {i} ({pattern.Name})";
+            SpellPatternData pattern = patterns[i];
+            string label = $"{prefix}도안 {i} ({pattern.Name})";
             if (!IsValidId(pattern.Id)) errors.Add($"{label}: id는 영문 소문자, 숫자, _만 쓸 수 있습니다");
             else if (!ids.Add(pattern.Id)) errors.Add($"{label}: id '{pattern.Id}'가 중복됩니다");
             if (string.IsNullOrWhiteSpace(pattern.Name)) errors.Add($"{label}: 이름이 비어 있습니다");
@@ -206,11 +237,12 @@ public static class SpellDataStore
                 warnings.Add($"{label}: 방어 도안의 키워드 추가 피해는 방어 수치에 더해집니다");
             if (pattern.Cells != null && !FitsBoard(pattern)) warnings.Add($"{label}: 기본 위치·회전에서 판 밖으로 나갑니다. 실행 중에는 빈 자리를 찾아 배치합니다");
         }
-        if (!hasStarter) errors.Add("시작 도안이 하나 이상 있어야 합니다");
+        if (!hasStarter) errors.Add($"{prefix}시작 도안이 하나 이상 있어야 합니다");
+        if (warnings == null) return;
         bool hasRewardPattern = false;
-        foreach (SpellPatternData pattern in table.Patterns) hasRewardPattern |= pattern.IsInRewardPool && !pattern.IsStarter;
-        if (warnings != null && !hasRewardPattern) warnings.Add("보상 후보인 비시작 도안이 없어 전투 보상에 도안이 나오지 않습니다");
-        if (warnings != null) AddStarterOverlapWarnings(table, warnings);
+        foreach (SpellPatternData pattern in patterns) hasRewardPattern |= pattern.IsInRewardPool && !pattern.IsStarter;
+        if (!hasRewardPattern) warnings.Add("보상 후보인 비시작 도안이 없어 전투 보상에 도안이 나오지 않습니다");
+        if (warningTable != null) AddStarterOverlapWarnings(warningTable, warnings);
     }
 
     /// <summary>조각 표를 검사해 오류와 경고 문구를 목록에 추가한다. Shape enum 값마다 정확히 하나가 있어야 한다.</summary>
@@ -250,7 +282,7 @@ public static class SpellDataStore
         {
             if (cell == null) { errors.Add($"{label}: 빈 칸 항목이 있습니다"); continue; }
             if (cell.X < 0 || cell.X >= GRID_SIZE || cell.Y < 0 || cell.Y >= GRID_SIZE) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})이 {GRID_SIZE}×{GRID_SIZE} 범위를 벗어납니다");
-            if (!IsHalfUnitMask(cell.Mask)) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})의 마스크는 1/4 삼각형 단위(3, 6, 9, 12, 15)여야 합니다");
+            if (!IsHalfUnitMask(cell.Mask)) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})의 마스크는 1/8 삼각형 단위(1~15)여야 합니다");
             if (!positions.Add(cell.Y * GRID_SIZE + cell.X)) errors.Add($"{label}: 칸 ({cell.X}, {cell.Y})이 중복됩니다");
             minX = Math.Min(minX, cell.X); minY = Math.Min(minY, cell.Y);
         }
@@ -258,10 +290,10 @@ public static class SpellDataStore
         return errors.Count == count;
     }
 
-    /// <summary>칸 마스크가 1/4 삼각형(인접한 두 구역) 하나 또는 칸 전체인지 반환한다.</summary>
+    /// <summary>칸 마스크가 비어 있지 않은 유효한 1/8 삼각형 구역 조합(1~15)인지 반환한다.</summary>
     public static bool IsHalfUnitMask(int mask)
     {
-        return mask == FULL_MASK || mask == 3 || mask == 6 || mask == 9 || mask == 12;
+        return mask > 0 && mask <= FULL_MASK;
     }
 
     /// <summary>칸 목록의 모든 구역이 같은 칸의 이웃 구역 또는 옆 칸의 마주 보는 구역을 통해 이어져 있는지 반환한다.</summary>

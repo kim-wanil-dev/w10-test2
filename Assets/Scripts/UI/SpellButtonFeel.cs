@@ -44,14 +44,30 @@ public sealed class SpellButtonFeel : MonoBehaviour, IPointerEnterHandler, IPoin
     void Awake()
     {
         _selectable = GetComponent<Selectable>();
+        EnsureCenterPivot();
         BuildSheen();
     }
 
     void OnEnable()
     {
+        EnsureCenterPivot();
         _isHovered = _isPressed = false; _scale = 1f; _sheenAlpha = 0f;
         _popStart = PopOnEnable ? Time.unscaledTime : -1f;
         Apply();
+    }
+
+    /// <summary>버튼이 항상 중앙 기준으로 커지고 작아지도록 피벗을 중앙(0.5, 0.5)으로 맞추고 위치를 보정한다.</summary>
+    private void EnsureCenterPivot()
+    {
+        RectTransform rect = transform as RectTransform;
+        if (rect == null) return;
+        Vector2 delta = new Vector2(0.5f, 0.5f) - rect.pivot;
+        if (delta.sqrMagnitude < 0.0001f) return;
+        Vector2 size = rect.rect.size;
+        if (size.x <= 0f && size.y <= 0f) size = rect.sizeDelta;
+        Vector3 scale = rect.localScale;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition += new Vector2(delta.x * size.x * scale.x, delta.y * size.y * scale.y);
     }
 
     void OnDisable()

@@ -69,7 +69,7 @@ public sealed class SpellBoardGraphic : UnityEngine.UI.MaskableGraphic, IPointer
     /// <summary>도형이 지정 칸에서 차지하는 삼각 구역 마스크를 반환한다. 좌표와 회전은 같은 기준(격자 또는 도안)을 쓴다.</summary>
     private static int CellMask(SpellGame.Card card, int x, int y, int rotation, int cellX, int cellY)
     {
-        return SpellGame.ShapeMaskAt(card.Shape, x, y, rotation, cellX, cellY);
+        return SpellGame.CellMask(card, rotation, cellX - x, cellY - y);
     }
 
     /// <summary>배치 조각의 코팅·씰링·이전 효과에 맞는 표시 색을 반환한다. 아무것도 없으면 일반 조각 색이다.</summary>
